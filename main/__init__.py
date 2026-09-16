@@ -7,12 +7,14 @@ from .lifecycle import LifecycleManager
 from .models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
 from .scoring import ImportanceScorer
 from .classification import MemoryClassifier
+from .store import LocalMemoryStore
 
 __all__ = [
     "FeatureExtractor",
     "GraphMemoryAdapter",
     "ImportanceScorer",
     "LifecycleManager",
+    "LocalMemoryStore",
     "MemoryCategory",
     "MemoryClassifier",
     "MemoryCore",

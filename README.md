@@ -4,7 +4,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 This repository currently implements the first foundation layer: the **Memory Core**. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
 
-This phase does **not** implement a database, RAG pipeline, vector search, graph database, trained ML model, API server, or CLI.
+This phase does **not** implement a database server, RAG pipeline, vector search, graph database, trained ML model, or API server. It now includes a local JSONL memory store and a CLI for processing and inspecting records.
 
 ## Current Implementation Status
 
@@ -20,17 +20,19 @@ Implemented:
 - Lifecycle tier assignment
 - Expiry/archive hints
 - Serialization and deserialization
+- Local JSONL memory store
+- CLI interface
 - Placeholder graph adapter interface only
 - Unit tests for the Memory Core behavior
 
 Not implemented yet:
 
-- Persistent storage
-- CLI command interface
+- Advanced ranked retrieval
 - REST API
 - RAG retrieval
 - Vector database
 - Embeddings
+- Production database storage
 - Graph database layer
 - Neo4j integration
 - Temporal knowledge graph construction
@@ -232,32 +234,55 @@ Later, the implementation can be replaced with a trained model without changing 
 
 ## How Data Is Stored Right Now
 
-There is no database storage yet.
+There is no database server yet.
 
-At the moment, data is stored only as an in-memory Python object while the code is running:
+The system now supports a local JSONL-backed store. By default, CLI commands write to:
+
+```text
+memory_store/memories.jsonl
+```
+
+This path is ignored by Git because it is local runtime data.
+
+Each line is one serialized `MemoryRecord` dictionary. Records can still be used in memory:
 
 ```python
 record = core.process(memory_input)
+payload = record.to_dict()
 ```
 
-The record can be serialized:
+The local store can save and load records:
 
 ```python
-record.to_dict()
+from main import LocalMemoryStore
+
+store = LocalMemoryStore()
+store.save(record)
+records = store.list(user_id="user_001")
+matches = store.search("technical summaries", user_id="user_001")
 ```
 
-But nothing is automatically written to:
+The local store is intentionally simple. It does not provide database indexes, concurrent write guarantees, vector search, graph traversal, or server-side querying.
 
-- files
-- JSONL
-- SQLite
-- Postgres
-- vector databases
-- Neo4j
-- graph stores
-- cloud storage
+## What Still Needs To Be Implemented
 
-So this phase defines **how data should look when stored**, but it does not yet implement the actual storage layer.
+The remaining work should be implemented in phases. The current system already has memory structuring, lifecycle decisions, local JSONL persistence, and CLI access.
+
+| Priority | Component | What needs to be implemented | Why it matters |
+| --- | --- | --- | --- |
+| 1 | Improved retrieval | Add better ranking over stored memories using category, tier, recency, importance score, and keyword relevance. | Makes stored memories actually useful for context recall before vector search is added. |
+| 2 | Training dataset generation | Create/export labeled examples with content, category, features, importance labels, and tier labels. | Required before replacing heuristic scoring with ML. |
+| 3 | ML importance model | Train LightGBM/XGBoost on extracted features and plug it behind the existing scorer interface. | Moves the project from rule/heuristic scoring toward the proposed ML-based memory importance predictor. |
+| 4 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
+| 5 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
+| 6 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
+| 7 | Controlled forgetting | Expire low-value working/short-term memories and archive useful stale memories. | Keeps storage efficient and prevents irrelevant context buildup. |
+| 8 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
+| 9 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
+| 10 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
+| 11 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
+| 12 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
+| 13 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
 
 ## Training Data Status
 
@@ -315,15 +340,71 @@ There is currently no:
 
 The current Memory Core can produce structured memory records that a future RAG layer may store and retrieve.
 
-## CLI Status
+## CLI
 
-A CLI is not implemented yet.
+The CLI is available through:
 
-For now, the Memory Core can be tested through Python:
+```bash
+python3 -m main --help
+```
+
+Process and save one memory:
+
+```bash
+python3 -m main process \
+  --user-id user_001 \
+  --session-id session_001 \
+  --interaction-score 0.5 \
+  --pretty \
+  "I prefer concise technical summaries."
+```
+
+Process without saving:
+
+```bash
+python3 -m main process \
+  --user-id user_001 \
+  --session-id session_001 \
+  --no-save \
+  --pretty \
+  "Remind me to submit the capstone report tomorrow."
+```
+
+List stored memories:
+
+```bash
+python3 -m main list --user-id user_001 --pretty
+```
+
+Search stored memories by simple keyword matching:
+
+```bash
+python3 -m main search "technical summaries" --user-id user_001 --pretty
+```
+
+Get one memory by ID:
+
+```bash
+python3 -m main get MEMORY_ID --pretty
+```
+
+Show local store statistics:
+
+```bash
+python3 -m main stats --pretty
+```
+
+Use a custom store path:
+
+```bash
+python3 -m main --store /tmp/cognimem.jsonl list --pretty
+```
+
+The Memory Core can also be used through Python:
 
 ```bash
 python3 - <<'PY'
-from main import MemoryCore, MemoryInput
+from main import LocalMemoryStore, MemoryCore, MemoryInput
 
 core = MemoryCore()
 record = core.process(
@@ -334,16 +415,9 @@ record = core.process(
     )
 )
 
+LocalMemoryStore().save(record)
 print(record.to_dict())
 PY
-```
-
-A future CLI could support commands like:
-
-```bash
-python3 -m main process --user-id user_001 --session-id session_001 "I prefer concise summaries"
-python3 -m main list --user-id user_001
-python3 -m main search --user-id user_001 --query "technical summaries"
 ```
 
 ## Tests
@@ -360,65 +434,56 @@ The tests cover:
 - importance scoring for durable vs temporary memories
 - lifecycle tier assignment
 - record serialization/deserialization
+- local JSONL storage
+- CLI process/list/get behavior
 - graph database isolation
-
-Note: the code currently lives under the `main` package. If tests still import an older package name, update the imports to `from main import ...`.
 
 ## Recommended Next Implementation Steps
 
 Recommended order:
 
-1. Add a CLI wrapper
-   - Process one memory from the terminal
-   - Print the resulting memory record as JSON
-
-2. Add local persistence
-   - Start with JSONL or SQLite
-   - Store serialized `MemoryRecord` objects
-   - Support append, list, and load by user/session
-
-3. Add simple retrieval
+1. Improve retrieval
    - Retrieve by user ID
    - Filter by category and tier
-   - Add keyword search before vector search
+   - Current keyword search can be expanded into ranked retrieval and later vector retrieval
 
-4. Add training dataset generation
+2. Add training dataset generation
    - Create labeled examples for category, importance, and tier
    - Export CSV for ML experiments
 
-5. Add ML importance model
+3. Add ML importance model
    - Train LightGBM/XGBoost using extracted features
    - Keep the same `score(features)` interface
 
-6. Add conflict detection
+4. Add conflict detection
    - Detect incompatible memories
    - Prefer newer or higher-confidence facts
 
-7. Add memory consolidation
+5. Add memory consolidation
    - Merge repeated observations into stronger long-term memories
    - Example: repeated coffee mentions become `User prefers coffee`
 
-8. Add controlled forgetting
+6. Add controlled forgetting
    - Periodically expire low-value working/short-term memories
    - Archive useful old memories
 
-9. Add RAG/vector retrieval
+7. Add RAG/vector retrieval
    - Generate embeddings
    - Store vectors
    - Retrieve relevant memories for prompts
 
-10. Add graph database layer later
-    - Temporal knowledge graph
-    - Entity relationships
-    - Conflict-aware graph updates
-    - Graph traversal as one retrieval signal
+8. Add graph database layer later
+   - Temporal knowledge graph
+   - Entity relationships
+   - Conflict-aware graph updates
+   - Graph traversal as one retrieval signal
 
 ## Current Milestone
 
 The current milestone is:
 
 ```text
-Structured Memory Core implemented.
+Structured Memory Core, local JSONL store, and CLI implemented.
 ```
 
-In other words, we have implemented the memory representation and decision pipeline. We have not yet implemented the storage, retrieval, training, RAG, graph, or deployment layers.
+In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. We have not yet implemented production database storage, advanced retrieval, ML training, RAG, graph, API, or deployment layers.

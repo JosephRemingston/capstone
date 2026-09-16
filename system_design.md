@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Joseph Remingston L
 
-Last updated: September 1, 2026
+Last updated: September 16, 2026
 
 Related docs:
 
@@ -13,15 +13,15 @@ Related docs:
 - `data/Capstone_Base_Paper_Analysis.docx`
 - `data/RAG-Driven_Memory_Architectures_in_Conversational_LLMsA_Literature_Review_With_Insights_Into_Emerging_Agriculture_Data_Sharing.pdf`
 
-Scope: This document describes the current implemented Memory Core and the planned complete CogniMem capstone architecture. It clearly separates implemented functionality from planned future components.
+Scope: This document describes the current implemented Memory Core, CLI, local JSONL store, and the planned complete CogniMem capstone architecture. It clearly separates implemented functionality from planned future components.
 
 ## 1. Abstract
 
 CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LLM agents. The project is based on the observation that standard vector-only RAG memory systems struggle with long-term personalization, temporal reasoning, contradictory information, lifecycle management, and structured memory types.
 
-The repository currently implements the first foundation layer: a non-database Memory Core. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record.
+The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The complete capstone system is planned to extend this core with persistent storage, retrieval, ML-based importance prediction, vector search, temporal knowledge graph support, conflict resolution, consolidation, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
+The complete capstone system is planned to extend this core with advanced retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, conflict resolution, consolidation, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
 
 ## 2. Repository Analysis
 
@@ -29,15 +29,17 @@ The current repository contains:
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| `main/` | Implemented | Python package containing the Memory Core modules. |
-| `tests/` | Implemented | Unit tests for classification, scoring, lifecycle assignment, serialization, and graph isolation. |
+| `main/` | Implemented | Python package containing the Memory Core, CLI entry point, and local JSONL store modules. |
+| `tests/` | Implemented | Unit tests for classification, scoring, lifecycle assignment, serialization, local storage, CLI behavior, and graph isolation. |
 | `README.md` | Implemented | Current implementation explanation and next-step roadmap. |
 | `data/` | Source documentation | Capstone proposal, base paper analysis, and base literature review paper. |
-| Database layer | Not implemented | No persistent memory database exists yet. |
-| RAG/vector layer | Not implemented | No embeddings, vector store, retriever, or LLM generation pipeline exists yet. |
+| Local storage | Implemented | JSONL-backed local memory store at `memory_store/memories.jsonl` by default. |
+| CLI | Implemented | `python3 -m main` supports process, list, search, get, and stats commands. |
+| Production database layer | Not implemented | No SQLite/Postgres/document database server exists yet. |
+| RAG/vector layer | Not implemented | No embeddings, vector store, semantic retriever, or LLM generation pipeline exists yet. |
 | Graph layer | Not implemented | Only a placeholder graph adapter protocol exists. |
 | ML training | Not implemented | No LightGBM/XGBoost training pipeline or labeled dataset exists yet. |
-| CLI/API | Not implemented | No command-line interface or REST API exists yet. |
+| REST API | Not implemented | No HTTP API exists yet. |
 
 ## 3. Implemented, Partial, Planned, and Out of Scope
 
@@ -52,21 +54,24 @@ Implemented:
 - Heuristic importance scoring.
 - Lifecycle tier assignment.
 - Serialization and deserialization.
-- Tests for core behavior and graph isolation.
+- Local JSONL memory persistence through `LocalMemoryStore`.
+- CLI commands for processing, listing, searching, getting records, and store statistics.
+- Tests for core behavior, local store behavior, CLI behavior, and graph isolation.
 
 Partially implemented:
 
 - Graph integration contract: `GraphMemoryAdapter` exists only as a protocol/interface. There is no graph database implementation.
-- Memory lifecycle: tier assignment and expiry/archive hints exist, but no scheduled cleanup, archive migration, or persistence exists.
+- Memory lifecycle: tier assignment and expiry/archive hints exist, but no scheduled cleanup or archive migration exists.
 - Importance modeling: heuristic scoring exists, but no trained ML model exists.
+- Retrieval: simple keyword search exists, but ranked retrieval, vector retrieval, and hybrid retrieval are not implemented.
 
 Planned:
 
-- Local persistent storage.
-- CLI wrapper.
 - REST API using FastAPI or similar.
 - LightGBM/XGBoost importance prediction.
 - Training dataset generation.
+- Advanced ranked retrieval.
+- Production storage backend.
 - Vector database and RAG retrieval.
 - Temporal knowledge graph.
 - Conflict detection and resolution.
@@ -82,14 +87,14 @@ Out of scope for the current phase:
 - Graph traversal.
 - Embedding generation.
 - LLM response generation.
-- Cloud deployment.
 - Authentication and authorization.
+- Cloud deployment.
 
 ## 4. Current System Overview
 
-The current implementation solves one narrow but important problem: converting raw conversational content into a structured memory object.
+The current implementation solves two narrow but important problems: converting raw conversational content into a structured memory object, and saving/inspecting those records through a local JSONL store and CLI.
 
-It does not store memories permanently and does not retrieve memories. It only defines the core representation and decision pipeline that future storage and retrieval layers will use.
+It does not provide production database storage, semantic retrieval, RAG, or graph reasoning. It does provide local append-only storage and simple keyword search for development/demo use.
 
 Current objective:
 
@@ -99,6 +104,8 @@ Current objective:
 - Score memory importance.
 - Assign a lifecycle tier.
 - Return a normalized record.
+- Save records locally as JSONL when requested through the CLI or `LocalMemoryStore`.
+- Inspect stored records through list, get, search, and stats commands.
 
 Current research-methodology alignment:
 
@@ -118,17 +125,19 @@ flowchart TD
     F --> G[LifecycleManager]
     G --> H[Final MemoryRecord]
     H --> I[to_dict serialization]
+    I --> J[LocalMemoryStore JSONL]
+    J --> K[CLI list search get stats]
 ```
 
 Current architecture properties:
 
 - Runs in-process as Python code.
 - Uses no external services.
-- Uses no database.
+- Uses a local JSONL file store for development/demo persistence.
 - Uses no graph database.
 - Uses no vector database.
 - Uses no ML training pipeline.
-- Produces serializable Python objects.
+- Produces serializable Python objects and JSON CLI output.
 
 ## 6. Current Component Design
 
@@ -141,8 +150,10 @@ Current architecture properties:
 | Importance scorer | `main/scoring.py` | Applies heuristic weights to features. | Feature dictionary. | Float score from `0.0` to `1.0`. |
 | Lifecycle manager | `main/lifecycle.py` | Assigns memory tier and expiry/archive hints. | `MemoryRecord`, score. | `MemoryTier`, timestamp hints. |
 | Memory orchestrator | `main/core.py` | Runs the full processing pipeline. | `MemoryInput`. | Final `MemoryRecord`. |
+| Local memory store | `main/store.py` | Saves, loads, filters, gets, and keyword-searches JSONL memory records. | `MemoryRecord` or filter/query arguments. | Stored or retrieved `MemoryRecord` objects. |
+| CLI | `main/__main__.py` | Provides terminal commands for process, list, search, get, and stats. | Command-line arguments. | JSON output. |
 | Graph contract | `main/interfaces.py` | Defines a future adapter protocol only. | `MemoryRecord`. | No implementation. |
-| Tests | `tests/test_memory_core.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
+| Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
 
 ## 7. Current Data Contracts
 
@@ -244,18 +255,23 @@ There is no training workflow, no hyperparameter search, no model registry, and 
 
 ## 10. Current Storage Design
 
-Current storage is in-memory only.
+Current storage has two levels:
+
+- In-memory Python objects returned by `MemoryCore.process()`.
+- Local JSONL persistence through `LocalMemoryStore`, with the default CLI path `memory_store/memories.jsonl`.
 
 | Data type | Current storage |
 | --- | --- |
 | Raw datasets | `data/` contains proposal and research documents only. |
 | Processed datasets | Not implemented. |
-| Features | Stored only inside returned `MemoryRecord.features`. |
+| Features | Stored inside returned `MemoryRecord.features` and persisted in JSONL when saved. |
 | Trained models | Not implemented. |
 | Experiment results | Not implemented. |
 | Logs | Not implemented. |
 | Configuration files | Not implemented. |
-| Memory records | In-memory object only; serializable via `to_dict()`. |
+| Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
+
+The JSONL store is intentionally simple. It is not a production database and does not provide indexes, concurrent write guarantees, vector search, or graph traversal.
 
 ## 11. Current Evaluation
 
@@ -267,6 +283,8 @@ The tests verify:
 - Durable memories score higher than greetings.
 - Lifecycle tier assignment.
 - Serialization/deserialization stability.
+- Local JSONL save/list/get/search behavior.
+- CLI process/list/get behavior.
 - Absence of Neo4j/graph database dependency in the Memory Core.
 
 Run tests:
@@ -285,6 +303,8 @@ flowchart LR
     D --> E[Heuristic importance score]
     E --> F[Tier assignment]
     F --> G[Serializable MemoryRecord]
+    G --> H[Optional JSONL save]
+    H --> I[CLI list search get stats]
 ```
 
 ## 13. Complete Capstone System Overview
@@ -353,14 +373,15 @@ Planned complete architecture responsibilities:
 | Feature extractor | Generate scoring features. | Baseline implemented. |
 | Importance predictor | Decide storage value using ML. | Heuristic implemented; ML planned. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Basic tiering implemented. |
-| Memory store | Persist memory records. | Planned. |
+| Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
 | Vector store | Store embeddings for retrieval. | Planned. |
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | Planned; not current phase. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Planned. |
 | Consolidation engine | Merge repeated observations into higher-level knowledge. | Planned. |
 | Forgetting engine | Expire/archive memories based on value and age. | Planned. |
 | Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Planned. |
-| API/CLI | User/developer access surfaces. | Planned. |
+| CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
+| REST API | HTTP access surface for backend/UI/agent integration. | Planned. |
 | Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | Planned. |
 
 ## 16. Complete Training Pipeline
@@ -424,7 +445,7 @@ This retrieval pipeline is planned but not implemented.
 Current public Python interface:
 
 ```python
-from main import MemoryCore, MemoryInput
+from main import LocalMemoryStore, MemoryCore, MemoryInput
 
 record = MemoryCore().process(
     MemoryInput(
@@ -433,14 +454,18 @@ record = MemoryCore().process(
         session_id="session_001",
     )
 )
+
+LocalMemoryStore().save(record)
 ```
 
-Planned CLI interface:
+Current CLI interface:
 
 ```bash
 python3 -m main process --user-id user_001 --session-id session_001 "I prefer concise summaries"
-python3 -m main list --user-id user_001
-python3 -m main search --user-id user_001 --query "technical summaries"
+python3 -m main list --user-id user_001 --pretty
+python3 -m main search "technical summaries" --user-id user_001 --pretty
+python3 -m main get MEMORY_ID --pretty
+python3 -m main stats --pretty
 ```
 
 Planned REST API examples:
@@ -458,7 +483,7 @@ REST API endpoints are not implemented yet.
 
 Current state:
 
-- No persistent sensitive-data storage exists yet.
+- Local JSONL persistence exists and may contain sensitive user memory content.
 - No authentication exists yet.
 - No logging exists yet.
 - No API surface exists yet.
@@ -474,7 +499,7 @@ Future requirements:
 
 ## 20. Operational Readiness
 
-Current operational readiness is limited to local unit tests.
+Current operational readiness is limited to local unit tests and manual CLI smoke testing.
 
 Future operational signals:
 
@@ -484,7 +509,7 @@ Future operational signals:
 | Classification distribution | Detect classifier drift or rule mistakes. |
 | Importance score distribution | Detect scoring bias or threshold problems. |
 | Retrieval precision/recall | Evaluate memory usefulness. |
-| Storage growth | Monitor memory bloat. |
+| Storage growth | Monitor JSONL and future database memory bloat. |
 | Conflict rate | Track contradictory memories. |
 | Consolidation rate | Measure reduction in repeated memories. |
 | Forgetting/archive rate | Confirm lifecycle cleanup works. |
@@ -501,7 +526,7 @@ Future operational signals:
 
 ## 22. Open Questions
 
-- What storage backend should be used first: JSONL, SQLite, or a document database?
+- Should the next production storage backend be SQLite, Postgres, or a document database?
 - What labeled dataset will be used to train the LightGBM/XGBoost importance model?
 - Which embedding model and vector database should be used for RAG retrieval?
 - What exact graph schema should represent users, memories, entities, relationships, and timestamps?
@@ -510,21 +535,22 @@ Future operational signals:
 
 ## 23. Recommended Next Steps
 
-1. Add a CLI wrapper around `MemoryCore.process()`.
-2. Add local JSONL or SQLite persistence.
-3. Add list/search commands for stored memories.
-4. Create a labeled training dataset format.
-5. Train and evaluate an ML importance scorer.
-6. Add conflict detection and consolidation.
-7. Add vector retrieval.
-8. Add graph database layer after the non-graph pipeline is stable.
+1. Improve local retrieval ranking using keyword relevance, category, tier, recency, importance, and confidence.
+2. Create a labeled training dataset format and exporter.
+3. Train and evaluate a LightGBM/XGBoost importance scorer.
+4. Add conflict detection and resolution.
+5. Add memory consolidation.
+6. Add controlled forgetting/archive cleanup.
+7. Add REST API endpoints.
+8. Add vector retrieval and RAG context building.
+9. Add graph database layer after the non-graph pipeline is stable.
 
 ## 24. Current Milestone
 
 The current milestone is:
 
 ```text
-Structured Memory Core implemented.
+Structured Memory Core, local JSONL store, and CLI implemented.
 ```
 
-The project has implemented memory structure and processing decisions. It has not yet implemented storage, RAG, graph database, ML training, APIs, CLI, or deployment.
+The project has implemented memory structure, processing decisions, local JSONL storage, simple keyword search, and CLI access. It has not yet implemented production database storage, advanced retrieval, RAG, graph database, ML training, REST APIs, or deployment.
