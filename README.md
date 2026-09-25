@@ -198,9 +198,24 @@ Current lifecycle behavior:
 
 - Temporary messages usually become `working` memory.
 - Low-score memories become `working` memory.
-- Durable high-score semantic, procedural, preference, and task memories become `long_term`.
+- Durable high-score semantic, procedural, and preference memories become `long_term`.
+- One-off tasks become `short_term`; explicitly recurring tasks can qualify as `long_term`.
 - Other useful memories become `short_term`.
 - Stale but useful memories can become `archive`.
+
+## Conversational Heuristic Improvements
+
+The default pipeline now uses whole-word keyword matching, recognizes explicit
+preferences/constraints and selected event updates, and keeps short one-off tasks
+in short-term memory. Mentions of today/tomorrow count as deadline signals only
+in task context. Fresh episodic memories receive a category weight of 0.20.
+Short-term expiry remains a fixed 14-day hint; deadlines are not parsed or enforced.
+
+See [the 15-sentence before/after experiment](reports/heuristic_improvements.md).
+These are developer-authored regression examples, not human-labeled validation or
+training data. No statistical threshold calibration or model retraining occurred.
+The optional Hippocorpus model retains its legacy classification/feature inputs;
+new lifecycle rules apply to both pipelines. Existing records are unchanged.
 
 ## Extracted Features
 

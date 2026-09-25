@@ -25,7 +25,7 @@ class MemoryCore:
     def with_ml(cls, model_dir: str | Path | None = None) -> "MemoryCore":
         """Replace heuristic scoring with the experimental Hippocorpus model."""
         from .ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
-        return cls(feature_extractor=MLFeatureExtractor(),
+        return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
                    importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:

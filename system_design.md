@@ -139,6 +139,8 @@ Current architecture properties:
 - Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
+Default conversational rules now use whole-word matching, explicit constraint/event recognition, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](reports/heuristic_improvements.md) for results and limitations.
+
 ## 6. Current Component Design
 
 | Component | File | Responsibility | Input | Output |

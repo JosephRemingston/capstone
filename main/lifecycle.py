@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from .models import MemoryCategory, MemoryRecord, MemoryTier
+from .text_rules import recurring
 
 
 @dataclass(slots=True)
@@ -22,6 +23,10 @@ class LifecycleManager:
 
         if record.category is MemoryCategory.TEMPORARY or score < self.working_threshold:
             return MemoryTier.WORKING
+
+        # A one-off action can matter greatly without being a durable user fact.
+        if record.category is MemoryCategory.TASK and not recurring(record.content):
+            return MemoryTier.SHORT_TERM
 
         durable_categories = {
             MemoryCategory.PREFERENCE,

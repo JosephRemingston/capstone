@@ -116,7 +116,7 @@ def main():
         groups.append(group)
         labels.append((rating - 1) / 4)
     splits = split_indices(groups)
-    classifier, extractor = MemoryClassifier(), MLFeatureExtractor()
+    classifier, extractor = MemoryClassifier(legacy=True), MLFeatureExtractor()
     feature_rows = []
     for row in valid:
         incoming = MemoryInput(content=row["story"], user_id="training", session_id="training")
@@ -141,7 +141,10 @@ def main():
     booster = selected.get_booster()[:selected.best_iteration + 1]
     prediction = np.clip(booster.inplace_predict(X[test]), 0, 1)
     mean = float(y[train].mean())
-    heuristic = np.asarray([ImportanceScorer().score(features) for features in feature_rows])
+    # Preserve the historical baseline used by the published Hippocorpus run.
+    heuristic_scorer = ImportanceScorer()
+    heuristic_scorer.weights["category_episodic"] = 0.12
+    heuristic = np.asarray([heuristic_scorer.score(features) for features in feature_rows])
     results = {
         "xgboost": metrics(y[test], prediction),
         "training_mean": metrics(y[test], np.full(len(test), mean)),

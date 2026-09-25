@@ -6,6 +6,7 @@ import json
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 from .features import FeatureExtractor
@@ -22,8 +23,11 @@ TEXT_FEATURES = (
 FEATURE_NAMES = list(TEXT_FEATURES) + [f"lexical_{i}" for i in range(512)]
 
 
+@dataclass
 class MLFeatureExtractor(FeatureExtractor):
     """Add deterministic hashed word counts, with no fitted vocabulary or labels."""
+
+    legacy: bool = True
 
     def extract(self, memory_input: MemoryInput, record: MemoryRecord) -> dict[str, float]:
         features = super().extract(memory_input, record)
