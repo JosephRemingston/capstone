@@ -1,0 +1,128 @@
+{
+  "source_url": "https://download.microsoft.com/download/3/c/3/3c388755-ac68-4858-8343-9acfb33c631d/hippocorpus-u20220112.zip",
+  "source_csv_sha256": "10429da5c70eae01ebd2e80d7e2ea44532ffe381191b3cd48a5f824ab6311530",
+  "source_archive_sha256": "cd27c69e43a3095eae98bad2d195b1f8ae20c30321160a904d65b9d1d43d385e",
+  "rows_total": 6854,
+  "rows_used": 6710,
+  "rows_excluded": 144,
+  "label_counts": {
+    "3.0": 929,
+    "4.0": 1690,
+    "5.0": 3109,
+    "2.0": 448,
+    "1.0": 534
+  },
+  "story_types": {
+    "imagined": 2612,
+    "recalled": 2779,
+    "retold": 1319
+  },
+  "split_method": "Seed 42; connected author/pair/duplicate-text components; largest component in train; remaining shuffled, targeting 15% test and 15% validation",
+  "splits": {
+    "train": {
+      "rows": 4697,
+      "groups": 388,
+      "target_mean": 0.7228550138386204
+    },
+    "validation": {
+      "rows": 1006,
+      "groups": 280,
+      "target_mean": 0.768389662027833
+    },
+    "test": {
+      "rows": 1007,
+      "groups": 261,
+      "target_mean": 0.7792949354518371
+    }
+  },
+  "group_overlap": {
+    "train_validation": 0,
+    "train_test": 0,
+    "validation_test": 0
+  },
+  "validation_candidates": [
+    {
+      "max_depth": 2,
+      "min_child_weight": 5,
+      "best_iteration": 496,
+      "metrics": {
+        "mae": 0.22540556596477274,
+        "rmse": 0.27942254063717825,
+        "r2": 0.05831897222147531,
+        "spearman": 0.252415365950233
+      }
+    },
+    {
+      "max_depth": 2,
+      "min_child_weight": 20,
+      "best_iteration": 496,
+      "metrics": {
+        "mae": 0.22491831911605584,
+        "rmse": 0.27897859332452807,
+        "r2": 0.061308886033212495,
+        "spearman": 0.25917846049767246
+      }
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "best_iteration": 354,
+      "metrics": {
+        "mae": 0.22486044987888032,
+        "rmse": 0.27908095695896284,
+        "r2": 0.060619905123922346,
+        "spearman": 0.26798177291702
+      }
+    },
+    {
+      "max_depth": 4,
+      "min_child_weight": 20,
+      "best_iteration": 353,
+      "metrics": {
+        "mae": 0.22499015574782316,
+        "rmse": 0.27889999245022795,
+        "r2": 0.06183775491539534,
+        "spearman": 0.2672835879812555
+      }
+    }
+  ],
+  "selected_validation_metrics": {
+    "mae": 0.22499015574782316,
+    "rmse": 0.27889999245022795,
+    "r2": 0.06183775491539534,
+    "spearman": 0.2672835879812555
+  },
+  "test_metrics": {
+    "xgboost": {
+      "mae": 0.22907517224461463,
+      "rmse": 0.2847394850689232,
+      "r2": 0.031054642785937614,
+      "spearman": 0.23669039099282985
+    },
+    "training_mean": {
+      "mae": 0.2424341087795269,
+      "rmse": 0.29472112010961843,
+      "r2": -0.03806945848663745,
+      "spearman": null
+    },
+    "existing_heuristic": {
+      "mae": 0.3098430983118173,
+      "rmse": 0.36121716566987505,
+      "r2": -0.559339415114738,
+      "spearman": 0.04700814588653163
+    }
+  },
+  "versions": {
+    "python": "3.13.9",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "sklearn": "1.9.1",
+    "xgboost": "3.4.1"
+  },
+  "limitations": [
+    "Personal-event importance is a proxy, not conversational retention utility.",
+    "Only text-derived features used; no demographics, survey responses, or target-derived features.",
+    "Author/pair links create a large component reserved for training; test represents smaller components.",
+    "No conversational importance or tier ground truth; lifecycle thresholds remain unvalidated for this model."
+  ]
+}

@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
+
+
+class ImportanceScoring(Protocol):
+    """Shared contract for heuristic and trained importance scorers."""
+
+    def score(self, features: dict[str, float]) -> float:
+        ...
 
 
 @dataclass(slots=True)

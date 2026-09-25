@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .classification import MemoryClassifier
 from .features import FeatureExtractor
 from .lifecycle import LifecycleManager
 from .models import MemoryInput, MemoryRecord
-from .scoring import ImportanceScorer
+from .scoring import ImportanceScorer, ImportanceScoring
 
 
 @dataclass(slots=True)
@@ -17,8 +18,15 @@ class MemoryCore:
 
     classifier: MemoryClassifier = field(default_factory=MemoryClassifier)
     feature_extractor: FeatureExtractor = field(default_factory=FeatureExtractor)
-    importance_scorer: ImportanceScorer = field(default_factory=ImportanceScorer)
+    importance_scorer: ImportanceScoring = field(default_factory=ImportanceScorer)
     lifecycle_manager: LifecycleManager = field(default_factory=LifecycleManager)
+
+    @classmethod
+    def with_ml(cls, model_dir: str | Path | None = None) -> "MemoryCore":
+        """Replace heuristic scoring with the experimental Hippocorpus model."""
+        from .ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
+        return cls(feature_extractor=MLFeatureExtractor(),
+                   importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         category = self.classifier.classify(memory_input)
@@ -32,4 +40,10 @@ class MemoryCore:
         record.tier = tier
         record.expires_at = self.lifecycle_manager.expiry_for(record)
         record.archive_after = self.lifecycle_manager.archive_after_for(record)
+        from .ml import MLImportanceScorer
+        if isinstance(self.importance_scorer, MLImportanceScorer):
+            record.source_metadata["importance_model"] = {
+                "type": "xgboost", "target": self.importance_scorer.metadata["target"],
+                "sha256": self.importance_scorer.metadata["model_sha256"],
+            }
         return record

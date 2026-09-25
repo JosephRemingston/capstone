@@ -4,7 +4,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 This repository currently implements the first foundation layer: the **Memory Core**. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
 
-This phase does **not** implement a database server, RAG pipeline, vector search, graph database, trained ML model, or API server. It now includes a local JSONL memory store and a CLI for processing and inspecting records.
+This phase does **not** implement a database server, RAG pipeline, vector search, graph database, API server. It now includes a local JSONL memory store and a CLI for processing and inspecting records.
 
 ## Current Implementation Status
 
@@ -17,17 +17,19 @@ Implemented:
 - Rule-based memory classification
 - Feature extraction for importance scoring
 - Heuristic importance scoring
+- Optional trained XGBoost importance scorer, evaluated on Hippocorpus
+- Reproducible importance-model training, held-out metrics, and native model artifacts
 - Lifecycle tier assignment
 - Expiry/archive hints
 - Serialization and deserialization
 - Local JSONL memory store
+- Advanced ranked keyword retrieval using relevance, category, tier, recency, and importance
 - CLI interface
 - Placeholder graph adapter interface only
 - Unit tests for the Memory Core behavior
 
 Not implemented yet:
 
-- Advanced ranked retrieval
 - REST API
 - RAG retrieval
 - Vector database
@@ -36,7 +38,6 @@ Not implemented yet:
 - Graph database layer
 - Neo4j integration
 - Temporal knowledge graph construction
-- LightGBM/XGBoost training
 - Conflict resolution
 - Memory consolidation
 - Controlled forgetting job
@@ -222,7 +223,7 @@ These features are used by the heuristic importance scorer. They are also design
 
 The current importance scorer is heuristic. It applies configured weights to extracted features and returns a score between `0.0` and `1.0`.
 
-This is not machine learning yet.
+An optional XGBoost scorer is now trained and integrated. The heuristic remains the default because the Hippocorpus personal-event target has not been validated for conversational retention. See **ML Importance Model** below.
 
 The scorer is intentionally designed behind this simple interface:
 
@@ -264,49 +265,131 @@ matches = store.search("technical summaries", user_id="user_001")
 
 The local store is intentionally simple. It does not provide database indexes, concurrent write guarantees, vector search, graph traversal, or server-side querying.
 
+## Ranked Retrieval
+
+`LocalMemoryStore.search()` and the CLI `search` command rank matching records
+using `MemoryRanker`. The return format remains a list of memory records.
+User, session, category, and tier filters are applied before ranking; the limit
+is applied afterward. A zero limit returns no results; negative limits are rejected.
+
+Queries and content are split into case-insensitive whole-word tokens. Punctuation
+separates tokens. At least one query token must match; unrelated records are never
+included merely because they are important. Duplicate query terms and repeated
+content words do not boost relevance. There is no stemming, synonym expansion,
+or semantic matching: `python` does not match `pythonic`.
+
+| Signal | Default weight | Calculation |
+| --- | --- | --- |
+| Keyword relevance | 0.65 | Fraction of unique query tokens present in the content. |
+| Category | 0.10 | Semantic/preference: 1.0; procedural/task: 0.9; episodic: 0.6; temporary: 0.1. |
+| Tier | 0.05 | Long-term: 1.0; short-term: 0.7; working: 0.4; archive: 0.2. |
+| Recency | 0.10 | Exponential decay from creation time, with a 30-day half-life. Future timestamps receive 1.0. |
+| Importance | 0.10 | Stored importance score clamped to 0–1; nonfinite values contribute 0. |
+
+The final score is the weighted sum divided by the total weight. Category and tier
+values are fixed usefulness preferences, not predictions of query intent. Ties
+are resolved by newest creation time, then ascending memory ID. Search does not
+modify records, increment access counts, or enforce expiry/archive hints.
+
+Weights and recency half-life can be configured through the Python API:
+
+```python
+from main import LocalMemoryStore, MemoryRanker
+
+store = LocalMemoryStore(
+    ranker=MemoryRanker(
+        weights={
+            "keyword_relevance": 0.65,
+            "category": 0.10,
+            "tier": 0.05,
+            "recency": 0.10,
+            "importance": 0.10,
+        },
+        recency_half_life_days=30.0,
+    )
+)
+matches = store.search("Python tests", user_id="user_001", limit=10)
+```
+
+All five weights must be finite and nonnegative with a positive finite total.
+The half-life must be finite and positive. Ranking remains an in-process heuristic
+that scans the local store; vector retrieval and a trained ranker are future work.
+
 ## What Still Needs To Be Implemented
 
 The remaining work should be implemented in phases. The current system already has memory structuring, lifecycle decisions, local JSONL persistence, and CLI access.
 
 | Priority | Component | What needs to be implemented | Why it matters |
 | --- | --- | --- | --- |
-| 1 | Improved retrieval | Add better ranking over stored memories using category, tier, recency, importance score, and keyword relevance. | Makes stored memories actually useful for context recall before vector search is added. |
-| 2 | Training dataset generation | Create/export labeled examples with content, category, features, importance labels, and tier labels. | Required before replacing heuristic scoring with ML. |
-| 3 | ML importance model | Train LightGBM/XGBoost on extracted features and plug it behind the existing scorer interface. | Moves the project from rule/heuristic scoring toward the proposed ML-based memory importance predictor. |
-| 4 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
-| 5 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
-| 6 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
-| 7 | Controlled forgetting | Expire low-value working/short-term memories and archive useful stale memories. | Keeps storage efficient and prevents irrelevant context buildup. |
-| 8 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 9 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
-| 10 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
-| 11 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
-| 12 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 13 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
+| 1 | In-domain training data | Add conversational importance/category/tier labels beyond Hippocorpus. | Validate transfer to actual agent memories. |
+| 2 | ML validation and calibration | Improve the experimental XGBoost model, evaluate conversational retention, and calibrate tier thresholds. | Required before making ML the default. |
+| 3 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
+| 4 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
+| 5 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
+| 6 | Controlled forgetting | Expire low-value working/short-term memories and archive useful stale memories. | Keeps storage efficient and prevents irrelevant context buildup. |
+| 7 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
+| 8 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
+| 9 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
+| 10 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
+| 11 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
+| 12 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
 
-## Training Data Status
+## ML Importance Model
 
-No training data is currently used.
+An XGBoost regression model has been trained on the existing **Hippocorpus**
+importance ratings, normalized from 1–5 to 0–1. It uses text-derived features and
+hashed word counts, with author/story-family-disjoint train, validation, and test
+sets. No synthetic labels were generated.
 
-The system does not currently train:
+| Held-out test metric | XGBoost | Mean baseline |
+| --- | ---: | ---: |
+| MAE | 0.2291 | 0.2424 |
+| RMSE | 0.2847 | 0.2947 |
+| R² | 0.0311 | -0.0381 |
+| Spearman | 0.2367 | Undefined (constant) |
 
-- a classifier
-- an importance model
-- a retrieval ranker
-- a consolidation model
-- a conflict detection model
+Training used 4,697 stories, validation 1,006, and test 1,007. The improvement is
+modest. This model predicts personal-event significance; conversational retention
+quality and lifecycle thresholds remain unvalidated. ML therefore replaces the
+heuristic only when explicitly selected.
 
-Future training data should likely contain examples like:
+Install optional dependencies and use the trained model:
 
-```csv
-content,category,importance_score,tier
-"I prefer Python examples",preference,0.90,long_term
-"hello",temporary,0.05,working
-"Yesterday I met my guide",episodic,0.50,short_term
-"Remind me to submit the report tomorrow",task,0.85,long_term
+```bash
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -r requirements-ml.txt
+.venv/bin/python -m main process "Yesterday I celebrated my graduation." \
+  --user-id user_001 --session-id session_001 --scorer xgboost --no-save --pretty
 ```
 
-That dataset can later be used to train a LightGBM/XGBoost importance predictor or a learned classifier.
+Python integration:
+
+```python
+from main import MemoryCore, MemoryInput
+
+core = MemoryCore.with_ml()
+record = core.process(MemoryInput(
+    content="Yesterday I celebrated my graduation.",
+    user_id="user_001", session_id="session_001",
+))
+print(record.importance_score)
+```
+
+`MLImportanceScorer.score(features)` implements the same scoring contract as the
+heuristic. Use `MLFeatureExtractor` with it; `MemoryCore.with_ml()` configures both.
+`--model-dir PATH` or `MemoryCore.with_ml(PATH)` selects a custom artifact directory.
+The score flows through existing tier assignment, JSONL persistence, and ranking.
+Each ML record includes model provenance in its source metadata.
+
+Retrain and reproduce metrics with `.venv/bin/python -m training.train_importance`.
+It downloads the official Microsoft archive into ignored `data/hippocorpus/`.
+See [experiment report](reports/importance_report.md),
+[full metrics](reports/importance_metrics.json), and
+[model metadata](artifacts/importance/metadata.json).
+
+No learned classifier, retrieval ranker, consolidation model, or conflict detection
+model is trained. In-domain conversational importance labels and evaluation remain
+future work.
 
 ## Graph Database Status
 
@@ -376,7 +459,7 @@ List stored memories:
 python3 -m main list --user-id user_001 --pretty
 ```
 
-Search stored memories by simple keyword matching:
+Search stored memories with ranked keyword retrieval:
 
 ```bash
 python3 -m main search "technical summaries" --user-id user_001 --pretty
@@ -435,6 +518,7 @@ The tests cover:
 - lifecycle tier assignment
 - record serialization/deserialization
 - local JSONL storage
+- ranked retrieval signals, whole-word matching, filters, limits, deterministic ordering, and CLI search
 - CLI process/list/get behavior
 - graph database isolation
 
@@ -442,37 +526,32 @@ The tests cover:
 
 Recommended order:
 
-1. Improve retrieval
-   - Retrieve by user ID
-   - Filter by category and tier
-   - Current keyword search can be expanded into ranked retrieval and later vector retrieval
-
-2. Add training dataset generation
+1. Add in-domain conversational labels
    - Create labeled examples for category, importance, and tier
    - Export CSV for ML experiments
 
-3. Add ML importance model
-   - Train LightGBM/XGBoost using extracted features
-   - Keep the same `score(features)` interface
+2. Improve and validate the trained ML importance model
+   - Evaluate transfer from Hippocorpus to conversations
+   - Calibrate lifecycle thresholds before changing the default
 
-4. Add conflict detection
+3. Add conflict detection
    - Detect incompatible memories
    - Prefer newer or higher-confidence facts
 
-5. Add memory consolidation
+4. Add memory consolidation
    - Merge repeated observations into stronger long-term memories
    - Example: repeated coffee mentions become `User prefers coffee`
 
-6. Add controlled forgetting
+5. Add controlled forgetting
    - Periodically expire low-value working/short-term memories
    - Archive useful old memories
 
-7. Add RAG/vector retrieval
+6. Add RAG/vector retrieval
    - Generate embeddings
    - Store vectors
    - Retrieve relevant memories for prompts
 
-8. Add graph database layer later
+7. Add graph database layer later
    - Temporal knowledge graph
    - Entity relationships
    - Conflict-aware graph updates
@@ -483,7 +562,7 @@ Recommended order:
 The current milestone is:
 
 ```text
-Structured Memory Core, local JSONL store, and CLI implemented.
+Structured Memory Core, ranked keyword retrieval, optional trained XGBoost scoring, local JSONL store, and CLI implemented.
 ```
 
-In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. We have not yet implemented production database storage, advanced retrieval, ML training, RAG, graph, API, or deployment layers.
+In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. We have not yet implemented production database storage, in-domain ML validation, RAG/vector retrieval, graph, API, or deployment layers.

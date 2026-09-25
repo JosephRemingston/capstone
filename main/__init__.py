@@ -8,6 +8,8 @@ from .models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
 from .scoring import ImportanceScorer
 from .classification import MemoryClassifier
 from .store import LocalMemoryStore
+from .retrieval import MemoryRanker
+from .ml import MLFeatureExtractor, MLImportanceScorer
 
 __all__ = [
     "FeatureExtractor",
@@ -20,5 +22,8 @@ __all__ = [
     "MemoryCore",
     "MemoryInput",
     "MemoryRecord",
+    "MemoryRanker",
+    "MLFeatureExtractor",
+    "MLImportanceScorer",
     "MemoryTier",
 ]

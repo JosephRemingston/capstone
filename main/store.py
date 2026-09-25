@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
 from .models import MemoryCategory, MemoryRecord, MemoryTier
+from .retrieval import MemoryRanker, tokenize
 
 
 DEFAULT_STORE_PATH = Path("memory_store") / "memories.jsonl"
@@ -18,6 +19,7 @@ class LocalMemoryStore:
     """Append-only local storage for serialized memory records."""
 
     path: Path | str = DEFAULT_STORE_PATH
+    ranker: MemoryRanker = field(default_factory=MemoryRanker)
 
     def __post_init__(self) -> None:
         self.path = Path(self.path)
@@ -83,8 +85,13 @@ class LocalMemoryStore:
         tier: MemoryTier | str | None = None,
         limit: int | None = None,
     ) -> list[MemoryRecord]:
-        terms = [term for term in query.lower().split() if term]
-        if not terms:
+        """Return ranked whole-word matches after applying all filters.
+
+        Expiry timestamps remain hints; search does not expire or mutate records.
+        """
+        if limit is not None and limit < 0:
+            raise ValueError("Search limit must be nonnegative")
+        if not tokenize(query) or limit == 0:
             return []
 
         candidates = self._filter(
@@ -94,15 +101,7 @@ class LocalMemoryStore:
             category=category,
             tier=tier,
         )
-        scored = []
-        for record in candidates:
-            content = record.content.lower()
-            score = sum(content.count(term) for term in terms)
-            if score > 0:
-                scored.append((score, record.created_at, record))
-
-        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
-        records = [record for _, _, record in scored]
+        records = self.ranker.rank(query, candidates)
         if limit is not None:
             return records[:limit]
         return records

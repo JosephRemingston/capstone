@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Joseph Remingston L
 
-Last updated: September 16, 2026
+Last updated: September 25, 2026
 
 Related docs:
 
@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The complete capstone system is planned to extend this core with advanced retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, conflict resolution, consolidation, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
+The complete capstone system is planned to extend this core with vector/hybrid retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, conflict resolution, consolidation, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
 
 ## 2. Repository Analysis
 
@@ -38,7 +38,7 @@ The current repository contains:
 | Production database layer | Not implemented | No SQLite/Postgres/document database server exists yet. |
 | RAG/vector layer | Not implemented | No embeddings, vector store, semantic retriever, or LLM generation pipeline exists yet. |
 | Graph layer | Not implemented | Only a placeholder graph adapter protocol exists. |
-| ML training | Not implemented | No LightGBM/XGBoost training pipeline or labeled dataset exists yet. |
+| ML training | Experimental implementation | XGBoost trained on Hippocorpus importance ratings; reproducible training and held-out metrics in `reports/importance_report.md`. |
 | REST API | Not implemented | No HTTP API exists yet. |
 
 ## 3. Implemented, Partial, Planned, and Out of Scope
@@ -55,6 +55,7 @@ Implemented:
 - Lifecycle tier assignment.
 - Serialization and deserialization.
 - Local JSONL memory persistence through `LocalMemoryStore`.
+- Ranked keyword retrieval through `MemoryRanker`, with configurable signal weights and recency half-life.
 - CLI commands for processing, listing, searching, getting records, and store statistics.
 - Tests for core behavior, local store behavior, CLI behavior, and graph isolation.
 
@@ -62,15 +63,14 @@ Partially implemented:
 
 - Graph integration contract: `GraphMemoryAdapter` exists only as a protocol/interface. There is no graph database implementation.
 - Memory lifecycle: tier assignment and expiry/archive hints exist, but no scheduled cleanup or archive migration exists.
-- Importance modeling: heuristic scoring exists, but no trained ML model exists.
-- Retrieval: simple keyword search exists, but ranked retrieval, vector retrieval, and hybrid retrieval are not implemented.
+- Importance modeling: heuristic default plus optional trained XGBoost proxy; conversational validation remains outstanding.
+- Retrieval: keyword relevance, category, tier, recency, and importance ranking exist; vector and hybrid retrieval are not implemented.
 
 Planned:
 
 - REST API using FastAPI or similar.
-- LightGBM/XGBoost importance prediction.
-- Training dataset generation.
-- Advanced ranked retrieval.
+- In-domain validation and calibration of XGBoost importance prediction.
+- In-domain conversational training labels beyond Hippocorpus.
 - Production storage backend.
 - Vector database and RAG retrieval.
 - Temporal knowledge graph.
@@ -94,7 +94,7 @@ Out of scope for the current phase:
 
 The current implementation solves two narrow but important problems: converting raw conversational content into a structured memory object, and saving/inspecting those records through a local JSONL store and CLI.
 
-It does not provide production database storage, semantic retrieval, RAG, or graph reasoning. It does provide local append-only storage and simple keyword search for development/demo use.
+It does not provide production database storage, semantic retrieval, RAG, or graph reasoning. It does provide local append-only storage and ranked keyword search for development/demo use.
 
 Current objective:
 
@@ -136,7 +136,7 @@ Current architecture properties:
 - Uses a local JSONL file store for development/demo persistence.
 - Uses no graph database.
 - Uses no vector database.
-- Uses no ML training pipeline.
+- Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
 ## 6. Current Component Design
@@ -151,6 +151,7 @@ Current architecture properties:
 | Lifecycle manager | `main/lifecycle.py` | Assigns memory tier and expiry/archive hints. | `MemoryRecord`, score. | `MemoryTier`, timestamp hints. |
 | Memory orchestrator | `main/core.py` | Runs the full processing pipeline. | `MemoryInput`. | Final `MemoryRecord`. |
 | Local memory store | `main/store.py` | Saves, loads, filters, gets, and keyword-searches JSONL memory records. | `MemoryRecord` or filter/query arguments. | Stored or retrieved `MemoryRecord` objects. |
+| Retrieval ranker | `main/retrieval.py` | Ranks whole-word matches by keyword coverage, category, tier, recency, and importance. | Query and filtered records. | Ordered records. |
 | CLI | `main/__main__.py` | Provides terminal commands for process, list, search, get, and stats. | Command-line arguments. | JSON output. |
 | Graph contract | `main/interfaces.py` | Defines a future adapter protocol only. | `MemoryRecord`. | No implementation. |
 | Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
@@ -228,7 +229,7 @@ Output format:
 
 ## 9. Current Model Design
 
-There is no trained ML model in the current system.
+An optional XGBoost regression model is trained on Hippocorpus personal-event importance ratings. `MemoryCore.with_ml()` enables it; the heuristic remains the default. See [experiment report](reports/importance_report.md) for measured results and limitations.
 
 Current classifier:
 
@@ -239,10 +240,10 @@ Current classifier:
 
 Current importance model:
 
-- Type: heuristic scoring model.
-- Inputs: extracted feature dictionary.
+- Type: default heuristic scorer or optional XGBoost regression model.
+- Inputs: extracted feature dictionary; ML adds deterministic hashed word counts.
 - Output: float score from `0.0` to `1.0`.
-- Method: weighted sum with a penalty for temporary memories.
+- Method: heuristic weighted sum, or trained XGBoost prediction clamped to 0–1.
 
 Current lifecycle model:
 
@@ -251,7 +252,7 @@ Current lifecycle model:
 - Output: one `MemoryTier`.
 - Method: threshold and category checks.
 
-There is no training workflow, no hyperparameter search, no model registry, and no model artifact storage yet.
+The offline training workflow evaluates four configurations using validation RMSE and early stopping, then evaluates the selected model on a held-out test set. Native model artifacts and metadata are stored under `artifacts/importance/`. There is no model registry.
 
 ## 10. Current Storage Design
 
@@ -262,11 +263,11 @@ Current storage has two levels:
 
 | Data type | Current storage |
 | --- | --- |
-| Raw datasets | `data/` contains proposal and research documents only. |
-| Processed datasets | Not implemented. |
+| Raw datasets | Research documents plus downloaded Hippocorpus under ignored `data/hippocorpus/`. |
+| Processed datasets | Features computed in memory during training; split IDs saved under `reports/`. |
 | Features | Stored inside returned `MemoryRecord.features` and persisted in JSONL when saved. |
-| Trained models | Not implemented. |
-| Experiment results | Not implemented. |
+| Trained models | Native XGBoost model and metadata under `artifacts/importance/`. |
+| Experiment results | Importance regression metrics, split IDs, and test predictions under `reports/`. |
 | Logs | Not implemented. |
 | Configuration files | Not implemented. |
 | Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
@@ -371,7 +372,7 @@ Planned complete architecture responsibilities:
 | Preprocessing layer | Clean, normalize, validate, and optionally redact input. | Basic validation only. |
 | Memory classifier | Classify memory type. | Rule-based version implemented. |
 | Feature extractor | Generate scoring features. | Baseline implemented. |
-| Importance predictor | Decide storage value using ML. | Heuristic implemented; ML planned. |
+| Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Basic tiering implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
 | Vector store | Store embeddings for retrieval. | Planned. |
@@ -386,7 +387,7 @@ Planned complete architecture responsibilities:
 
 ## 16. Complete Training Pipeline
 
-The planned training pipeline will use labeled examples of memory content, category, importance, and lifecycle tier.
+The current training pipeline uses existing Hippocorpus story text and importance ratings. Author/story-family-disjoint splits protect evaluation. The broader planned dataset would also include conversational category and lifecycle tier labels.
 
 ```mermaid
 flowchart LR
@@ -410,7 +411,7 @@ Planned training data fields:
 - `interaction_signal`
 - `retrieval_success`
 
-No such training dataset exists yet.
+Hippocorpus supplies the current importance target; the broader conversational category/tier dataset does not yet exist.
 
 ## 17. Complete Retrieval Pipeline
 
@@ -527,7 +528,7 @@ Future operational signals:
 ## 22. Open Questions
 
 - Should the next production storage backend be SQLite, Postgres, or a document database?
-- What labeled dataset will be used to train the LightGBM/XGBoost importance model?
+- Which conversational dataset can validate transfer of Hippocorpus-trained importance scoring?
 - Which embedding model and vector database should be used for RAG retrieval?
 - What exact graph schema should represent users, memories, entities, relationships, and timestamps?
 - What evaluation dataset and metrics will compare CogniMem against baseline memory systems?
@@ -535,22 +536,21 @@ Future operational signals:
 
 ## 23. Recommended Next Steps
 
-1. Improve local retrieval ranking using keyword relevance, category, tier, recency, importance, and confidence.
-2. Create a labeled training dataset format and exporter.
-3. Train and evaluate a LightGBM/XGBoost importance scorer.
-4. Add conflict detection and resolution.
-5. Add memory consolidation.
-6. Add controlled forgetting/archive cleanup.
-7. Add REST API endpoints.
-8. Add vector retrieval and RAG context building.
-9. Add graph database layer after the non-graph pipeline is stable.
+1. Add conversational importance/category/tier labels for in-domain evaluation.
+2. Improve and calibrate the experimental XGBoost importance scorer for conversational retention.
+3. Add conflict detection and resolution.
+4. Add memory consolidation.
+5. Add controlled forgetting/archive cleanup.
+6. Add REST API endpoints.
+7. Add vector retrieval and RAG context building.
+8. Add graph database layer after the non-graph pipeline is stable.
 
 ## 24. Current Milestone
 
 The current milestone is:
 
 ```text
-Structured Memory Core, local JSONL store, and CLI implemented.
+Structured Memory Core, ranked keyword retrieval, local JSONL store, and CLI implemented.
 ```
 
-The project has implemented memory structure, processing decisions, local JSONL storage, simple keyword search, and CLI access. It has not yet implemented production database storage, advanced retrieval, RAG, graph database, ML training, REST APIs, or deployment.
+The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It has not yet implemented production database storage, vector/hybrid retrieval, RAG, graph database, in-domain ML validation, REST APIs, or deployment.

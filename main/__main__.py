@@ -36,13 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--interaction-score", type=float, help="Shortcut for metadata.interaction_score.")
     process.add_argument("--no-save", action="store_true", help="Process and print the record without saving it.")
     process.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    process.add_argument("--scorer", choices=["heuristic", "xgboost"], default="heuristic",
+                         help="Importance scorer; xgboost uses the experimental Hippocorpus model.")
+    process.add_argument("--model-dir", type=Path, help="Custom XGBoost artifact directory (requires --scorer xgboost).")
 
     list_cmd = subparsers.add_parser("list", help="List stored memory records.")
     add_filter_args(list_cmd)
     list_cmd.add_argument("--limit", type=int, default=20, help="Maximum records to return. Defaults to 20.")
     list_cmd.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
-    search = subparsers.add_parser("search", help="Search stored records by simple keyword matching.")
+    search = subparsers.add_parser("search", help="Rank keyword matches by relevance, category, tier, recency, and importance.")
     search.add_argument("query", help="Search query.")
     add_filter_args(search)
     search.add_argument("--limit", type=int, default=20, help="Maximum records to return. Defaults to 20.")
@@ -124,7 +127,10 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
         role=args.role,
         metadata=metadata,
     )
-    record = MemoryCore().process(memory_input)
+    if args.model_dir is not None and args.scorer != "xgboost":
+        raise ValueError("--model-dir requires --scorer xgboost")
+    core = MemoryCore.with_ml(args.model_dir) if args.scorer == "xgboost" else MemoryCore()
+    record = core.process(memory_input)
     if not args.no_save:
         store.save(record)
     print_json(record.to_dict(), pretty=args.pretty)
