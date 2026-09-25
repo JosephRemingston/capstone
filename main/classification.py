@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 
 from .models import MemoryCategory, MemoryInput
-from .text_rules import event_update, matches, preference_constraint
+from .text_rules import event_update, matches, preference_constraint, negated_task
 
 
 def _contains_any(text: str, terms: tuple[str, ...], *, legacy: bool = False) -> bool:
@@ -98,6 +98,10 @@ class MemoryClassifier:
             return MemoryCategory.TEMPORARY
 
         if not self.legacy:
+            if matches(r"\b(?:don't|do not|no longer)\s+(?:need|want)\s+to\b", lowered):
+                return MemoryCategory.EPISODIC
+            if negated_task(lowered):
+                return MemoryCategory.TASK
             if preference_constraint(lowered):
                 return MemoryCategory.PREFERENCE
             # An explicit new request takes precedence over an event it mentions.

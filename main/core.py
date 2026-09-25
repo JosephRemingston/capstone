@@ -10,6 +10,10 @@ from .features import FeatureExtractor
 from .lifecycle import LifecycleManager
 from .models import MemoryInput, MemoryRecord
 from .scoring import ImportanceScorer, ImportanceScoring
+from .models import MemoryCategory
+from .deadlines import parse_deadline
+from .text_rules import recurring
+from .segmentation import split_input
 
 
 @dataclass(slots=True)
@@ -31,6 +35,16 @@ class MemoryCore:
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         category = self.classifier.classify(memory_input)
         record = MemoryRecord.from_input(memory_input=memory_input, category=category)
+        if memory_input.metadata.get("due_at") is not None and category is not MemoryCategory.TASK:
+            raise ValueError("An explicit due_at requires a task message")
+        if category is MemoryCategory.TASK:
+            record.task_status = "active"
+            if recurring(record.content) and memory_input.metadata.get("due_at") is not None:
+                raise ValueError("A recurring task needs a recurrence policy, not a single due_at")
+            # Recurrence is a standing instruction; do not expire the entire series.
+            if not recurring(record.content):
+                record.due_at = parse_deadline(record.content, memory_input.timestamp,
+                                               memory_input.metadata.get("due_at"))
         features = self.feature_extractor.extract(memory_input, record)
         score = self.importance_scorer.score(features)
         tier = self.lifecycle_manager.assign_tier(record, score)
@@ -47,3 +61,7 @@ class MemoryCore:
                 "sha256": self.importance_scorer.metadata["model_sha256"],
             }
         return record
+
+    def process_many(self, memory_input: MemoryInput) -> list[MemoryRecord]:
+        """Produce separate records for explicit independent clauses."""
+        return [self.process(part) for part in split_input(memory_input)]

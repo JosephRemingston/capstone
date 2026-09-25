@@ -86,6 +86,10 @@ class MemoryRecord:
     features: dict[str, float] = field(default_factory=dict)
     expires_at: datetime | None = None
     archive_after: datetime | None = None
+    due_at: datetime | None = None
+    task_status: str | None = None
+    related_task_id: str | None = None
+    last_accessed_at: datetime | None = None
 
     @classmethod
     def from_input(
@@ -111,6 +115,7 @@ class MemoryRecord:
         self.updated_at = when or utc_now()
         if self.updated_at.tzinfo is None:
             self.updated_at = self.updated_at.replace(tzinfo=timezone.utc)
+        self.last_accessed_at = self.updated_at
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,6 +135,10 @@ class MemoryRecord:
             "tier": self.tier.value,
             "updated_at": _serialize_datetime(self.updated_at),
             "user_id": self.user_id,
+            "due_at": _serialize_datetime(self.due_at),
+            "task_status": self.task_status,
+            "related_task_id": self.related_task_id,
+            "last_accessed_at": _serialize_datetime(self.last_accessed_at),
         }
 
     @classmethod
@@ -151,4 +160,8 @@ class MemoryRecord:
             tier=MemoryTier(payload.get("tier", MemoryTier.WORKING.value)),
             updated_at=_parse_datetime(payload.get("updated_at")) or utc_now(),
             user_id=payload["user_id"],
+            due_at=_parse_datetime(payload.get("due_at")),
+            task_status=payload.get("task_status"),
+            related_task_id=payload.get("related_task_id"),
+            last_accessed_at=_parse_datetime(payload.get("last_accessed_at")),
         )

@@ -1,0 +1,871 @@
+{
+  "count": 48,
+  "label_sources": {
+    "developer_authored": 48
+  },
+  "category_accuracy": 0.9166666666666666,
+  "category_macro_f1": 0.9149540517961571,
+  "tier_accuracy": 0.9166666666666666,
+  "importance_range_agreement": 0.9166666666666666,
+  "confusion": [
+    {
+      "expected": "episodic",
+      "predicted": "episodic",
+      "count": 7
+    },
+    {
+      "expected": "episodic",
+      "predicted": "temporary",
+      "count": 1
+    },
+    {
+      "expected": "preference",
+      "predicted": "preference",
+      "count": 8
+    },
+    {
+      "expected": "preference",
+      "predicted": "temporary",
+      "count": 3
+    },
+    {
+      "expected": "procedural",
+      "predicted": "procedural",
+      "count": 4
+    },
+    {
+      "expected": "semantic",
+      "predicted": "semantic",
+      "count": 8
+    },
+    {
+      "expected": "task",
+      "predicted": "task",
+      "count": 12
+    },
+    {
+      "expected": "temporary",
+      "predicted": "temporary",
+      "count": 5
+    }
+  ],
+  "note": "Range agreement measures a proposed policy, not importance regression accuracy. Developer cases are not independent human validation. No model was trained or thresholds fitted on these labels.",
+  "results": [
+    {
+      "id": "conversation-001",
+      "content": "Hi there!",
+      "label_source": "developer_authored",
+      "expected_category": "temporary",
+      "category": "temporary",
+      "expected_tier": "working",
+      "tier": "working",
+      "importance_range": [
+        0,
+        0.24
+      ],
+      "score": 0.0304,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-002",
+      "content": "Thanks a lot for your help.",
+      "label_source": "developer_authored",
+      "expected_category": "temporary",
+      "category": "temporary",
+      "expected_tier": "working",
+      "tier": "working",
+      "importance_range": [
+        0,
+        0.24
+      ],
+      "score": 0.0245,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-003",
+      "content": "Okay!",
+      "label_source": "developer_authored",
+      "expected_category": "temporary",
+      "category": "temporary",
+      "expected_tier": "working",
+      "tier": "working",
+      "importance_range": [
+        0,
+        0.24
+      ],
+      "score": 0.0402,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-004",
+      "content": "Good morning!",
+      "label_source": "developer_authored",
+      "expected_category": "temporary",
+      "category": "temporary",
+      "expected_tier": "working",
+      "tier": "working",
+      "importance_range": [
+        0,
+        0.24
+      ],
+      "score": 0.0429,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-005",
+      "content": "See you later!",
+      "label_source": "developer_authored",
+      "expected_category": "temporary",
+      "category": "temporary",
+      "expected_tier": "working",
+      "tier": "working",
+      "importance_range": [
+        0,
+        0.24
+      ],
+      "score": 0.0272,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-006",
+      "content": "My occupation is a civil engineer.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4778,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-007",
+      "content": "I work at a public library.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4645,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-008",
+      "content": "I live near the train station.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4645,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-009",
+      "content": "My dog is named Bruno.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4957,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-010",
+      "content": "I study physics at university.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4637,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-011",
+      "content": "I own a small bakery.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4637,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-012",
+      "content": "I prefer examples over abstract explanations.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.6345,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-013",
+      "content": "My favourite author is Ursula Le Guin.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.6581,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-014",
+      "content": "I dislike being called by my surname.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.6352,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-015",
+      "content": "I don't like messages with lots of emojis.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.636,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-016",
+      "content": "Never add sugar to my coffee.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.5978,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-017",
+      "content": "Always use Celsius in my weather summaries.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.6081,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-018",
+      "content": "I am allergic to sesame.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.5837,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-019",
+      "content": "Avoid including shellfish in my meals.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "preference",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.5978,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-020",
+      "content": "Please book a dentist appointment tomorrow.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.6878,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-021",
+      "content": "Send the invoice next Tuesday.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.4957,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-022",
+      "content": "Pay the electricity bill by 2026-12-01.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.5678,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-023",
+      "content": "Remind me to water the plants in 3 hours.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.6856,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-024",
+      "content": "I need to pick up the package today.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.676,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-025",
+      "content": "I haven't finished the budget report.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.4645,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-026",
+      "content": "I have not submitted the application yet.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.4652,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-027",
+      "content": "I never completed the registration.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.4637,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-028",
+      "content": "Remind me to review expenses every Friday.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.6081,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-029",
+      "content": "Remind me to check my calendar daily.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.5967,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-030",
+      "content": "Yesterday I attended a design workshop.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.2978,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-031",
+      "content": "I completed the budget report today.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.2845,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-032",
+      "content": "We have already submitted the application.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.2978,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-033",
+      "content": "The appointment has been cancelled.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.2997,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-034",
+      "content": "Our meeting was postponed.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.303,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-035",
+      "content": "I bought the groceries.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.283,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-036",
+      "content": "We sent the invoice yesterday.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "episodic",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.2997,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-037",
+      "content": "First back up the database, then install the update.",
+      "label_source": "developer_authored",
+      "expected_category": "procedural",
+      "category": "procedural",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4356,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-038",
+      "content": "How to reset the router: hold the button for ten seconds.",
+      "label_source": "developer_authored",
+      "expected_category": "procedural",
+      "category": "procedural",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4355,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-039",
+      "content": "Whenever I deploy, I check the logs.",
+      "label_source": "developer_authored",
+      "expected_category": "procedural",
+      "category": "procedural",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4367,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-040",
+      "content": "My workflow is to draft, review, and publish.",
+      "label_source": "developer_authored",
+      "expected_category": "procedural",
+      "category": "procedural",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.436,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-041",
+      "content": "My hobby is bookbinding.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.483,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-042",
+      "content": "I work with overdue accounts.",
+      "label_source": "developer_authored",
+      "expected_category": "semantic",
+      "category": "semantic",
+      "expected_tier": "long_term",
+      "tier": "long_term",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.4637,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-043",
+      "content": "I would rather receive short answers.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "temporary",
+      "expected_tier": "long_term",
+      "tier": "working",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.0211,
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "conversation-044",
+      "content": "The lecture got called off.",
+      "label_source": "developer_authored",
+      "expected_category": "episodic",
+      "category": "temporary",
+      "expected_tier": "short_term",
+      "tier": "working",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.0249,
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "conversation-045",
+      "content": "Please remember that my cat cannot eat tuna.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "temporary",
+      "expected_tier": "long_term",
+      "tier": "working",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.054,
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "conversation-046",
+      "content": "Could you remind me to renew my passport?",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.596,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "conversation-047",
+      "content": "I usually take tea without milk.",
+      "label_source": "developer_authored",
+      "expected_category": "preference",
+      "category": "temporary",
+      "expected_tier": "long_term",
+      "tier": "working",
+      "importance_range": [
+        0.42,
+        1
+      ],
+      "score": 0.0211,
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "conversation-048",
+      "content": "The report is not finished yet.",
+      "label_source": "developer_authored",
+      "expected_category": "task",
+      "category": "task",
+      "expected_tier": "short_term",
+      "tier": "short_term",
+      "importance_range": [
+        0.25,
+        1
+      ],
+      "score": 0.4778,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    }
+  ]
+}

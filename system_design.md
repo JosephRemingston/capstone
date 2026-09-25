@@ -62,7 +62,7 @@ Implemented:
 Partially implemented:
 
 - Graph integration contract: `GraphMemoryAdapter` exists only as a protocol/interface. There is no graph database implementation.
-- Memory lifecycle: tier assignment and expiry/archive hints exist, but no scheduled cleanup or archive migration exists.
+- Memory lifecycle: task deadline parsing, expiry filtering, resolved-task visibility, and inactivity archive views exist. No scheduled physical cleanup or archive migration exists.
 - Importance modeling: heuristic default plus optional trained XGBoost proxy; conversational validation remains outstanding.
 - Retrieval: keyword relevance, category, tier, recency, and importance ranking exist; vector and hybrid retrieval are not implemented.
 
@@ -157,6 +157,8 @@ Default conversational rules now use whole-word matching, explicit constraint/ev
 | CLI | `main/__main__.py` | Provides terminal commands for process, list, search, get, and stats. | Command-line arguments. | JSON output. |
 | Graph contract | `main/interfaces.py` | Defines a future adapter protocol only. | `MemoryRecord`. | No implementation. |
 | Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
+
+Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: [lifecycle changes](reports/lifecycle_improvements.md).
 
 ## 7. Current Data Contracts
 
@@ -278,7 +280,7 @@ The JSONL store is intentionally simple. It is not a production database and doe
 
 ## 11. Current Evaluation
 
-Current evaluation consists of unit tests.
+Current evaluation includes automated tests, the Hippocorpus regression experiment, and a 48-case developer-authored conversational check. Human review remains pending; see `evaluation/README.md`.
 
 The tests verify:
 
@@ -375,13 +377,13 @@ Planned complete architecture responsibilities:
 | Memory classifier | Classify memory type. | Rule-based version implemented. |
 | Feature extractor | Generate scoring features. | Baseline implemented. |
 | Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
-| Lifecycle manager | Assign tier, expiry, archive behavior. | Basic tiering implemented. |
+| Lifecycle manager | Assign tier, expiry, archive behavior. | Deadlines, inactivity archival, and expiry visibility implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
 | Vector store | Store embeddings for retrieval. | Planned. |
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | Planned; not current phase. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Planned. |
 | Consolidation engine | Merge repeated observations into higher-level knowledge. | Planned. |
-| Forgetting engine | Expire/archive memories based on value and age. | Planned. |
+| Forgetting engine | Expire/archive memories based on value and age. | Read visibility and archive views implemented; physical cleanup planned. |
 | Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Planned. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
 | REST API | HTTP access surface for backend/UI/agent integration. | Planned. |

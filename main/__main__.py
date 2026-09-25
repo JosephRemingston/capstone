@@ -39,6 +39,9 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--scorer", choices=["heuristic", "xgboost"], default="heuristic",
                          help="Importance scorer; xgboost uses the experimental Hippocorpus model.")
     process.add_argument("--model-dir", type=Path, help="Custom XGBoost artifact directory (requires --scorer xgboost).")
+    process.add_argument("--split", action="store_true", help="Split independent clauses; return an array of memories.")
+    process.add_argument("--due-at", help="Explicit ISO deadline in the input timezone (UTC by default).")
+    process.add_argument("--task-id", help="Explicit task to resolve with a completion/cancellation message.")
 
     list_cmd = subparsers.add_parser("list", help="List stored memory records.")
     add_filter_args(list_cmd)
@@ -62,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def add_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--include-expired", action="store_true", help="Include expired records for inspection.")
+    parser.add_argument("--include-resolved", action="store_true", help="Include completed/cancelled tasks.")
     parser.add_argument("--user-id", help="Filter by user identifier.")
     parser.add_argument("--session-id", help="Filter by session identifier.")
     parser.add_argument("--category", choices=[category.value for category in MemoryCategory], help="Filter by category.")
@@ -83,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
                 category=args.category,
                 tier=args.tier,
                 limit=args.limit,
+                include_expired=args.include_expired,
+                include_resolved=args.include_resolved,
             )
             print_json([record.to_dict() for record in records], pretty=args.pretty)
             return 0
@@ -94,6 +101,8 @@ def main(argv: list[str] | None = None) -> int:
                 category=args.category,
                 tier=args.tier,
                 limit=args.limit,
+                include_expired=args.include_expired,
+                include_resolved=args.include_resolved,
             )
             print_json([record.to_dict() for record in records], pretty=args.pretty)
             return 0
@@ -119,6 +128,10 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
     metadata = parse_metadata(args.metadata)
     if args.interaction_score is not None:
         metadata["interaction_score"] = args.interaction_score
+    if args.due_at is not None:
+        metadata["due_at"] = args.due_at
+    if args.task_id is not None:
+        metadata["task_id"] = args.task_id
 
     memory_input = MemoryInput(
         content=args.content,
@@ -130,10 +143,12 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
     if args.model_dir is not None and args.scorer != "xgboost":
         raise ValueError("--model-dir requires --scorer xgboost")
     core = MemoryCore.with_ml(args.model_dir) if args.scorer == "xgboost" else MemoryCore()
-    record = core.process(memory_input)
+    records = core.process_many(memory_input) if args.split else [core.process(memory_input)]
     if not args.no_save:
-        store.save(record)
-    print_json(record.to_dict(), pretty=args.pretty)
+        for record in records:
+            store.ingest(record)
+    payload = [record.to_dict() for record in records]
+    print_json(payload if args.split else payload[0], pretty=args.pretty)
     return 0
 
 

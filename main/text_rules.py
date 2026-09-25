@@ -14,15 +14,21 @@ def preference_constraint(text: str) -> bool:
 
 
 def event_update(text: str) -> bool:
+    text = text.replace("’", "'")
     # Do not treat negated completion or cancellation as a finished event.
-    if matches(r"\b(?:not|never|haven't|hasn't|isn't|wasn't|didn't)\b", text):
+    if matches(r"\b(?:not|never|haven't|hasn't|hadn't|isn't|wasn't|weren't|didn't)\b", text):
         return False
     return matches(
         r"\b(?:i|we)\s+(?:(?:have|had|just|already)\s+)*"
-        r"(?:submitted|completed|finished|cancelled|canceled|booked|scheduled)\b|"
+        r"(?:submitted|completed|finished|cancelled|canceled|booked|scheduled|paid|sent|bought)\b|"
         r"\b(?:meeting|appointment|event|task|deadline|report|booking)\b.{0,60}"
         r"\b(?:is|was|has been|have been)\s+(?:already\s+)?"
         r"(?:cancelled|canceled|completed|finished|submitted|rescheduled|postponed)\b", text)
+
+
+def negated_task(text: str) -> bool:
+    return matches(r"\b(?:not|never|haven't|hasn't|hadn't|didn't)\s+(?:yet\s+)?"
+                   r"(?:complete[ds]?|finish(?:ed)?|submit(?:ted)?|paid|pay|sent|send|bought|buy)\b", text)
 
 
 def recurring(text: str) -> bool:

@@ -20,7 +20,10 @@ Implemented:
 - Optional trained XGBoost importance scorer, evaluated on Hippocorpus
 - Reproducible importance-model training, held-out metrics, and native model artifacts
 - Lifecycle tier assignment
-- Expiry/archive hints
+- Deadline-aware task expiry, inactivity archive views, and expiry-aware retrieval
+- Conservative task completion/cancellation linking with revision history
+- Optional multi-memory segmentation
+- Conversational developer evaluation and a human-review template
 - Serialization and deserialization
 - Local JSONL memory store
 - Advanced ranked keyword retrieval using relevance, category, tier, recency, and importance
@@ -158,6 +161,10 @@ Fields:
 - `features`: extracted numeric scoring features
 - `expires_at`: expiry hint for working or short-term memory
 - `archive_after`: archive hint for long-term memory
+- `due_at`: parsed/explicit task deadline
+- `task_status`: active, completed, or cancelled for tasks
+- `related_task_id`: task resolved by this observation
+- `last_accessed_at`: explicit access timestamp used for inactivity
 
 Records can be converted to plain dictionaries:
 
@@ -209,7 +216,8 @@ The default pipeline now uses whole-word keyword matching, recognizes explicit
 preferences/constraints and selected event updates, and keeps short one-off tasks
 in short-term memory. Mentions of today/tomorrow count as deadline signals only
 in task context. Fresh episodic memories receive a category weight of 0.20.
-Short-term expiry remains a fixed 14-day hint; deadlines are not parsed or enforced.
+Dated tasks expire 24 hours after their deadline; undated tasks use 14 days.
+List/search enforce expiry visibility without deleting records.
 
 See [the 15-sentence before/after experiment](reports/heuristic_improvements.md).
 These are developer-authored regression examples, not human-labeled validation or
@@ -304,7 +312,9 @@ or semantic matching: `python` does not match `pythonic`.
 The final score is the weighted sum divided by the total weight. Category and tier
 values are fixed usefulness preferences, not predictions of query intent. Ties
 are resolved by newest creation time, then ascending memory ID. Search does not
-modify records, increment access counts, or enforce expiry/archive hints.
+modify records or increment access counts. Expired records and resolved tasks are
+omitted by default, and inactive long-term memories are returned as archive views.
+Use `--include-expired` and `--include-resolved` for historical inspection.
 
 Weights and recency half-life can be configured through the Python API:
 
@@ -341,7 +351,7 @@ The remaining work should be implemented in phases. The current system already h
 | 3 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
 | 4 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
 | 5 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
-| 6 | Controlled forgetting | Expire low-value working/short-term memories and archive useful stale memories. | Keeps storage efficient and prevents irrelevant context buildup. |
+| 6 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
 | 7 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
 | 8 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
 | 9 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
@@ -517,6 +527,47 @@ LocalMemoryStore().save(record)
 print(record.to_dict())
 PY
 ```
+
+## Deadlines, Task Updates, and Multiple Memories
+
+```bash
+# Separate a standing preference and an actionable reminder.
+python3 -m main process "I prefer Python, and remind me to submit the report tomorrow." \
+  --user-id u1 --session-id s1 --split --pretty
+
+# Resolves a unique matching active task for this user, or records ambiguity.
+python3 -m main process "I submitted the report." --user-id u1 --session-id s1 --pretty
+
+# Explicit deadline / explicit task resolution when needed.
+python3 -m main process "Submit the application" --user-id u1 --session-id s1 \
+  --due-at "2026-12-01T17:00:00+05:30"
+python3 -m main process "I completed it." --user-id u1 --session-id s1 --task-id TASK_ID
+
+# Include historical records omitted from normal retrieval.
+python3 -m main list --user-id u1 --include-expired --include-resolved --pretty
+```
+
+Python: call `core.process_many(input)` for segmentation, then `store.ingest(record)`
+for each record to enable task updates. `process()` returns one record and `save()`
+is raw persistence. `--no-save` previews processing without resolving stored tasks.
+
+Deadline parsing supports ISO dates, today/tomorrow/tonight, next week, weekdays,
+and numeric durations, with optional times. Date-only deadlines mean end of day
+in the input timestamp timezone (UTC by default). Unknown phrasing is not guessed.
+Recurring tasks remain standing instructions. Task matching is conservative;
+ambiguous references and rescheduling require further handling.
+
+Storage is now an append-only revision log: reads use the latest row per ID.
+`get()` and `all()` include historical visibility; list/search hide expired and
+resolved tasks by default. Long-term memories are viewed as archived after 90
+inactive days, using explicit last access or creation time. No cleanup job or
+concurrent-write guarantees are provided.
+
+Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
+category/tier agreement is 44/48, not independently reviewed accuracy. The blank
+[review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
+are ready; no human-reviewed labels have been collected.
+See [implementation and limits](reports/lifecycle_improvements.md).
 
 ## Tests
 
