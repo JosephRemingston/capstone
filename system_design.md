@@ -139,7 +139,7 @@ Current architecture properties:
 - Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
-Default conversational rules now use whole-word matching, explicit constraint/event recognition, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](reports/heuristic_improvements.md) for results and limitations.
+Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](reports/heuristic_improvements.md) for results and limitations.
 
 ## 6. Current Component Design
 
@@ -540,14 +540,16 @@ Future operational signals:
 
 ## 23. Recommended Next Steps
 
-1. Add conversational importance/category/tier labels for in-domain evaluation.
-2. Improve and calibrate the experimental XGBoost importance scorer for conversational retention.
-3. Add conflict detection and resolution.
-4. Add memory consolidation.
-5. Add controlled forgetting/archive cleanup.
-6. Add REST API endpoints.
-7. Add vector retrieval and RAG context building.
-8. Add graph database layer after the non-graph pipeline is stable.
+1. Add conflict detection and resolution for facts/preferences.
+2. Add memory consolidation.
+3. Add controlled forgetting/archive cleanup and compaction.
+4. Add REST API endpoints and production storage.
+5. Add vector retrieval and RAG context building.
+6. Evaluate retrieval and personalization independently.
+7. Add monitoring and privacy/deletion/export controls.
+8. Add the graph database layer after the non-graph pipeline is stable.
+
+ML modeling and its datasets are a separate research track.
 
 ## 24. Current Milestone
 
@@ -558,3 +560,41 @@ Structured Memory Core, ranked keyword retrieval, local JSONL store, and CLI imp
 ```
 
 The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It has not yet implemented production database storage, vector/hybrid retrieval, RAG, graph database, in-domain ML validation, REST APIs, or deployment.
+
+## 25. Conversational Task Updates
+
+The heuristic recognizes indirect preferences and retains their original negation.
+`process_many()` splits explicit independent clauses outside quoted spans. Task
+state changes are recognized separately from classification; questions, reported
+speech, hypotheticals, and negated completion cannot resolve tasks.
+
+`ingest()` identifies an active task belonging to the observation's user, preferring
+an exact normalized object and then a unique noun subset. Numeric identifiers
+must match. Bare pronouns are restricted to one candidate in the same session.
+Ambiguity is returned with candidate IDs. `task_id` supplies an explicit reference.
+Updates preserve the task ID and append a revision plus an observation. Duplicate
+event IDs are idempotent. Event chronology is enforced against `updated_at`.
+
+Rescheduling parses the replacement date separately from the old date, updates
+`due_at`, and recalculates one-off expiry. Relative postponement uses the current
+deadline. Unknown/alternative dates do not mutate state. A narrow “not due X but Y”
+correction is supported without treating general negation as completion.
+
+Recurring tasks store `recurrence` (unit, interval, anchor, index), `next_due_at`,
+and `task_occurrences`. `due_at` remains null for the standing series. The first
+anchor comes from the input date/time or explicit `due_at`. Supported schedules
+are daily, weekly, monthly, yearly, one named weekday, or integer intervals.
+Calendar month/year arithmetic clamps invalid days against the original anchor,
+so January 31 → February 28 → March 31 does not drift. Anchor offsets are fixed;
+named timezone/DST schedules and combined/exclusion schedules are unsupported.
+
+Each completion/cancellation advances one occurrence and leaves the series active.
+The cursor tracks the oldest unresolved occurrence; reads never advance it. An
+unqualified completion must refer to an occurrence due that local day, otherwise
+`occurrence_at` is required. That field accepts its original or rescheduled ISO
+date/time. Already resolved occurrences are recognized. Occurrence rescheduling
+keeps the cadence and cannot cross the next occurrence. `task_scope=series` resets
+the anchor or closes the series; re-anchoring cannot overlap resolved history.
+
+See [current behavior and verification](reports/lifecycle_improvements.md) and
+[CLI examples](README.md#deadlines-task-updates-and-multiple-memories).

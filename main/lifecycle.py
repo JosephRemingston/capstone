@@ -45,6 +45,8 @@ class LifecycleManager:
     def expiry_for(self, record: MemoryRecord) -> datetime | None:
         if record.category is MemoryCategory.TASK and record.task_status in {"completed", "cancelled"}:
             return None
+        if record.category is MemoryCategory.TASK and recurring(record.content):
+            return None
         if record.category is MemoryCategory.TASK and record.due_at is not None:
             return record.due_at + timedelta(hours=self.task_grace_hours)
         if record.tier is MemoryTier.WORKING:

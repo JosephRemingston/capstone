@@ -3,30 +3,20 @@
   "label_sources": {
     "developer_authored": 48
   },
-  "category_accuracy": 0.9166666666666666,
-  "category_macro_f1": 0.9149540517961571,
-  "tier_accuracy": 0.9166666666666666,
-  "importance_range_agreement": 0.9166666666666666,
+  "category_accuracy": 1.0,
+  "category_macro_f1": 1.0,
+  "tier_accuracy": 1.0,
+  "importance_range_agreement": 1.0,
   "confusion": [
     {
       "expected": "episodic",
       "predicted": "episodic",
-      "count": 7
-    },
-    {
-      "expected": "episodic",
-      "predicted": "temporary",
-      "count": 1
-    },
-    {
-      "expected": "preference",
-      "predicted": "preference",
       "count": 8
     },
     {
       "expected": "preference",
-      "predicted": "temporary",
-      "count": 3
+      "predicted": "preference",
+      "count": 11
     },
     {
       "expected": "procedural",
@@ -770,51 +760,51 @@
       "content": "I would rather receive short answers.",
       "label_source": "developer_authored",
       "expected_category": "preference",
-      "category": "temporary",
+      "category": "preference",
       "expected_tier": "long_term",
-      "tier": "working",
+      "tier": "long_term",
       "importance_range": [
         0.42,
         1
       ],
-      "score": 0.0211,
-      "category_correct": false,
-      "tier_correct": false,
-      "importance_in_range": false
+      "score": 0.5845,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
     },
     {
       "id": "conversation-044",
       "content": "The lecture got called off.",
       "label_source": "developer_authored",
       "expected_category": "episodic",
-      "category": "temporary",
+      "category": "episodic",
       "expected_tier": "short_term",
-      "tier": "working",
+      "tier": "short_term",
       "importance_range": [
         0.25,
         1
       ],
-      "score": 0.0249,
-      "category_correct": false,
-      "tier_correct": false,
-      "importance_in_range": false
+      "score": 0.2997,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
     },
     {
       "id": "conversation-045",
       "content": "Please remember that my cat cannot eat tuna.",
       "label_source": "developer_authored",
       "expected_category": "preference",
-      "category": "temporary",
+      "category": "preference",
       "expected_tier": "long_term",
-      "tier": "working",
+      "tier": "long_term",
       "importance_range": [
         0.42,
         1
       ],
-      "score": 0.054,
-      "category_correct": false,
-      "tier_correct": false,
-      "importance_in_range": false
+      "score": 0.716,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
     },
     {
       "id": "conversation-046",
@@ -838,17 +828,17 @@
       "content": "I usually take tea without milk.",
       "label_source": "developer_authored",
       "expected_category": "preference",
-      "category": "temporary",
+      "category": "preference",
       "expected_tier": "long_term",
-      "tier": "working",
+      "tier": "long_term",
       "importance_range": [
         0.42,
         1
       ],
-      "score": 0.0211,
-      "category_correct": false,
-      "tier_correct": false,
-      "importance_in_range": false
+      "score": 0.5845,
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
     },
     {
       "id": "conversation-048",

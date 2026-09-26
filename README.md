@@ -163,8 +163,11 @@ Fields:
 - `archive_after`: archive hint for long-term memory
 - `due_at`: parsed/explicit task deadline
 - `task_status`: active, completed, or cancelled for tasks
-- `related_task_id`: task resolved by this observation
+- `related_task_id`: task changed by this observation
 - `last_accessed_at`: explicit access timestamp used for inactivity
+- `recurrence`: cadence, interval, calendar anchor, and occurrence index
+- `next_due_at`: deadline of the current unresolved recurring occurrence
+- `task_occurrences`: completed/cancelled occurrences with dates and source event IDs
 
 Records can be converted to plain dictionaries:
 
@@ -213,7 +216,7 @@ Current lifecycle behavior:
 ## Conversational Heuristic Improvements
 
 The default pipeline now uses whole-word keyword matching, recognizes explicit
-preferences/constraints and selected event updates, and keeps short one-off tasks
+preferences/constraints, indirect preferences, and selected event updates, and keeps short one-off tasks
 in short-term memory. Mentions of today/tomorrow count as deadline signals only
 in task context. Fresh episodic memories receive a category weight of 0.20.
 Dated tasks expire 24 hours after their deadline; undated tasks use 14 days.
@@ -346,18 +349,16 @@ The remaining work should be implemented in phases. The current system already h
 
 | Priority | Component | What needs to be implemented | Why it matters |
 | --- | --- | --- | --- |
-| 1 | In-domain training data | Add conversational importance/category/tier labels beyond Hippocorpus. | Validate transfer to actual agent memories. |
-| 2 | ML validation and calibration | Improve the experimental XGBoost model, evaluate conversational retention, and calibrate tier thresholds. | Required before making ML the default. |
-| 3 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
-| 4 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
-| 5 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
-| 6 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
-| 7 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 8 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
-| 9 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
-| 10 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
-| 11 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 12 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
+| 1 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
+| 2 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
+| 3 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
+| 4 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
+| 5 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
+| 6 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
+| 7 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
+| 8 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
+| 9 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
+| 10 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
 
 ## ML Importance Model
 
@@ -554,8 +555,57 @@ is raw persistence. `--no-save` previews processing without resolving stored tas
 Deadline parsing supports ISO dates, today/tomorrow/tonight, next week, weekdays,
 and numeric durations, with optional times. Date-only deadlines mean end of day
 in the input timestamp timezone (UTC by default). Unknown phrasing is not guessed.
-Recurring tasks remain standing instructions. Task matching is conservative;
-ambiguous references and rescheduling require further handling.
+Recurring tasks remain standing instructions with a separate occurrence cursor.
+Task updates support rescheduling, changed deadlines, completion, and cancellation.
+Exact object matches take priority; a unique noun subset supports “that report”
+for “budget report.” Numbers must agree. Bare “it” requires exactly one active
+candidate in the same session. Ambiguity returns candidate IDs for `--task-id`.
+Only user messages update tasks, and older observations cannot revise newer state.
+
+```bash
+python3 -m main process "Move the report from Monday to Friday at 5 pm" \
+  --user-id u1 --session-id s1
+python3 -m main process "Postpone the report by 2 days" --user-id u1 --session-id s1
+python3 -m main process "The report is not due Monday but Tuesday" --user-id u1 --session-id s1
+
+# --due-at sets the first occurrence when creating a recurring task.
+python3 -m main process "Remind me to pay rent monthly" \
+  --user-id u1 --session-id s1 --due-at "2026-10-01T09:00:00+05:30"
+python3 -m main process "I paid rent" --user-id u1 --session-id s1 \
+  --task-id TASK_ID --occurrence-at "2026-10-01"
+python3 -m main process "Cancel rent" --user-id u1 --session-id s1 \
+  --task-id TASK_ID --task-scope series
+```
+
+Supported recurrence: daily, weekly, monthly, yearly, every named weekday, and
+“every N days/weeks/months/years” (including “every other week”). A date/time
+anchor preserves month ends and leap days. Without an explicit time, the deadline
+is end of day; “morning/evening” does not invent a particular hour. Recurrence uses
+the anchor's fixed UTC offset; named timezones and daylight-saving rules are not
+implemented. Combined schedules/exclusions return `unsupported_schedule`.
+
+Completing or skipping the current occurrence records its outcome and advances
+`next_due_at`; the series stays active. Plain completion applies automatically
+only when the current occurrence is due on the observation's local date. For an
+early or overdue completion, pass `--occurrence-at` with the current occurrence's
+scheduled or rescheduled date/time. Occurrences are processed in order; reads do
+not skip overdue occurrences. Reusing an event ID is idempotent, and explicitly
+repeating a resolved occurrence returns `already_resolved`.
+
+Rescheduling defaults to the current occurrence and keeps the original cadence.
+Moving it to or past the next occurrence returns `occurrence_overlaps_next`.
+Use `--task-scope series` to re-anchor the series, or to cancel it entirely.
+“Stop reminding me to pay rent” also cancels the series. A new series anchor
+cannot overlap completed occurrence history. Unrecognized replacement dates
+return `missing_deadline` without changing the task. These statuses appear in
+`source_metadata.task_resolution`; applied changes include `task_change`.
+
+Preferences keep their original wording, including negation. The rules recognize
+“I'd rather…”, “not a fan of…”, “I don't dislike…”, and “works better for me.”
+Uncertain or reported completions do not change tasks. `--split` handles explicit
+independent clauses outside quoted spans, while preserving conditional scope,
+procedures, and object lists. Arbitrary paraphrases, sarcasm, and general language
+understanding remain outside these deterministic rules.
 
 Storage is now an append-only revision log: reads use the latest row per ID.
 `get()` and `all()` include historical visibility; list/search hide expired and
@@ -564,7 +614,7 @@ inactive days, using explicit last access or creation time. No cleanup job or
 concurrent-write guarantees are provided.
 
 Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
-category/tier agreement is 44/48, not independently reviewed accuracy. The blank
+category/tier agreement is 48/48, not independently reviewed accuracy. The blank
 [review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
 are ready; no human-reviewed labels have been collected.
 See [implementation and limits](reports/lifecycle_improvements.md).
@@ -592,36 +642,16 @@ The tests cover:
 
 Recommended order:
 
-1. Add in-domain conversational labels
-   - Create labeled examples for category, importance, and tier
-   - Export CSV for ML experiments
+1. Add conflict detection and resolution for contradictory facts/preferences.
+2. Consolidate repeated memories.
+3. Add scheduled cleanup and JSONL compaction.
+4. Add REST API endpoints and production storage.
+5. Add vector retrieval and RAG context building.
+6. Evaluate retrieval and personalization with independent conversational examples.
+7. Add monitoring, deletion/export, and privacy controls.
+8. Add the temporal graph layer after the core pipeline is stable.
 
-2. Improve and validate the trained ML importance model
-   - Evaluate transfer from Hippocorpus to conversations
-   - Calibrate lifecycle thresholds before changing the default
-
-3. Add conflict detection
-   - Detect incompatible memories
-   - Prefer newer or higher-confidence facts
-
-4. Add memory consolidation
-   - Merge repeated observations into stronger long-term memories
-   - Example: repeated coffee mentions become `User prefers coffee`
-
-5. Add controlled forgetting
-   - Periodically expire low-value working/short-term memories
-   - Archive useful old memories
-
-6. Add RAG/vector retrieval
-   - Generate embeddings
-   - Store vectors
-   - Retrieve relevant memories for prompts
-
-7. Add graph database layer later
-   - Temporal knowledge graph
-   - Entity relationships
-   - Conflict-aware graph updates
-   - Graph traversal as one retrieval signal
+ML research is tracked separately in **ML Importance Model** above.
 
 ## Current Milestone
 

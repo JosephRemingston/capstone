@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -11,8 +11,9 @@ from typing import Iterable
 from .models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
 from .retrieval import MemoryRanker, tokenize
 from .lifecycle import LifecycleManager
-from .tasks import task_key, task_outcome
-from .text_rules import recurring
+from .tasks import task_action, match_tasks
+from .task_updates import revise_task
+from .deadlines import parse_deadline
 
 
 DEFAULT_STORE_PATH = Path("memory_store") / "memories.jsonl"
@@ -67,13 +68,26 @@ class LocalMemoryStore:
 
         Use save() for raw persistence. No access counts change during reads.
         """
-        outcome = task_outcome(record.content) if record.role == 'user' else None
+        action = task_action(record.content) if record.role == 'user' else None
         target_id = record.source_metadata.get('task_id')
-        if target_id is not None and (not isinstance(target_id, str) or not outcome):
-            raise ValueError('task_id requires an affirmative completion/cancellation by the user')
+        if target_id is not None and (not isinstance(target_id, str) or not target_id or not action):
+            raise ValueError('task_id requires a recognized task update by the user')
+        scope = record.source_metadata.get('task_scope')
+        if scope is not None and (scope not in ('occurrence', 'series') or not action):
+            raise ValueError('task_scope requires a task update and must be occurrence or series')
+        if 'occurrence_at' in record.source_metadata and not action:
+            raise ValueError('occurrence_at requires a task update')
+        if record.source_metadata.get('occurrence_at') is not None:
+            parse_deadline('', record.created_at, record.source_metadata['occurrence_at'])
+        records = self.all()
+        existing = next((item for item in records if item.id == record.id), None)
+        if existing:
+            if existing.user_id != record.user_id or existing.content != record.content:
+                raise ValueError('An ingested memory ID cannot be reused for a different observation')
+            return existing  # Retrying the same event must not advance a series twice.
         updates = []
-        if outcome:
-            candidates = [item for item in self.all()
+        if action:
+            candidates = [item for item in records
                           if item.category is MemoryCategory.TASK and item.user_id == record.user_id
                           and item.task_status in (None, 'active') and item.updated_at <= record.created_at]
             if target_id:
@@ -81,15 +95,12 @@ class LocalMemoryStore:
                 if not candidates:
                     raise ValueError('Target task not found, inactive, newer than update, or belongs to another user')
             else:
-                key = task_key(record.content)
-                candidates = [item for item in candidates if key and task_key(item.content) == key
-                              and not recurring(item.content)]
+                candidates = match_tasks(candidates, action, record.session_id)
             if len(candidates) == 1:
                 target = candidates[0]
-                record.related_task_id = target.id
-                updates.append(replace(target, task_status=outcome, tier=MemoryTier.ARCHIVE,
-                    updated_at=record.created_at, expires_at=None, archive_after=None,
-                    source_metadata={**target.source_metadata, 'resolved_by': record.id}))
+                revision = revise_task(target, record, action)
+                if revision:
+                    updates.append(revision)
             elif len(candidates) > 1:
                 record.source_metadata['task_resolution'] = 'ambiguous'
                 record.source_metadata['candidate_task_ids'] = [item.id for item in candidates]

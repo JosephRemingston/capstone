@@ -11,10 +11,12 @@ all predictions, a category confusion matrix, macro F1, tier accuracy, and agree
 with the proposed importance ranges. Ranges represent a retention policy, not
 human-measured continuous scores. Never report range agreement as regression accuracy.
 
-The current run has 44/48 category and tier matches (91.67%), macro F1 0.9150,
-and 44/48 importance-range matches. Four failures remain visible: indirect
-preferences and the phrase “got called off.” The evaluator does not silently
-remove these cases or adjust labels to match the implementation.
+The current run has 48/48 category and tier matches (100%), macro F1 1.0,
+and 48/48 importance-range matches. The four previous failures now pass after
+extending the preference/event rules. The original labels are unchanged.
+These are examples used during development, so the result is regression coverage,
+not an estimate of accuracy on unseen conversations. Stateful task workflows,
+calendar arithmetic, and ambiguity handling are covered by automated tests.
 
 ## Human review
 

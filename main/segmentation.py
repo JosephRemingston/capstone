@@ -1,25 +1,34 @@
-"""Conservative splitting at explicit independent clauses, not arbitrary 'and'."""
+"""Split independent clauses without losing quoted or conditional scope."""
 import re
 from dataclasses import replace
 
 from .models import MemoryInput
 
+_START = r"(?:i\b|my\b|we\b|our\b|remind me\b|please\b|never\b|the\b|" \
+         r"reschedule\b|postpone\b|buy\b|submit\b|send\b|pay\b|cancel\b|skip\b)"
+_BOUNDARY = re.compile(
+    r'[;\n]+|(?<=[.!?])\s+(?=' + _START + r')|'
+    r',?\s+(?:and|but|also)\s+(?=' + _START + r')', re.I)
+
 
 def split_input(incoming: MemoryInput) -> list[MemoryInput]:
     text = incoming.content
-    # Quoted text and procedural sequences need richer parsing; leave them whole.
-    if '"' in text or re.search(r'\b(?:first|then|finally|how to|steps)\b', text, re.I):
+    # Scope cannot safely be inherited across an arbitrary conditional or sequence.
+    if re.search(r'\b(?:if|unless|whether)\b|^\s*(?:first|how to|steps)\b', text, re.I):
         return [incoming]
-    parts = re.split(
-        r'[;\n]+|(?<=[.!?])\s+(?=(?:I\b|My\b|We\b|Our\b|Remind\b|Please\b|Never\b|The\b))|'
-        r',?\s+(?:and|but)\s+(?=(?:I\b|my\b|we\b|our\b|remind me\b|please\b|never\b|the\b))',
-        text, flags=re.I)
-    parts = [part.strip(' ,') for part in parts if part.strip(' ,')]
+    # Mask quoted spans while keeping character positions intact.
+    masked = re.sub(r'"[^"\n]*"|“[^”\n]*”|(?<!\w)\x27[^\x27\n]+\x27(?!\w)',
+                    lambda match: 'x' * len(match[0]), text)
+    parts, start = [], 0
+    for boundary in _BOUNDARY.finditer(masked):
+        parts.append(text[start:boundary.start()].strip(' ,'))
+        start = boundary.end()
+    parts.append(text[start:].strip(' ,'))
+    parts = [part for part in parts if part]
     if len(parts) <= 1:
         return [incoming]
-    # One explicit target/deadline cannot safely be assigned to several clauses.
-    if any(key in incoming.metadata for key in ('task_id', 'due_at')):
-        raise ValueError('Split messages with task_id/due_at into separate inputs first')
+    if any(key in incoming.metadata for key in ('task_id', 'due_at', 'occurrence_at', 'task_scope')):
+        raise ValueError('Split messages with task_id/due_at/occurrence_at/task_scope into separate inputs first')
     return [replace(incoming, content=part, metadata={**incoming.metadata,
             'source_content': text, 'segment_index': index, 'segment_count': len(parts)})
             for index, part in enumerate(parts)]

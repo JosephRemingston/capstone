@@ -41,7 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--model-dir", type=Path, help="Custom XGBoost artifact directory (requires --scorer xgboost).")
     process.add_argument("--split", action="store_true", help="Split independent clauses; return an array of memories.")
     process.add_argument("--due-at", help="Explicit ISO deadline in the input timezone (UTC by default).")
-    process.add_argument("--task-id", help="Explicit task to resolve with a completion/cancellation message.")
+    process.add_argument("--task-id", help="Explicit task to complete, cancel, or reschedule.")
+    process.add_argument("--occurrence-at", help="ISO date/datetime of the current recurring occurrence.")
+    process.add_argument("--task-scope", choices=['occurrence', 'series'], help="Update one occurrence (default) or the entire series.")
 
     list_cmd = subparsers.add_parser("list", help="List stored memory records.")
     add_filter_args(list_cmd)
@@ -132,6 +134,10 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
         metadata["due_at"] = args.due_at
     if args.task_id is not None:
         metadata["task_id"] = args.task_id
+    if args.occurrence_at is not None:
+        metadata['occurrence_at'] = args.occurrence_at
+    if args.task_scope is not None:
+        metadata['task_scope'] = args.task_scope
 
     memory_input = MemoryInput(
         content=args.content,

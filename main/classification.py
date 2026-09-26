@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass, field
 
 from .models import MemoryCategory, MemoryInput
-from .text_rules import event_update, matches, preference_constraint, negated_task
+from .text_rules import event_update, matches, preference_constraint, negated_task, uncertain
+from .tasks import task_action
 
 
 def _contains_any(text: str, terms: tuple[str, ...], *, legacy: bool = False) -> bool:
@@ -98,6 +99,11 @@ class MemoryClassifier:
             return MemoryCategory.TEMPORARY
 
         if not self.legacy:
+            if task_action(lowered):
+                return MemoryCategory.EPISODIC
+            # Polite reminder requests are actionable; speculative statements are not.
+            if uncertain(lowered, quoted_objects=True) and not matches(r"^(?:could|can|would) you (?:please )?remind me\b", lowered):
+                return MemoryCategory.TEMPORARY
             if matches(r"\b(?:don't|do not|no longer)\s+(?:need|want)\s+to\b", lowered):
                 return MemoryCategory.EPISODIC
             if negated_task(lowered):

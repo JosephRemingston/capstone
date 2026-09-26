@@ -14,6 +14,8 @@ from .models import MemoryCategory
 from .deadlines import parse_deadline
 from .text_rules import recurring
 from .segmentation import split_input
+from .tasks import task_action
+from .recurrence import parse_recurrence, scheduled_at
 
 
 @dataclass(slots=True)
@@ -35,12 +37,21 @@ class MemoryCore:
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         category = self.classifier.classify(memory_input)
         record = MemoryRecord.from_input(memory_input=memory_input, category=category)
-        if memory_input.metadata.get("due_at") is not None and category is not MemoryCategory.TASK:
+        action = task_action(record.content)
+        is_reschedule = action is not None and action.kind == 'rescheduled'
+        if memory_input.metadata.get("due_at") is not None and category is not MemoryCategory.TASK and not is_reschedule:
             raise ValueError("An explicit due_at requires a task message")
+        if memory_input.metadata.get('due_at') is not None:
+            parse_deadline('', memory_input.timestamp, memory_input.metadata['due_at'])
         if category is MemoryCategory.TASK:
             record.task_status = "active"
-            if recurring(record.content) and memory_input.metadata.get("due_at") is not None:
-                raise ValueError("A recurring task needs a recurrence policy, not a single due_at")
+            if recurring(record.content):
+                record.recurrence = parse_recurrence(record.content, memory_input.timestamp,
+                                                     memory_input.metadata.get('due_at'))
+                if record.recurrence:
+                    record.next_due_at = scheduled_at(record.recurrence)
+                else:
+                    record.source_metadata['recurrence_resolution'] = 'unsupported_schedule'
             # Recurrence is a standing instruction; do not expire the entire series.
             if not recurring(record.content):
                 record.due_at = parse_deadline(record.content, memory_input.timestamp,

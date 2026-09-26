@@ -90,6 +90,9 @@ class MemoryRecord:
     task_status: str | None = None
     related_task_id: str | None = None
     last_accessed_at: datetime | None = None
+    recurrence: dict[str, Any] | None = None
+    next_due_at: datetime | None = None
+    task_occurrences: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_input(
@@ -139,6 +142,9 @@ class MemoryRecord:
             "task_status": self.task_status,
             "related_task_id": self.related_task_id,
             "last_accessed_at": _serialize_datetime(self.last_accessed_at),
+            "recurrence": dict(self.recurrence) if self.recurrence else None,
+            "next_due_at": _serialize_datetime(self.next_due_at),
+            "task_occurrences": [dict(item) for item in self.task_occurrences],
         }
 
     @classmethod
@@ -164,4 +170,7 @@ class MemoryRecord:
             task_status=payload.get("task_status"),
             related_task_id=payload.get("related_task_id"),
             last_accessed_at=_parse_datetime(payload.get("last_accessed_at")),
+            recurrence=dict(payload['recurrence']) if payload.get('recurrence') else None,
+            next_due_at=_parse_datetime(payload.get('next_due_at')),
+            task_occurrences=[dict(item) for item in payload.get('task_occurrences', [])],
         )
