@@ -44,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--task-id", help="Explicit task to complete, cancel, or reschedule.")
     process.add_argument("--occurrence-at", help="ISO date/datetime of the current recurring occurrence.")
     process.add_argument("--task-scope", choices=['occurrence', 'series'], help="Update one occurrence (default) or the entire series.")
+    process.add_argument('--confidence', type=float, help='Assertion confidence, from 0 to 1.')
+    process.add_argument('--source-priority', type=float, help='Caller-assigned source priority, from 0 to 100.')
 
     list_cmd = subparsers.add_parser("list", help="List stored memory records.")
     add_filter_args(list_cmd)
@@ -63,10 +65,25 @@ def build_parser() -> argparse.ArgumentParser:
     stats = subparsers.add_parser("stats", help="Show local store counts by category and tier.")
     stats.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
+    history = subparsers.add_parser('history', help='Show every persisted revision of a memory.')
+    history.add_argument('record_id')
+    history.add_argument('--user-id', required=True)
+    history.add_argument('--pretty', action='store_true')
+
+    resolve = subparsers.add_parser('resolve', help='Explicitly select the current assertion in a conflict.')
+    resolve.add_argument('--keep', required=True, help='ID of the fact/preference root to keep.')
+    resolve.add_argument('--user-id', required=True)
+    resolve.add_argument('--pretty', action='store_true')
+
+    reconcile = subparsers.add_parser('reconcile', help='Resolve conflicts and consolidate existing facts/preferences.')
+    reconcile.add_argument('--user-id', required=True)
+    reconcile.add_argument('--pretty', action='store_true')
+
     return parser
 
 
 def add_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('--include-history', action='store_true', help='Include superseded and consolidated records.')
     parser.add_argument("--include-expired", action="store_true", help="Include expired records for inspection.")
     parser.add_argument("--include-resolved", action="store_true", help="Include completed/cancelled tasks.")
     parser.add_argument("--user-id", help="Filter by user identifier.")
@@ -92,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 include_expired=args.include_expired,
                 include_resolved=args.include_resolved,
+                include_history=args.include_history,
             )
             print_json([record.to_dict() for record in records], pretty=args.pretty)
             return 0
@@ -105,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 include_expired=args.include_expired,
                 include_resolved=args.include_resolved,
+                include_history=args.include_history,
             )
             print_json([record.to_dict() for record in records], pretty=args.pretty)
             return 0
@@ -117,6 +136,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "stats":
             print_json(build_stats(store.all(), store.path), pretty=args.pretty)
+            return 0
+        if args.command == 'history':
+            records = store.history(args.record_id, user_id=args.user_id)
+            print_json([record.to_dict() for record in records], pretty=args.pretty)
+            return 0
+        if args.command == 'resolve':
+            record = store.resolve_conflict(args.keep, user_id=args.user_id)
+            print_json(record.to_dict(), pretty=args.pretty)
+            return 0
+        if args.command == 'reconcile':
+            records = store.reconcile_memories(user_id=args.user_id)
+            print_json({'changed_records': len(records), 'records': [record.to_dict() for record in records]}, pretty=args.pretty)
             return 0
     except ValueError as exc:
         print_json({"error": "invalid_input", "message": str(exc)}, pretty=getattr(args, "pretty", False))
@@ -138,6 +169,10 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
         metadata['occurrence_at'] = args.occurrence_at
     if args.task_scope is not None:
         metadata['task_scope'] = args.task_scope
+    if args.confidence is not None:
+        metadata['confidence'] = args.confidence
+    if args.source_priority is not None:
+        metadata['source_priority'] = args.source_priority
 
     memory_input = MemoryInput(
         content=args.content,
@@ -151,8 +186,7 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
     core = MemoryCore.with_ml(args.model_dir) if args.scorer == "xgboost" else MemoryCore()
     records = core.process_many(memory_input) if args.split else [core.process(memory_input)]
     if not args.no_save:
-        for record in records:
-            store.ingest(record)
+        records = [store.ingest(record) for record in records]
     payload = [record.to_dict() for record in records]
     print_json(payload if args.split else payload[0], pretty=args.pretty)
     return 0

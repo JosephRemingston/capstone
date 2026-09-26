@@ -50,14 +50,14 @@ class LifecycleManager:
         if record.category is MemoryCategory.TASK and record.due_at is not None:
             return record.due_at + timedelta(hours=self.task_grace_hours)
         if record.tier is MemoryTier.WORKING:
-            return record.created_at + timedelta(hours=1)
+            return (record.last_observed_at or record.created_at) + timedelta(hours=1)
         if record.tier is MemoryTier.SHORT_TERM:
-            return record.created_at + timedelta(days=14)
+            return (record.last_observed_at or record.created_at) + timedelta(days=14)
         return None
 
     def archive_after_for(self, record: MemoryRecord) -> datetime | None:
         if record.tier is MemoryTier.LONG_TERM:
-            return (record.last_accessed_at or record.created_at) + timedelta(days=self.archive_age_days)
+            return self._last_activity(record) + timedelta(days=self.archive_age_days)
         return None
 
     def _should_archive(self, record: MemoryRecord, score: float, *, now: datetime | None = None) -> bool:
@@ -67,10 +67,15 @@ class LifecycleManager:
         # Open tasks remain actionable until their deadline/expiry, not inactivity.
         if record.category is MemoryCategory.TASK:
             return False
-        age = (now or utc_now()) - (record.last_accessed_at or record.created_at)
+        age = (now or utc_now()) - self._last_activity(record)
         stale = age >= timedelta(days=self.archive_age_days)
         historically_useful = record.access_count > 0 or score >= self.long_term_threshold
         return stale and historically_useful
+
+    @staticmethod
+    def _last_activity(record: MemoryRecord) -> datetime:
+        return max(record.created_at, record.last_accessed_at or record.created_at,
+                   record.last_observed_at or record.created_at)
 
     def refresh(self, record: MemoryRecord, *, now: datetime | None = None) -> MemoryRecord:
         """Return an archived read view without mutating persistent history."""

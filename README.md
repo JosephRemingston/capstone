@@ -21,7 +21,10 @@ Implemented:
 - Reproducible importance-model training, held-out metrics, and native model artifacts
 - Lifecycle tier assignment
 - Deadline-aware task expiry, inactivity archive views, and expiry-aware retrieval
-- Conservative task completion/cancellation linking with revision history
+- Task completion, cancellation, rescheduling, and recurring occurrences with revision history
+- Supported fact/preference conflict detection and resolution
+- Durable memory consolidation with summaries and source evidence
+- History inspection, explicit conflict selection, and bulk reconciliation
 - Optional multi-memory segmentation
 - Conversational developer evaluation and a human-review template
 - Serialization and deserialization
@@ -41,8 +44,6 @@ Not implemented yet:
 - Graph database layer
 - Neo4j integration
 - Temporal knowledge graph construction
-- Conflict resolution
-- Memory consolidation
 - Controlled forgetting job
 - Evaluation dashboard or experiment runner
 
@@ -154,7 +155,7 @@ Fields:
 - `tier`: lifecycle tier
 - `created_at`: creation timestamp
 - `updated_at`: latest update timestamp
-- `confidence`: confidence score, currently defaulted to `1.0`
+- `confidence`: caller-provided assertion confidence (0–1), default `1.0`
 - `importance_score`: score from the baseline importance scorer
 - `access_count`: number of times the memory has been touched/accessed
 - `source_metadata`: metadata copied from the input
@@ -168,6 +169,15 @@ Fields:
 - `recurrence`: cadence, interval, calendar anchor, and occurrence index
 - `next_due_at`: deadline of the current unresolved recurring occurrence
 - `task_occurrences`: completed/cancelled occurrences with dates and source event IDs
+- `memory_status`: `active`, `superseded`, or `consolidated` (separate from lifecycle tier)
+- `claim`: extracted subject, attribute, value, polarity, and exclusivity
+- `superseded_by`: current replacement for a conflicting assertion
+- `consolidated_into`: canonical record for a repeated observation
+- `conflict_ids` / `conflict_resolution`: detected conflicts and the recorded decision/reason
+- `evidence_ids` / `evidence_session_ids`: supporting observations and their sessions
+- `summary`: faithful summary of a consolidated group
+- `first_observed_at` / `last_observed_at`: observation range; explicit selection also reaffirms the last observation time
+- `last_confirmed_at`: explicit selection timestamp used to order later assertions
 
 Records can be converted to plain dictionaries:
 
@@ -295,10 +305,10 @@ The local store is intentionally simple. It does not provide database indexes, c
 
 `LocalMemoryStore.search()` and the CLI `search` command rank matching records
 using `MemoryRanker`. The return format remains a list of memory records.
-User, session, category, and tier filters are applied before ranking; the limit
+User, session, category, and tier filters are applied before ranking; consolidated groups match their supporting sessions; the limit
 is applied afterward. A zero limit returns no results; negative limits are rejected.
 
-Queries and content are split into case-insensitive whole-word tokens. Punctuation
+Queries, original content, and consolidated summaries are split into case-insensitive whole-word tokens. Punctuation
 separates tokens. At least one query token must match; unrelated records are never
 included merely because they are important. Duplicate query terms and repeated
 content words do not boost relevance. There is no stemming, synonym expansion,
@@ -309,7 +319,7 @@ or semantic matching: `python` does not match `pythonic`.
 | Keyword relevance | 0.65 | Fraction of unique query tokens present in the content. |
 | Category | 0.10 | Semantic/preference: 1.0; procedural/task: 0.9; episodic: 0.6; temporary: 0.1. |
 | Tier | 0.05 | Long-term: 1.0; short-term: 0.7; working: 0.4; archive: 0.2. |
-| Recency | 0.10 | Exponential decay from creation time, with a 30-day half-life. Future timestamps receive 1.0. |
+| Recency | 0.10 | Exponential decay from the latest supporting observation (creation time if absent), with a 30-day half-life. Future timestamps receive 1.0. |
 | Importance | 0.10 | Stored importance score clamped to 0–1; nonfinite values contribute 0. |
 
 The final score is the weighted sum divided by the total weight. Category and tier
@@ -317,7 +327,7 @@ values are fixed usefulness preferences, not predictions of query intent. Ties
 are resolved by newest creation time, then ascending memory ID. Search does not
 modify records or increment access counts. Expired records and resolved tasks are
 omitted by default, and inactive long-term memories are returned as archive views.
-Use `--include-expired` and `--include-resolved` for historical inspection.
+Use `--include-expired`, `--include-resolved`, and `--include-history` to include the corresponding hidden records. Superseded facts and consolidated duplicates are omitted by default.
 
 Weights and recency half-life can be configured through the Python API:
 
@@ -349,16 +359,13 @@ The remaining work should be implemented in phases. The current system already h
 
 | Priority | Component | What needs to be implemented | Why it matters |
 | --- | --- | --- | --- |
-| 1 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
-| 2 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
-| 3 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
-| 4 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
-| 5 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 6 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
-| 7 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
-| 8 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
-| 9 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 10 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
+| 1 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
+| 2 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
+| 3 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
+| 4 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
+| 5 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
+| 6 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
+| 7 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
 
 ## ML Importance Model
 
@@ -610,7 +617,7 @@ understanding remain outside these deterministic rules.
 Storage is now an append-only revision log: reads use the latest row per ID.
 `get()` and `all()` include historical visibility; list/search hide expired and
 resolved tasks by default. Long-term memories are viewed as archived after 90
-inactive days, using explicit last access or creation time. No cleanup job or
+inactive days, using the latest explicit access, supporting observation, or creation time. No cleanup job or
 concurrent-write guarantees are provided.
 
 Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
@@ -618,6 +625,78 @@ category/tier agreement is 48/48, not independently reviewed accuracy. The blank
 [review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
 are ready; no human-reviewed labels have been collected.
 See [implementation and limits](reports/lifecycle_improvements.md).
+
+## Conflicts, Current Memories, and Consolidation
+
+CLI processing and `store.ingest(record)` reconcile durable user assertions.
+`store.save(record)` remains raw persistence. `process()` / `--no-save` extract
+supported claims without consulting or changing stored records.
+
+| Inputs | Result |
+| --- | --- |
+| “I live in Chennai.” → “I live in Bengaluru.” | Bengaluru becomes current by default; Chennai remains in history. |
+| “I like tea.” + “I like coffee.” | Both remain current because the preferences are compatible. |
+| “I like coffee.” → “I don't like coffee.” | The newer opposite preference becomes current. |
+| “I prefer short answers.” → “I prefer detailed answers.” | The explicit response-length preference changes. |
+| “I live in Chennai.” + “I reside in Chennai.” | One retrievable summary, “User lives in Chennai.”, with both source IDs. |
+
+Supported assertions include residence, employer, occupation, name, home city,
+hometown, timezone, a named entity's residence/employer, a pet/entity's name,
+favorites, likes/dislikes, allergies, response length, and explicit “X over Y”
+choices. Subjects and attributes must match. Different positive values conflict
+only for attributes treated as single-valued; opposite polarities conflict only
+for the same value. Multiple likes and multiple allergies can coexist.
+
+The automatic policy compares **source priority → confidence → observation
+timestamp → importance**, in that order. Priority defaults to 0 and confidence
+to 1, so later assertions normally win. Exact ties keep an existing assertion.
+`metadata.source_priority` / `--source-priority` accepts 0–100;
+`metadata.confidence` / `--confidence` accepts 0–1. These are caller-assigned
+values, not authenticated trust or automatically calibrated probabilities.
+Every decision records its reason and the replacement ID. A consolidated group
+uses its strongest actual supporting observation; repetition alone does not
+increase confidence or importance. Access timestamps do not decide truth. Explicit selection records a confirmation timestamp, so equal-quality late data does not undo that selection.
+
+Consolidation groups equivalent supported claims, or exact normalized duplicates
+of other durable facts, preferences, and procedures. It keeps the original
+content and source observations, adds a summary and evidence IDs, and hides
+redundant observations from normal retrieval. Counts are `len(evidence_ids)`.
+Fresh support renews retention and retrieval recency. Returning to an older value
+after a conflicting change starts a new evidence group. Tasks, transient chat,
+and separate episodic events are not merged as repeated facts.
+
+```bash
+# New assertions automatically reconcile when saved.
+python3 -m main process "I live in Chennai." --user-id u1 --session-id s1
+python3 -m main process "I live in Bengaluru." --user-id u1 --session-id s2
+
+# Include superseded/consolidated records, or inspect every revision of one ID.
+python3 -m main list --user-id u1 --include-history --pretty
+python3 -m main history MEMORY_ID --user-id u1 --pretty
+
+# Explicitly choose a supported original/canonical assertion in an active conflict.
+python3 -m main resolve --keep MEMORY_ID --user-id u1 --pretty
+
+# Apply reconciliation to existing records, including older/raw-saved memories.
+python3 -m main reconcile --user-id u1 --pretty
+```
+
+Python equivalents: `store.history(id, user_id=...)`,
+`store.resolve_conflict(id, user_id=...)`, and
+`store.reconcile_memories(user_id=...)`. Bulk reconciliation appends only changed
+rows and is idempotent. Explicit resolution can restore a superseded root,
+reaffirm it now, and supersede its current contradictions; subsequent ingestion
+still follows the normal policy. All these operations preserve original rows.
+
+These rules do not infer preferences from mere mentions, generalize repeated
+events into new facts, resolve arbitrary prose, or recognize geographical/name
+aliases. Questions, uncertain/reported statements, historical wording, and
+ambiguous compound assertions do not automatically replace supported facts.
+Use `--split` for supported independent clauses. Unrecognized content remains
+stored without an inferred conflict. The JSONL store still needs production
+concurrency controls and physical cleanup.
+
+See [behavior and verification](reports/memory_reconciliation.md).
 
 ## Tests
 
@@ -637,19 +716,18 @@ The tests cover:
 - ranked retrieval signals, whole-word matching, filters, limits, deterministic ordering, and CLI search
 - CLI process/list/get behavior
 - graph database isolation
+- conflict resolution, duplicate summaries, provenance, history visibility, and bulk reconciliation
 
 ## Recommended Next Implementation Steps
 
 Recommended order:
 
-1. Add conflict detection and resolution for contradictory facts/preferences.
-2. Consolidate repeated memories.
-3. Add scheduled cleanup and JSONL compaction.
-4. Add REST API endpoints and production storage.
-5. Add vector retrieval and RAG context building.
-6. Evaluate retrieval and personalization with independent conversational examples.
-7. Add monitoring, deletion/export, and privacy controls.
-8. Add the temporal graph layer after the core pipeline is stable.
+1. Add scheduled cleanup and JSONL compaction.
+2. Add REST API endpoints and production storage.
+3. Add vector retrieval and RAG context building.
+4. Evaluate retrieval, conflict decisions, and personalization independently.
+5. Add monitoring, deletion/export, and privacy controls.
+6. Add the temporal graph layer after the core pipeline is stable.
 
 ML research is tracked separately in **ML Importance Model** above.
 

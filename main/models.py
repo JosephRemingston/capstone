@@ -93,6 +93,18 @@ class MemoryRecord:
     recurrence: dict[str, Any] | None = None
     next_due_at: datetime | None = None
     task_occurrences: list[dict[str, Any]] = field(default_factory=list)
+    memory_status: str = 'active'
+    claim: dict[str, Any] | None = None
+    superseded_by: str | None = None
+    consolidated_into: str | None = None
+    conflict_ids: list[str] = field(default_factory=list)
+    conflict_resolution: dict[str, Any] | None = None
+    evidence_ids: list[str] = field(default_factory=list)
+    evidence_session_ids: list[str] = field(default_factory=list)
+    summary: str | None = None
+    first_observed_at: datetime | None = None
+    last_observed_at: datetime | None = None
+    last_confirmed_at: datetime | None = None
 
     @classmethod
     def from_input(
@@ -145,6 +157,18 @@ class MemoryRecord:
             "recurrence": dict(self.recurrence) if self.recurrence else None,
             "next_due_at": _serialize_datetime(self.next_due_at),
             "task_occurrences": [dict(item) for item in self.task_occurrences],
+            "memory_status": self.memory_status,
+            "claim": dict(self.claim) if self.claim else None,
+            "superseded_by": self.superseded_by,
+            "consolidated_into": self.consolidated_into,
+            "conflict_ids": list(self.conflict_ids),
+            "conflict_resolution": dict(self.conflict_resolution) if self.conflict_resolution else None,
+            "evidence_ids": list(self.evidence_ids),
+            "evidence_session_ids": list(self.evidence_session_ids),
+            "summary": self.summary,
+            "first_observed_at": _serialize_datetime(self.first_observed_at),
+            "last_observed_at": _serialize_datetime(self.last_observed_at),
+            "last_confirmed_at": _serialize_datetime(self.last_confirmed_at),
         }
 
     @classmethod
@@ -173,4 +197,16 @@ class MemoryRecord:
             recurrence=dict(payload['recurrence']) if payload.get('recurrence') else None,
             next_due_at=_parse_datetime(payload.get('next_due_at')),
             task_occurrences=[dict(item) for item in payload.get('task_occurrences', [])],
+            memory_status=payload.get('memory_status', 'active'),
+            claim=dict(payload['claim']) if payload.get('claim') else None,
+            superseded_by=payload.get('superseded_by'),
+            consolidated_into=payload.get('consolidated_into'),
+            conflict_ids=list(payload.get('conflict_ids', [])),
+            conflict_resolution=dict(payload['conflict_resolution']) if payload.get('conflict_resolution') else None,
+            evidence_ids=list(payload.get('evidence_ids', [])),
+            evidence_session_ids=list(payload.get('evidence_session_ids', [])),
+            summary=payload.get('summary'),
+            first_observed_at=_parse_datetime(payload.get('first_observed_at')),
+            last_observed_at=_parse_datetime(payload.get('last_observed_at')),
+            last_confirmed_at=_parse_datetime(payload.get('last_confirmed_at')),
         )

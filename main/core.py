@@ -16,6 +16,8 @@ from .text_rules import recurring
 from .segmentation import split_input
 from .tasks import task_action
 from .recurrence import parse_recurrence, scheduled_at
+from .claims import extract_claim
+from .reconciliation import validate_evidence
 
 
 @dataclass(slots=True)
@@ -37,6 +39,10 @@ class MemoryCore:
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         category = self.classifier.classify(memory_input)
         record = MemoryRecord.from_input(memory_input=memory_input, category=category)
+        record.confidence = memory_input.metadata.get('confidence', record.confidence)
+        validate_evidence(record)
+        if record.role == 'user' and category in {MemoryCategory.SEMANTIC, MemoryCategory.PREFERENCE}:
+            record.claim = extract_claim(record.content)
         action = task_action(record.content)
         is_reschedule = action is not None and action.kind == 'rescheduled'
         if memory_input.metadata.get("due_at") is not None and category is not MemoryCategory.TASK and not is_reschedule:

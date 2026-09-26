@@ -21,7 +21,7 @@ class MemoryRanker:
     """Rank lexical matches using bounded signals and configurable weights.
 
     Category and tier scores are usefulness priors, not inferred query intent.
-    Recency uses creation time with a 30-day half-life by default.
+    Recency uses the latest supporting observation, with a 30-day half-life.
     """
 
     weights: dict[str, float] = field(default_factory=lambda: {
@@ -71,10 +71,10 @@ class MemoryRanker:
         }
         scored = []
         for record in records:
-            matches = terms & tokenize(record.content)
+            matches = terms & tokenize(record.content + ' ' + (record.summary or ''))
             if not matches:
                 continue
-            age_days = max(0.0, (now - record.created_at).total_seconds() / 86400)
+            age_days = max(0.0, (now - (record.last_observed_at or record.created_at)).total_seconds() / 86400)
             importance = record.importance_score
             signals = {
                 "keyword_relevance": len(matches) / len(terms),

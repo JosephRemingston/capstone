@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The complete capstone system is planned to extend this core with vector/hybrid retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, conflict resolution, consolidation, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
+The complete capstone system is planned to extend this core with vector/hybrid retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
 
 ## 2. Repository Analysis
 
@@ -58,6 +58,8 @@ Implemented:
 - Ranked keyword retrieval through `MemoryRanker`, with configurable signal weights and recency half-life.
 - CLI commands for processing, listing, searching, getting records, and store statistics.
 - Tests for core behavior, local store behavior, CLI behavior, and graph isolation.
+- Supported assertion conflict detection, automatic/explicit resolution, and durable-memory consolidation.
+- Revision history and idempotent bulk reconciliation of existing records.
 
 Partially implemented:
 
@@ -74,8 +76,6 @@ Planned:
 - Production storage backend.
 - Vector database and RAG retrieval.
 - Temporal knowledge graph.
-- Conflict detection and resolution.
-- Memory consolidation.
 - Controlled forgetting.
 - Continuous learning from feedback/retrieval success.
 - Evaluation against vector-only RAG, Mem0, MemGPT, LangMem, or similar baselines.
@@ -381,8 +381,8 @@ Planned complete architecture responsibilities:
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
 | Vector store | Store embeddings for retrieval. | Planned. |
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | Planned; not current phase. |
-| Conflict resolver | Detect contradictory memories and pick retained fact. | Planned. |
-| Consolidation engine | Merge repeated observations into higher-level knowledge. | Planned. |
+| Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
+| Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
 | Forgetting engine | Expire/archive memories based on value and age. | Read visibility and archive views implemented; physical cleanup planned. |
 | Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Planned. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
@@ -540,14 +540,12 @@ Future operational signals:
 
 ## 23. Recommended Next Steps
 
-1. Add conflict detection and resolution for facts/preferences.
-2. Add memory consolidation.
-3. Add controlled forgetting/archive cleanup and compaction.
-4. Add REST API endpoints and production storage.
-5. Add vector retrieval and RAG context building.
-6. Evaluate retrieval and personalization independently.
-7. Add monitoring and privacy/deletion/export controls.
-8. Add the graph database layer after the non-graph pipeline is stable.
+1. Add controlled forgetting/archive cleanup and compaction.
+2. Add REST API endpoints and production storage.
+3. Add vector retrieval and RAG context building.
+4. Evaluate retrieval, conflict decisions, and personalization independently.
+5. Add monitoring and privacy/deletion/export controls.
+6. Add the graph database layer after the non-graph pipeline is stable.
 
 ML modeling and its datasets are a separate research track.
 
@@ -598,3 +596,46 @@ the anchor or closes the series; re-anchoring cannot overlap resolved history.
 
 See [current behavior and verification](reports/lifecycle_improvements.md) and
 [CLI examples](README.md#deadlines-task-updates-and-multiple-memories).
+
+## 26. Assertion Reconciliation and Consolidation
+
+`main/claims.py` extracts a narrow single assertion: subject, predicate, normalized
+value, polarity, and exclusivity. The default classifier recognizes those forms;
+the optional scorer retains its frozen classification preprocessing. Ingestion
+recomputes claims from the original content, including older records without
+claim fields. Current user assertions with the same subject/predicate are checked
+for opposing polarity or different values on an exclusive attribute. Compatible
+likes and negative claims about different values remain independent.
+
+`main/reconciliation.py` compares source priority, confidence, observation time,
+then importance. The best actual supporting observation determines a group's
+rank. A rejected assertion does not supersede compatible existing facts. An exact
+tie keeps an existing assertion. Source priority/confidence are caller-supplied,
+not authenticated source identity or learned certainty. Automatic decisions,
+manual selections, and conflict links are persisted as revisions. `last_confirmed_at` makes explicit reaffirmation participate in observation ordering; it is separate from access time.
+
+`memory_status` is separate from lifecycle tier: active, superseded, consolidated.
+Superseded records point to their replacement; consolidated observations point to
+a canonical record. That record retains original content plus a summary,
+evidence IDs/session IDs, and observation range. Fresh evidence renews retention
+and retrieval recency without raising confidence/importance by repetition.
+Evidence must exist, belong to the same user, and support the same assertion.
+
+Only durable user facts/preferences/procedures consolidate, using equivalent
+claims or exact normalized text. Events and tasks retain separate identities.
+A change followed by a return to an old value creates a new assertion episode.
+No facts are invented from repeated mentions. Historical, uncertain, reported,
+and compound statements are not interpreted as unconditional replacements.
+Unsupported language remains stored; geographic and entity aliases are not
+resolved by the extractor.
+
+List/search omit superseded and consolidated records unless `include_history`
+is enabled. Search also indexes summary text; session filters match evidence
+sessions. `get`/`all` retain administrative visibility. `history` returns all
+revisions of a specific user-owned ID. Explicit `resolve_conflict` restores a
+supported root and supersedes its active contradictions. `reconcile_memories`
+replays current durable roots in memory and appends only changed records, making
+bulk processing idempotent. It does not rewrite prior JSONL rows or lock writers.
+
+See [README usage](README.md#conflicts-current-memories-and-consolidation) and
+[verification](reports/memory_reconciliation.md).
