@@ -17,6 +17,7 @@ from unittest.mock import patch
 from main.core import MemoryCore
 from main.models import MemoryInput
 from main.store import LocalMemoryStore
+from main.cleanup import cleanup
 
 ROOT = Path('data/evaluation/longmemeval')
 REVISION = '98d7416c24c778c2fee6e6f3006e7a073259d48f'
@@ -28,7 +29,14 @@ def parse_date(value):
     return datetime.strptime(value, '%Y/%m/%d (%a) %H:%M').replace(tzinfo=timezone.utc)
 
 
+def chronology_valid(row):
+    question_time = parse_date(row['question_date'])
+    return all(parse_date(date) <= question_time for date in row['haystack_dates'])
+
+
 def evaluate(row):
+    if not chronology_valid(row):
+        raise ValueError('Future sessions must not enter a historical evaluation')
     core = MemoryCore()
     owner = row['question_id']
     sessions = sorted(zip(row['haystack_dates'], row['haystack_session_ids'], row['haystack_sessions']),
@@ -62,12 +70,19 @@ def evaluate(row):
             retained.update(record.evidence_ids)
         raw_gold = len(gold & set(input_ids)) / len(gold) if gold else None
         retained_gold = len(gold & retained) / len(gold) if gold else None
-        return {'id': owner, 'type': row['question_type'], 'turns': len(input_ids),
+        before_bytes = store.path.stat().st_size if store.path.exists() else 0
+        cleanup_result = cleanup(store, user_id=owner, now=parse_date(row['question_date']), apply=True)
+        after = store.list(user_id=owner, now=parse_date(row['question_date']))
+        preserved = [r.to_dict() for r in after] == [r.to_dict() for r in visible]
+        return {'cleanup_removed_memories': cleanup_result['removed_memories'],
+                'cleanup_bytes_before': before_bytes, 'cleanup_bytes_after': cleanup_result['bytes_after'],
+                'cleanup_preserved_visible_memories': preserved,
+                'id': owner, 'type': row['question_type'], 'turns': len(input_ids),
                 'gold_turns': len(gold), 'raw_retention_baseline': raw_gold,
                 'memory_gold_evidence_retention': retained_gold,
                 'visible_roots': len(visible), 'visible_fraction': len(visible) / len(input_ids) if input_ids else 0,
                 'visible_text_bytes': sum(len(r.content.encode()) for r in visible), 'input_text_bytes': input_bytes,
-                'history_bytes': store.path.stat().st_size if store.path.exists() else 0,
+                'history_bytes': before_bytes,
                 'superseded': sum(r.memory_status == 'superseded' for r in all_records),
                 'consolidated': sum(r.memory_status == 'consolidated' for r in all_records),
                 'missing_gold_turns': sorted(gold - retained)}
@@ -76,7 +91,8 @@ def evaluate(row):
 def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('--download', action='store_true')
-    parser.add_argument('--output', type=Path, default=Path('reports/longmemeval_retention.json'))
+    parser.add_argument('--all-types', action='store_true', help='Evaluate all 500 examples, including 392 outside the earlier subset.')
+    parser.add_argument('--output', type=Path, default=Path('docs/reports/longmemeval_retention.json'))
     args = parser.parse_args()
     if args.download:
         ROOT.mkdir(parents=True, exist_ok=True)
@@ -89,20 +105,30 @@ def main():
     if hashlib.sha256(payload).hexdigest() != SHA256:
         raise ValueError('Dataset checksum mismatch')
     rows = json.loads(payload)
-    results = [evaluate(row) for row in rows if row['question_type'] in {'knowledge-update', 'single-session-preference'}]
+    requested = [row for row in rows if args.all_types or row['question_type'] in {'knowledge-update', 'single-session-preference'}]
+    excluded = [row for row in requested if not chronology_valid(row)]
+    results = [evaluate(row) for row in requested if chronology_valid(row)]
     summary = {}
-    for kind in ('knowledge-update', 'single-session-preference'):
+    for kind in sorted({r['type'] for r in results}):
         selected = [r for r in results if r['type'] == kind]
         labeled = [r for r in selected if r['gold_turns']]
         summary[kind] = {'examples': len(selected), 'with_evidence_labels': len(labeled),
-            'raw_retention_baseline': statistics.mean(r['raw_retention_baseline'] for r in labeled),
-            'memory_gold_evidence_retention': statistics.mean(r['memory_gold_evidence_retention'] for r in labeled),
+            'raw_retention_baseline': statistics.mean(r['raw_retention_baseline'] for r in labeled) if labeled else None,
+            'memory_gold_evidence_retention': statistics.mean(r['memory_gold_evidence_retention'] for r in labeled) if labeled else None,
             'mean_visible_fraction': statistics.mean(r['visible_fraction'] for r in selected),
             'superseded_memories': sum(r['superseded'] for r in selected),
             'consolidated_memories': sum(r['consolidated'] for r in selected)}
     report = {'dataset': SOURCE, 'revision': REVISION, 'sha256': SHA256,
-        'protocol': 'All knowledge-update/preference oracle examples, no fitting; timestamps respected; has_answer labels used only for scoring.',
+        'protocol': 'All oracle examples' + (' (500)' if args.all_types else ' in the update/preference subset') + '; no fitting; timestamps respected; has_answer labels used only for scoring.',
+        'chronology_exclusions': {'count': len(excluded), 'question_ids': [r['question_id'] for r in excluded],
+                                 'reason': 'Evidence session dated after the question; excluded before scoring.'},
+        'previously_evaluated_subset': '108 update/preference examples; remaining 392 are new to this evaluation run when --all-types is used.',
         'limits': 'Evidence retention and storage efficiency, not QA accuracy or correctness of individual conflict decisions. Oracle sessions remove retrieval distractors. Generic preference advice may require generation and human judgment. Ingestion clocks replay session timestamps; visibility is measured at each question date.',
+        'cleanup': {'examples': len(results),
+                    'visible_state_preserved': sum(r['cleanup_preserved_visible_memories'] for r in results),
+                    'removed_memories': sum(r['cleanup_removed_memories'] for r in results),
+                    'bytes_before': sum(r['cleanup_bytes_before'] for r in results),
+                    'bytes_after': sum(r['cleanup_bytes_after'] for r in results)},
         'summary': summary, 'results': results}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')

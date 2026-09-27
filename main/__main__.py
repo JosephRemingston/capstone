@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
                 command.add_argument('--query', help='Entity names to seed traversal; omitted lists relationships.')
                 command.add_argument('--predicate')
                 command.add_argument('--direction', choices=['both', 'outgoing', 'incoming'], default='both')
+    cleanup_cmd = subparsers.add_parser('cleanup', help='Preview or apply safe expiry cleanup and history compaction.')
+    cleanup_cmd.add_argument('--user-id', required=True)
+    cleanup_cmd.add_argument('--grace-days', type=float, default=7)
+    cleanup_cmd.add_argument('--apply', action='store_true', help='Physically delete eligible data; default is a preview.')
+    cleanup_cmd.add_argument('--scheduled', action='store_true', help='Run only when the persisted schedule is due.')
+    cleanup_cmd.add_argument('--interval-hours', type=float, default=24)
+    cleanup_cmd.add_argument('--pretty', action='store_true')
     return parser
 
 
@@ -123,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     store = LocalMemoryStore(Path(args.store))
 
     try:
+        if args.command == 'cleanup':
+            from .cleanup import cleanup
+            print_json(cleanup(store, user_id=args.user_id, grace_days=args.grace_days,
+                               apply=args.apply, scheduled=args.scheduled, interval_hours=args.interval_hours), pretty=args.pretty)
+            return 0
         if args.command == "process":
             return process_command(args, store)
         if args.command == "list":
@@ -176,6 +189,12 @@ def main(argv: list[str] | None = None) -> int:
             records = store.reconcile_memories(user_id=args.user_id)
             print_json({'changed_records': len(records), 'records': [record.to_dict() for record in records]}, pretty=args.pretty)
             return 0
+    except (OSError, sqlite3.Error) as exc:
+        if args.command != 'cleanup':
+            raise
+        print_json({'error': 'cleanup_failed', 'error_type': type(exc).__name__,
+                    'message': 'Cleanup failed; retry after resolving the storage/index error.'}, pretty=args.pretty)
+        return 1
     except ValueError as exc:
         print_json({"error": "invalid_input", "message": str(exc)}, pretty=getattr(args, "pretty", False))
         return 2

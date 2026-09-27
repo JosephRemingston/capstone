@@ -58,7 +58,7 @@ facts, named-entity/user separation, uncertainty and compound clauses, all polic
 criteria, evidence integrity, out-of-order data, duplicate retries, retention,
 manual confirmation, legacy records, bulk idempotency, and CLI integration.
 
-`python3 -m evaluation.evaluate`: existing **48/48 category, tier, and proposed
+`python3 -m tests.evaluation.evaluate`: existing **48/48 category, tier, and proposed
 importance-range checks pass**, macro F1 **1.0**. These remain developer examples,
 not an independent estimate of conversational accuracy. No labels were changed.
 

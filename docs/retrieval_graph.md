@@ -2,8 +2,9 @@
 
 The JSONL revision log remains authoritative. `MemoryRAG` maintains rebuildable
 SQLite vector and graph indexes next to it (`memories.index.sqlite3`). Indexing
-and queries require a user ID. This is a local, single-writer design; it does not
-add authentication or concurrent JSONL writer guarantees.
+and queries require a user ID. This is a local design with cooperative cross-process locking on macOS/Linux; it does not
+add authentication or server-grade concurrent storage. Scheduled expiry cleanup
+and index invalidation are documented in [cleanup operations](cleanup.md).
 
 ## Setup
 
@@ -151,8 +152,8 @@ whose underlying memory is expired for ordinary RAG.
 
 ## Evaluation
 
-See [the report](../reports/retrieval_graph_report.md) and
-[evaluation instructions](../evaluation/README.md). LoCoMo measures externally
+See [the report](reports/retrieval_graph_report.md) and
+[evaluation instructions](../tests/evaluation/README.md). LoCoMo measures externally
 annotated evidence retrieval with fixed baseline comparisons. LongMemEval checks
 labeled evidence retention in knowledge-update/preference examples. These are
 not claims of correct generated answers. Independent human judgments of conflict

@@ -15,6 +15,7 @@ from .tasks import task_action, match_tasks
 from .task_updates import revise_task
 from .deadlines import parse_deadline
 from .reconciliation import reconcile, select_current, eligible
+from .locking import locked
 
 
 DEFAULT_STORE_PATH = Path("memory_store") / "memories.jsonl"
@@ -34,6 +35,7 @@ class LocalMemoryStore:
         self._append([record])
         return record
 
+    @locked
     def _append(self, records: list[MemoryRecord]) -> None:
         from .graph import validate_graph_metadata
         for record in records:
@@ -54,6 +56,7 @@ class LocalMemoryStore:
         records = {record.id: record for record in self._read_log()}
         return list(records.values())
 
+    @locked
     def _read_log(self) -> list[MemoryRecord]:
         if not self.path.exists():
             return []
@@ -80,6 +83,7 @@ class LocalMemoryStore:
         """Return every persisted revision for this user's record in log order."""
         return [record for record in self._read_log() if record.id == record_id and record.user_id == user_id]
 
+    @locked
     def resolve_conflict(self, record_id: str, *, user_id: str, now: datetime | None = None) -> MemoryRecord:
         records = self.all()
         selected = next((item for item in records if item.id == record_id and item.user_id == user_id), None)
@@ -89,6 +93,7 @@ class LocalMemoryStore:
         self._append(revisions)
         return revisions[-1]
 
+    @locked
     def reconcile_memories(self, *, user_id: str) -> list[MemoryRecord]:
         """Reconcile existing active facts/preferences, appending only changed rows."""
         records = self.all()
@@ -107,6 +112,7 @@ class LocalMemoryStore:
             self._append(changed)
         return changed
 
+    @locked
     def ingest(self, record: MemoryRecord) -> MemoryRecord:
         """Persist an observation, reconcile facts/preferences, and apply task updates.
 

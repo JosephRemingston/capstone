@@ -1,8 +1,8 @@
 """Run developer cases or independently supplied human-reviewed labels.
 
-python -m evaluation.evaluate
-python -m evaluation.evaluate --export-review evaluation/review_template.jsonl
-python -m evaluation.evaluate --labels FILE --reviewed-only
+python -m tests.evaluation.evaluate
+python -m tests.evaluation.evaluate --export-review evaluation/review_template.jsonl
+python -m tests.evaluation.evaluate --labels FILE --reviewed-only
 """
 import argparse
 from collections import Counter
@@ -59,7 +59,7 @@ def evaluate(rows):
 def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('--labels', type=Path, default=DEFAULT_LABELS)
-    parser.add_argument('--output', type=Path, default=Path('reports/conversational_evaluation.json'))
+    parser.add_argument('--output', type=Path, default=Path('docs/reports/conversational_evaluation.json'))
     parser.add_argument('--reviewed-only', action='store_true')
     parser.add_argument('--export-review', type=Path)
     args = parser.parse_args()

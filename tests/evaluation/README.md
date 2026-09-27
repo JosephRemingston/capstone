@@ -6,7 +6,7 @@ preferences/constraints, one-off/recurring tasks, negation, events, procedures, 
 indirect paraphrases. These examples were not used to train an ML model. They are
 regression/development checks, not an independent benchmark or human ground truth.
 
-Run `python3 -m evaluation.evaluate` from the repository root. The report includes
+Run `python3 -m tests.evaluation.evaluate` from the repository root. The report includes
 all predictions, a category confusion matrix, macro F1, tier accuracy, and agreement
 with the proposed importance ranges. Ranges represent a retention policy, not
 human-measured continuous scores. Never report range agreement as regression accuracy.
@@ -45,9 +45,9 @@ intensity alone. Reviewers may disagree with the existing policy and should reco
 that disagreement rather than copy predictions.
 
 ```bash
-python3 -m evaluation.evaluate --export-review evaluation/review_template.jsonl
-python3 -m evaluation.evaluate --labels reviewed.jsonl --reviewed-only \
-  --output reports/human_reviewed_evaluation.json
+python3 -m tests.evaluation.evaluate --export-review tests/evaluation/review_template.jsonl
+python3 -m tests.evaluation.evaluate --labels reviewed.jsonl --reviewed-only \
+  --output docs/reports/human_reviewed_evaluation.json
 ```
 
 The reviewed-only command fails if no eligible reviewed rows exist. No human review
@@ -61,9 +61,9 @@ from these developer examples.
 
 ```bash
 uv pip install --python .venv/bin/python -r requirements-evaluation.txt
-.venv/bin/python -m evaluation.benchmark --download
-.venv/bin/python -m evaluation.longmemeval --download
-.venv/bin/python -m evaluation.conflicts --download
+.venv/bin/python -m tests.evaluation.benchmark --download
+.venv/bin/python -m tests.evaluation.longmemeval --download
+.venv/bin/python -m tests.evaluation.conflicts --download
 ```
 
 Downloads pin dataset revisions and verify SHA-256. Data/model caches live under
@@ -94,7 +94,7 @@ these three commands. The embedding model downloads once and runs locally.
   This tests conflict state updates on an external synthetic dataset; it is not
   a claim of natural-language parsing or independent human policy validation.
 
-See [the consolidated results](../reports/retrieval_graph_report.md). Reports
+See [the consolidated results](../../docs/reports/retrieval_graph_report.md). Reports
 include predictions, dataset fingerprints, exclusions, protocols, and limitations.
 LoCoMo raw-turn retrieval bypasses memory lifecycle decisions deliberately to
 isolate retrieval; LongMemEval separately exposes end-to-end retention losses.
@@ -105,3 +105,94 @@ Independent human ratings of conflict policy and generated personalization, live
 Gemini answers, and comparisons to deployed Mem0/MemGPT/LangMem systems remain
 unmeasured. The existing human-review workflow is for category/tier/importance
 labels and must not be described as covering those other judgments.
+
+## Unified evaluation, cleanup measurement, and independent answer review
+
+The evaluation package now lives under `tests/evaluation`; reports live under
+`docs/reports`. Run from the repository root:
+
+```bash
+.venv/bin/python -m tests.evaluation.suite
+# If datasets are not downloaded:
+.venv/bin/python -m tests.evaluation.suite --download
+```
+
+The runner executes each stage, records its status and duration, hashes its report,
+and writes `docs/reports/independent_evaluation.json` and a Markdown comparison.
+A failed stage makes the run incomplete; an old report from that stage is not
+silently included as a fresh result. Detailed stdout/stderr stays in stage logs.
+
+The LongMemEval stage audits **all 500 oracle examples**, including 392 outside
+the previously evaluated update/preference subset. It excludes 43 cases with
+sessions dated after their question (40 temporal-reasoning, 3 knowledge-update),
+then scores 457 cases. Exclusions are recorded by question ID. It reports retention by all six
+question types and applies physical cleanup to each **temporary** replay store.
+Metrics include removed memories, JSONL bytes before/after, and exact preservation
+of visible memory state. This measures storage cleanup safety, not the quality of
+the existing expiry policy: gold evidence can already have been hidden before
+cleanup. The retain-everything baseline remains visible alongside the losses.
+
+No rules or weights are fitted during the suite. Previously evaluated external
+cases remain repeated benchmarks, not newly unseen data. Future changes tuned to
+these results require a fresh held-out split before claiming unseen performance.
+No real user data is deleted by any of these evaluation commands.
+
+### Personalization and conflict-policy review
+
+The answer stage audits all **108** externally authored LongMemEval preference/update
+cases and excludes the 3 with future-dated sessions, leaving 105 cases with
+no-memory, keyword, and hybrid baselines (315 answer variants). Only
+conversation text, speaker, and dates enter retrieval; gold answers and evidence
+annotations are added to the review packet **after** generation. The source
+sessions are oracle-selected, so these are not full-corpus retrieval results.
+Default answers are cited extractive snippets and make no hosted API calls.
+The no-memory baseline abstains under the same evidence-only policy; it is not
+an unrestricted standalone Gemini response.
+
+```bash
+# Real Gemini answers after configuring .env; up to 210 hosted answer requests.
+.venv/bin/python -m tests.evaluation.personalization --generator gemini
+```
+
+Artifacts in `data/evaluation/personalization/`:
+
+- `answers.json`: frozen answers, baseline assignments, evidence measurements,
+  generation status, and content bindings.
+- `blind_review.jsonl`: deterministically shuffled cases without baseline names,
+  including question, reference answer, retrieved evidence, answer, and blank ratings.
+- `review_mapping.json`: baseline mapping; keep this away from blinded reviewers.
+
+Distribute review packets to people who did not implement/tune the system.
+Reviewers should read both the reference and evidence, then fill `reviewer`,
+`reviewed_at` (timezone-aware ISO timestamp), `independent: true`, and `scores`:
+
+| Dimension | 0 | 1 | 2 |
+| --- | --- | --- | --- |
+| preference_alignment | Ignores/contradicts relevant preferences | Partly respects preferences | Respects all relevant stated preferences |
+| groundedness | Unsupported or contradictory claims | Mixed/partly supported | Claims supported by supplied evidence |
+| usefulness | Does not answer the question | Partly actionable/relevant | Directly useful answer |
+| conflict_correctness | Uses stale/contradictory information | Partly handles the update | Correctly uses the current information |
+
+Use `preference_alignment` only for preference cases and `conflict_correctness`
+only for knowledge-update cases; leave the nonapplicable dimension `null`.
+Record reasons and ambiguities in `notes`. These are answer-quality judgments,
+separate from the synthetic bAbI state-transition accuracy.
+
+```bash
+python3 -m tests.evaluation.personalization --reviews /path/to/completed_reviews.jsonl
+```
+
+The scorer requires coverage of every successfully generated answer, rejects
+blank/nonindependent/stale/altered packets, duplicate reviewer-answer pairs,
+invalid dates, and out-of-range scores. Failed generations are reported separately
+and excluded from answer-quality means; they cannot silently earn passing scores.
+Multiple reviewers are averaged per answer before baseline means, and their
+ordinal disagreement fraction is reported. The output includes answer-report and
+review-file fingerprints. Independence is an attestation, not something software
+can prove. No human rating is fabricated or inferred from retrieval recall.
+
+**Current limit:** the external evaluation/reporting and blind-review workflow are
+implemented; independent human personalization/conflict-policy validation still
+requires actual completed reviews. Live Gemini answer evaluation requires the key
+the user elected to configure later. Unit-test ratings are test fixtures only and
+are never included in evaluation reports.

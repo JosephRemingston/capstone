@@ -1,6 +1,6 @@
 """Frozen external LoCoMo retrieval benchmark; never index QA or generated summaries.
 
-Run: python -m evaluation.benchmark --download
+Run: python -m tests.evaluation.benchmark --download
 This evaluates evidence retrieval, not answer correctness or semantic entailment.
 """
 from __future__ import annotations
@@ -141,7 +141,7 @@ def summarize(results):
 def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('--download', action='store_true')
-    parser.add_argument('--output', type=Path, default=Path('reports/locomo_retrieval.json'))
+    parser.add_argument('--output', type=Path, default=Path('docs/reports/locomo_retrieval.json'))
     args = parser.parse_args()
     if args.download:
         download()

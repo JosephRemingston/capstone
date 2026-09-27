@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "dataset_sha256": "821a2034d219ab45846873dd14c14f12cfe7776e73527a483f9dac095d38620c",
+  "generator": "extractive",
+  "protocol": "All oracle preference/update examples; no fitting; raw conversation documents only; k=5; 10000-character context; no-memory/keyword/hybrid baselines.",
+  "limits": "Oracle sessions omit distractors. Evidence recall is not personalization quality. Human review pending until a complete independent rating file is supplied. Extractive responses are snippets, not Gemini recommendations.",
+  "human_quality_status": "pending_independent_review",
+  "summary": {
+    "no_memory": {
+      "examples": 105,
+      "labeled_examples": 99,
+      "evidence_recall": 0.0,
+      "generation_failures": 0,
+      "mean_context_characters": 0
+    },
+    "keyword": {
+      "examples": 105,
+      "labeled_examples": 99,
+      "evidence_recall": 0.6717171717171717,
+      "generation_failures": 0,
+      "mean_context_characters": 3702.495238095238
+    },
+    "hybrid": {
+      "examples": 105,
+      "labeled_examples": 99,
+      "evidence_recall": 0.7946127946127947,
+      "generation_failures": 0,
+      "mean_context_characters": 3195.752380952381
+    }
+  },
+  "chronology_exclusions": [
+    "2133c1b5",
+    "7a87bd0c",
+    "e61a7584"
+  ]
+}

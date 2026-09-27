@@ -10,6 +10,8 @@ from .graph import TemporalGraph, iso
 from .indexes import IndexDatabase, VectorIndex, document_text, chunks, digest
 from .models import utc_now
 from .retrieval import tokenize
+from .locking import locked, store_lock
+from .cleanup import register_index
 
 MODES = ('keyword', 'semantic', 'graph', 'hybrid', 'recency')
 
@@ -17,7 +19,9 @@ MODES = ('keyword', 'semantic', 'graph', 'hybrid', 'recency')
 class MemoryRAG:
     def __init__(self, store, *, embedder=None, index_path=None):
         self.store = store
-        self.database = IndexDatabase(index_path or store.path.with_suffix('.index.sqlite3'))
+        with store_lock(store.path):
+            self.database = IndexDatabase(index_path or store.path.with_suffix('.index.sqlite3'))
+            register_index(store.path, self.database.path)
         self.graph = TemporalGraph(self.database)
         self._embedder = embedder
 
@@ -27,12 +31,14 @@ class MemoryRAG:
             self._embedder = FastEmbedder()
         return VectorIndex(self.database, self._embedder)
 
+    @locked
     def sync(self, *, user_id, semantic=True):
         result = {'graph': self.graph.sync(self.store._read_log(), user_id=user_id)}
         if semantic:
             result['vectors'] = self.vectors.sync(self.store.list(user_id=user_id), user_id=user_id)
         return result
 
+    @locked
     def candidates(self, *, user_id, as_of=None, known_at=None, **filters):
         if not user_id:
             raise ValueError('A user_id is required for RAG')
@@ -56,6 +62,7 @@ class MemoryRAG:
         return self.store._filter(records, user_id=user_id, session_id=filters.get('session_id'),
                                   category=filters.get('category'), tier=filters.get('tier'))
 
+    @locked
     def search(self, query, *, user_id, mode='hybrid', limit=5, as_of=None, known_at=None,
                max_hops=2, **filters):
         for timestamp in (as_of, known_at):
@@ -122,6 +129,7 @@ class MemoryRAG:
                            'paths': [path for path in paths if identifier in path['source_ids']]})
         return result
 
+    @locked
     def context(self, query, *, user_id, budget=10000, **search_options):
         if not 256 <= budget <= 100000:
             raise ValueError('Context budget must be between 256 and 100000 characters')

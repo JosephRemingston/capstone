@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, and external evaluation. Production storage, cleanup jobs, and API/demo surfaces remain planned. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
+The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, and external evaluation. Production server storage and API/demo surfaces remain planned; a local scheduled cleanup worker is implemented. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
 
 ## 2. Repository Analysis
 
@@ -64,7 +64,7 @@ Implemented:
 Partially implemented:
 
 - Graph language coverage: temporal storage/traversal work; automatic extraction covers only supported complete assertions. Structured relationships support richer caller-provided data.
-- Memory lifecycle: task deadline parsing, expiry filtering, resolved-task visibility, and inactivity archive views exist. No scheduled physical cleanup or archive migration exists.
+- Memory lifecycle: task deadline parsing, expiry filtering, resolved-task visibility, and inactivity archive views exist. Scheduled physical expiry cleanup and lossless compaction are implemented; archive migration remains planned.
 - Importance modeling: heuristic default plus optional trained XGBoost proxy; conversational validation remains outstanding.
 - Retrieval quality: keyword/vector/graph/hybrid retrieval work; external results expose extraction and retention limitations.
 
@@ -139,7 +139,7 @@ Current architecture properties:
 - Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
-Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](reports/heuristic_improvements.md) for results and limitations.
+Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](docs/reports/heuristic_improvements.md) for results and limitations.
 
 ## 6. Current Component Design
 
@@ -158,7 +158,7 @@ Default conversational rules use whole-word matching, indirect preferences, expl
 | Graph contract | `main/interfaces.py` | Defines a future adapter protocol only. | `MemoryRecord`. | No implementation. |
 | Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
 
-Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: [lifecycle changes](reports/lifecycle_improvements.md).
+Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: [lifecycle changes](docs/reports/lifecycle_improvements.md).
 
 ## 7. Current Data Contracts
 
@@ -233,7 +233,7 @@ Output format:
 
 ## 9. Current Model Design
 
-An optional XGBoost regression model is trained on Hippocorpus personal-event importance ratings. `MemoryCore.with_ml()` enables it; the heuristic remains the default. See [experiment report](reports/importance_report.md) for measured results and limitations.
+An optional XGBoost regression model is trained on Hippocorpus personal-event importance ratings. `MemoryCore.with_ml()` enables it; the heuristic remains the default. See [experiment report](docs/reports/importance_report.md) for measured results and limitations.
 
 Current classifier:
 
@@ -276,7 +276,7 @@ Current storage has two levels:
 | Configuration files | Not implemented. |
 | Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
 
-JSONL remains the simple source log without concurrent writer guarantees. Rebuildable SQLite indexes provide vector search and temporal graph traversal.
+JSONL remains the local source log with cooperative cross-process locking on macOS/Linux. Rebuildable SQLite indexes provide vector search and temporal graph traversal.
 
 ## 11. Current Evaluation
 
@@ -383,7 +383,7 @@ Planned complete architecture responsibilities:
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | SQLite graph with bitemporal edges, aliases, evidence, and bounded traversal implemented. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
 | Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
-| Forgetting engine | Expire/archive memories based on value and age. | Read visibility and archive views implemented; physical cleanup planned. |
+| Forgetting engine | Expire/archive memories based on value and age. | Read visibility, archive views, physical expiry cleanup, and lossless compaction implemented. |
 | Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion implemented; importance/category/tier/recency enter the keyword channel. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
 | REST API | HTTP access surface for backend/UI/agent integration. | Planned. |
@@ -540,7 +540,7 @@ Future operational signals:
 
 ## 23. Recommended Next Steps
 
-1. Add controlled forgetting/archive cleanup and compaction.
+1. Configure the implemented conservative expiry cleanup worker; broader forgetting policies remain future work.
 2. Add REST API endpoints and production storage.
 3. Improve extraction coverage and evaluate hosted answer quality.
 4. Extend external retrieval/retention evidence with independent human conflict/personalization judgments.
@@ -594,7 +594,7 @@ date/time. Already resolved occurrences are recognized. Occurrence rescheduling
 keeps the cadence and cannot cross the next occurrence. `task_scope=series` resets
 the anchor or closes the series; re-anchoring cannot overlap resolved history.
 
-See [current behavior and verification](reports/lifecycle_improvements.md) and
+See [current behavior and verification](docs/reports/lifecycle_improvements.md) and
 [CLI examples](README.md#deadlines-task-updates-and-multiple-memories).
 
 ## 26. Assertion Reconciliation and Consolidation
@@ -638,11 +638,18 @@ replays current durable roots in memory and appends only changed records, making
 bulk processing idempotent. It does not rewrite prior JSONL rows or lock writers.
 
 See [README usage](README.md#conflicts-current-memories-and-consolidation) and
-[verification](reports/memory_reconciliation.md).
+[verification](docs/reports/memory_reconciliation.md).
 
 ## 28. Retrieval and temporal graph implementation
 
 The implementation contract, SQLite schema behavior, query examples, hosted
 configuration, time semantics, extraction bounds, and citation checks are in
 [docs/retrieval_graph.md](docs/retrieval_graph.md). External benchmark results and
-limits are in [reports/retrieval_graph_report.md](reports/retrieval_graph_report.md).
+limits are in [reports/retrieval_graph_report.md](docs/reports/retrieval_graph_report.md).
+
+## Scheduled cleanup and evaluation operations
+
+See [cleanup policy, locking, failure recovery, and scheduling](docs/cleanup.md),
+[unified external evaluation](docs/reports/independent_evaluation.md), and
+[blind independent review instructions](tests/evaluation/README.md). Human
+personalization and conflict-policy scores remain pending actual reviews.

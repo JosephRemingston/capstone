@@ -1,6 +1,11 @@
 # Retrieval, graph, and external evaluation report
 
-Implemented locally: BGE embeddings, persistent SQLite vectors, hybrid ranking, bounded source context, LangChain Gemini 2.5 Flash integration, checked citations, and a typed bitemporal graph. Configuration and usage: [retrieval/graph guide](../docs/retrieval_graph.md).
+Historical baseline report (September 27). The current expanded evaluation,
+chronology exclusions, physical cleanup results, and answer-review workflow are
+in [independent_evaluation.md](independent_evaluation.md). Detailed JSON reports
+now reflect that newer run; the measurements below preserve the earlier baseline.
+
+Implemented locally: BGE embeddings, persistent SQLite vectors, hybrid ranking, bounded source context, LangChain Gemini 2.5 Flash integration, checked citations, and a typed bitemporal graph. Configuration and usage: [retrieval/graph guide](../retrieval_graph.md).
 
 ## LoCoMo: retrieval baselines
 
@@ -60,9 +65,9 @@ The latest-assertion baseline also solves this simple task. This is external syn
 
 ```bash
 uv pip install --python .venv/bin/python -r requirements-evaluation.txt
-.venv/bin/python -m evaluation.benchmark --download
-.venv/bin/python -m evaluation.longmemeval --download
-.venv/bin/python -m evaluation.conflicts --download
+.venv/bin/python -m tests.evaluation.benchmark --download
+.venv/bin/python -m tests.evaluation.longmemeval --download
+.venv/bin/python -m tests.evaluation.conflicts --download
 python3 -m unittest discover -s tests -q
 ```
 

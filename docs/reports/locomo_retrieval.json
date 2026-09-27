@@ -463,7 +463,7 @@
       "consolidation_ratio": 1.0
     }
   ],
-  "elapsed_seconds": 110.48631300000125,
+  "elapsed_seconds": 113.17950920801377,
   "independent_conflict_decisions": "not measured: no gold conflict decisions in LoCoMo",
   "generated_answer_quality": "not measured: Gemini credentials configured later by user",
   "results": [

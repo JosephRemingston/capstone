@@ -42,7 +42,7 @@ Not implemented yet:
 - REST API
 - Production database storage
 - Neo4j integration
-- Controlled forgetting job
+- Broader forgetting policies beyond conservative expiry cleanup
 - Evaluation dashboard, independent human conflict/personalization labels, and live Gemini quality evaluation
 
 ## What This Layer Does
@@ -230,7 +230,7 @@ in task context. Fresh episodic memories receive a category weight of 0.20.
 Dated tasks expire 24 hours after their deadline; undated tasks use 14 days.
 List/search enforce expiry visibility without deleting records.
 
-See [the 15-sentence before/after experiment](reports/heuristic_improvements.md).
+See [the 15-sentence before/after experiment](docs/reports/heuristic_improvements.md).
 These are developer-authored regression examples, not human-labeled validation or
 training data. No statistical threshold calibration or model retraining occurred.
 The optional Hippocorpus model retains its legacy classification/feature inputs;
@@ -297,7 +297,7 @@ records = store.list(user_id="user_001")
 matches = store.search("technical summaries", user_id="user_001")
 ```
 
-The JSONL source store is intentionally simple and lacks concurrent writer guarantees or server-side querying. The optional retrieval layer adds SQLite vector/graph indexes; see [retrieval design](docs/retrieval_graph.md).
+The JSONL source store is intentionally local. Cooperating store/RAG/cleanup operations use cross-process locks on macOS/Linux; direct file edits and server-side queries are outside that contract. The optional retrieval layer adds SQLite vector/graph indexes; see [retrieval design](docs/retrieval_graph.md).
 
 ## Ranked Retrieval
 
@@ -357,7 +357,7 @@ The remaining work should be implemented in phases. The current system already h
 
 | Priority | Component | What needs to be implemented | Why it matters |
 | --- | --- | --- | --- |
-| 1 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
+| 1 | Cleanup operations | Scheduled expiry cleanup and lossless compaction are implemented; configure a supervisor/cron job for your store. | Preserves referenced evidence, holds, open tasks, and meaningful history. |
 | 2 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
 | 3 | Retrieval quality | Improve paragraph-level fact extraction and assess Gemini answers after credentials are configured. | Current bounded graph extraction has low coverage on free-form conversations. |
 | 4 | Evaluation quality | Add independent human conflict/personalization labels and full memory-system baselines. | External retrieval/retention runners and recency/keyword/vector/graph/hybrid baselines now exist. |
@@ -414,8 +414,8 @@ Each ML record includes model provenance in its source metadata.
 
 Retrain and reproduce metrics with `.venv/bin/python -m training.train_importance`.
 It downloads the official Microsoft archive into ignored `data/hippocorpus/`.
-See [experiment report](reports/importance_report.md),
-[full metrics](reports/importance_metrics.json), and
+See [experiment report](docs/reports/importance_report.md),
+[full metrics](docs/reports/importance_metrics.json), and
 [model metadata](artifacts/importance/metadata.json).
 
 No learned classifier, retrieval ranker, consolidation model, or conflict detection
@@ -431,7 +431,7 @@ time, task relationships, and bounded traversal. The local `.env` has blank key
 configuration; fill `GOOGLE_API_KEY` when ready. No hosted call has been made.
 
 See [full setup and examples](docs/retrieval_graph.md) and
-[external evaluation results](reports/retrieval_graph_report.md). Automatic graph
+[external evaluation results](docs/reports/retrieval_graph_report.md). Automatic graph
 extraction is limited to supported assertions; broad paragraph understanding is
 not solved. Citation checks verify source references/quotes, not entailment.
 
@@ -596,14 +596,14 @@ understanding remain outside these deterministic rules.
 Storage is now an append-only revision log: reads use the latest row per ID.
 `get()` and `all()` include historical visibility; list/search hide expired and
 resolved tasks by default. Long-term memories are viewed as archived after 90
-inactive days, using the latest explicit access, supporting observation, or creation time. No cleanup job or
-concurrent-write guarantees are provided.
+inactive days, using the latest explicit access, supporting observation, or creation time. Scheduled physical cleanup is available; automatic archive migration is not implemented.
+Cooperating local operations are protected by process/file locks.
 
-Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
+Run `python3 -m tests.evaluation.evaluate` for the 48-case developer check. Its current
 category/tier agreement is 48/48, not independently reviewed accuracy. The blank
-[review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
+[review template](tests/evaluation/review_template.jsonl) and [review guidance](tests/evaluation/README.md)
 are ready; no human-reviewed labels have been collected.
-See [implementation and limits](reports/lifecycle_improvements.md).
+See [implementation and limits](docs/reports/lifecycle_improvements.md).
 
 ## Conflicts, Current Memories, and Consolidation
 
@@ -673,9 +673,9 @@ aliases. Questions, uncertain/reported statements, historical wording, and
 ambiguous compound assertions do not automatically replace supported facts.
 Use `--split` for supported independent clauses. Unrecognized content remains
 stored without an inferred conflict. The JSONL store still needs production
-concurrency controls and physical cleanup.
+server-grade concurrency controls. Local cooperative locking and safe physical expiry cleanup are implemented.
 
-See [behavior and verification](reports/memory_reconciliation.md).
+See [behavior and verification](docs/reports/memory_reconciliation.md).
 
 ## Tests
 
@@ -701,7 +701,7 @@ The tests cover:
 
 Recommended order:
 
-1. Add scheduled cleanup and JSONL compaction.
+1. Configure the implemented cleanup worker for your store after reviewing its preview.
 2. Add REST API endpoints and production storage.
 3. Improve free-form entity/relation extraction and measure hosted answer quality.
 4. Extend external retrieval/retention evaluation with independent human conflict and personalization judgments.
@@ -719,3 +719,16 @@ Structured Memory Core, ranked keyword retrieval, optional trained XGBoost scori
 ```
 
 In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. Semantic/hybrid retrieval, cited RAG, temporal graph storage, and external evaluation are now implemented. Production concurrent storage, APIs, deployment, broader extraction quality, and independent human answer/conflict/personalization validation remain. ML research is separate.
+
+## Independent evaluation and scheduled cleanup
+
+Run `.venv/bin/python -m tests.evaluation.suite` for the unified external benchmark,
+500-case retention/cleanup replay, synthetic conflict baselines, and personalized
+answer-context baselines. Default generation is extractive and makes no hosted
+API calls. `--generator gemini` explicitly enables hosted generation.
+
+See [the generated report](docs/reports/independent_evaluation.md),
+[evaluation and blind-review instructions](tests/evaluation/README.md), and
+[cleanup policy and scheduling](docs/cleanup.md). Independent human personalization
+and conflict-policy ratings remain pending until actual reviews are provided.
+Cleanup was tested on temporary stores; no real-user cleanup job was activated.

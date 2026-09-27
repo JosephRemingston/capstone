@@ -80,7 +80,7 @@ def evaluate(rows):
 def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('--download', action='store_true')
-    parser.add_argument('--output', type=Path, default=Path('reports/babi_conflicts.json'))
+    parser.add_argument('--output', type=Path, default=Path('docs/reports/babi_conflicts.json'))
     args = parser.parse_args()
     if args.download:
         ROOT.mkdir(parents=True, exist_ok=True)

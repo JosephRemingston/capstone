@@ -1,0 +1,23 @@
+{
+  "no_memory": {
+    "examples": 105,
+    "labeled_examples": 99,
+    "evidence_recall": 0.0,
+    "generation_failures": 0,
+    "mean_context_characters": 0
+  },
+  "keyword": {
+    "examples": 105,
+    "labeled_examples": 99,
+    "evidence_recall": 0.6717171717171717,
+    "generation_failures": 0,
+    "mean_context_characters": 3702.495238095238
+  },
+  "hybrid": {
+    "examples": 105,
+    "labeled_examples": 99,
+    "evidence_recall": 0.7946127946127947,
+    "generation_failures": 0,
+    "mean_context_characters": 3195.752380952381
+  }
+}
