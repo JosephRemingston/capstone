@@ -7,6 +7,8 @@ This repository implements the **Memory Core**, local semantic/hybrid retrieval,
 JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). Production database servers and REST APIs remain future work.
 
 See [the repository architecture](docs/architecture.md) for package ownership and entry points.
+For the complete product, usage, architecture, feature, and operational reference, see
+[DOCUMENTATION.md](DOCUMENTATION.md).
 
 ## Current Implementation Status
 
