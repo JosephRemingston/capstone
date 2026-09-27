@@ -37,7 +37,12 @@ class MemoryCore:
                    importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
+        from .graph import validate_graph_metadata
+        validate_graph_metadata(memory_input.metadata, memory_input.timestamp)
         category = self.classifier.classify(memory_input)
+        if (not self.classifier.legacy and memory_input.role == 'user'
+                and memory_input.metadata.get('relations') and category is MemoryCategory.TEMPORARY):
+            category = MemoryCategory.SEMANTIC
         record = MemoryRecord.from_input(memory_input=memory_input, category=category)
         record.confidence = memory_input.metadata.get('confidence', record.confidence)
         validate_evidence(record)

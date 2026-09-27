@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Joseph Remingston L
 
-Last updated: September 25, 2026
+Last updated: September 27, 2026
 
 Related docs:
 
@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The complete capstone system is planned to extend this core with vector/hybrid retrieval, production storage, ML-based importance prediction, vector search, temporal knowledge graph support, controlled forgetting, evaluation, and API/demo surfaces. These future capabilities are documented here only as planned architecture, not as current implementation.
+The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, and external evaluation. Production storage, cleanup jobs, and API/demo surfaces remain planned. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
 
 ## 2. Repository Analysis
 
@@ -35,9 +35,9 @@ The current repository contains:
 | `data/` | Source documentation | Capstone proposal, base paper analysis, and base literature review paper. |
 | Local storage | Implemented | JSONL-backed local memory store at `memory_store/memories.jsonl` by default. |
 | CLI | Implemented | `python3 -m main` supports process, list, search, get, and stats commands. |
-| Production database layer | Not implemented | No SQLite/Postgres/document database server exists yet. |
-| RAG/vector layer | Not implemented | No embeddings, vector store, semantic retriever, or LLM generation pipeline exists yet. |
-| Graph layer | Not implemented | Only a placeholder graph adapter protocol exists. |
+| Production database layer | Not implemented | SQLite indexes exist; authoritative concurrent server storage is still planned. |
+| RAG/vector layer | Implemented locally | BGE embeddings, SQLite vectors, hybrid retrieval, bounded context, and LangChain Gemini with checked citations. |
+| Graph layer | Implemented locally | Typed SQLite graph with provenance, valid/recorded time, aliases, task edges, and traversal. |
 | ML training | Experimental implementation | XGBoost trained on Hippocorpus importance ratings; reproducible training and held-out metrics in `reports/importance_report.md`. |
 | REST API | Not implemented | No HTTP API exists yet. |
 
@@ -63,10 +63,10 @@ Implemented:
 
 Partially implemented:
 
-- Graph integration contract: `GraphMemoryAdapter` exists only as a protocol/interface. There is no graph database implementation.
+- Graph language coverage: temporal storage/traversal work; automatic extraction covers only supported complete assertions. Structured relationships support richer caller-provided data.
 - Memory lifecycle: task deadline parsing, expiry filtering, resolved-task visibility, and inactivity archive views exist. No scheduled physical cleanup or archive migration exists.
 - Importance modeling: heuristic default plus optional trained XGBoost proxy; conversational validation remains outstanding.
-- Retrieval: keyword relevance, category, tier, recency, and importance ranking exist; vector and hybrid retrieval are not implemented.
+- Retrieval quality: keyword/vector/graph/hybrid retrieval work; external results expose extraction and retention limitations.
 
 Planned:
 
@@ -74,8 +74,8 @@ Planned:
 - In-domain validation and calibration of XGBoost importance prediction.
 - In-domain conversational training labels beyond Hippocorpus.
 - Production storage backend.
-- Vector database and RAG retrieval.
-- Temporal knowledge graph.
+- ANN vector storage for larger workloads.
+- Broader graph entity/relation extraction from paragraphs.
 - Controlled forgetting.
 - Continuous learning from feedback/retrieval success.
 - Evaluation against vector-only RAG, Mem0, MemGPT, LangMem, or similar baselines.
@@ -83,10 +83,10 @@ Planned:
 Out of scope for the current phase:
 
 - Neo4j setup.
-- Graph schema design.
-- Graph traversal.
-- Embedding generation.
-- LLM response generation.
+- Distributed graph deployment.
+- Unbounded graph reasoning.
+- Training custom embedding models.
+- Fine-tuning generation models.
 - Authentication and authorization.
 - Cloud deployment.
 
@@ -94,7 +94,7 @@ Out of scope for the current phase:
 
 The current implementation solves two narrow but important problems: converting raw conversational content into a structured memory object, and saving/inspecting those records through a local JSONL store and CLI.
 
-It does not provide production database storage, semantic retrieval, RAG, or graph reasoning. It does provide local append-only storage and ranked keyword search for development/demo use.
+It provides local append-only storage, ranked keyword/semantic/hybrid retrieval, cited RAG, and temporal graph traversal. Production concurrent storage remains planned.
 
 Current objective:
 
@@ -276,7 +276,7 @@ Current storage has two levels:
 | Configuration files | Not implemented. |
 | Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
 
-The JSONL store is intentionally simple. It is not a production database and does not provide indexes, concurrent write guarantees, vector search, or graph traversal.
+JSONL remains the simple source log without concurrent writer guarantees. Rebuildable SQLite indexes provide vector search and temporal graph traversal.
 
 ## 11. Current Evaluation
 
@@ -379,15 +379,15 @@ Planned complete architecture responsibilities:
 | Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Deadlines, inactivity archival, and expiry visibility implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
-| Vector store | Store embeddings for retrieval. | Planned. |
-| Temporal knowledge graph | Store entities, relationships, and timestamps. | Planned; not current phase. |
+| Vector store | Store embeddings for retrieval. | SQLite normalized vectors and exact cosine retrieval implemented. |
+| Temporal knowledge graph | Store entities, relationships, and timestamps. | SQLite graph with bitemporal edges, aliases, evidence, and bounded traversal implemented. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
 | Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
 | Forgetting engine | Expire/archive memories based on value and age. | Read visibility and archive views implemented; physical cleanup planned. |
-| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Planned. |
+| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion implemented; importance/category/tier/recency enter the keyword channel. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
 | REST API | HTTP access surface for backend/UI/agent integration. | Planned. |
-| Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | Planned. |
+| Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | External retrieval/retention reports implemented; human judgment and generated-answer quality pending. |
 
 ## 16. Complete Training Pipeline
 
@@ -443,7 +443,7 @@ The final retrieval strategy should combine:
 - user/session context
 - memory tier
 
-This retrieval pipeline is planned but not implemented.
+The local implementation uses keyword/dense/graph rank fusion, a character-budgeted context, and cited Gemini responses. See [implementation details](docs/retrieval_graph.md); production scale and broader extraction remain future work.
 
 ## 18. APIs and Interfaces
 
@@ -524,7 +524,7 @@ Future operational signals:
 | Alternative | Why considered | Why not selected as the current architecture |
 | --- | --- | --- |
 | Vector-only RAG memory | Simple and common for conversational memory. | The proposal identifies limitations in chronology, personalization, lifecycle management, and conflict handling. |
-| Graph-only memory | Strong for relationships and temporal reasoning. | Does not solve semantic similarity retrieval alone and is intentionally deferred for this phase. |
+| Graph-only memory | Strong for relationships and temporal reasoning. | Does not solve semantic similarity retrieval alone; implemented as one hybrid retrieval channel. |
 | LLM-only memory extraction | Flexible and semantically rich. | Adds cost, latency, nondeterminism, and external dependencies before the core is stable. |
 | ML-first classifier/scorer | Better long-term adaptability. | Requires labeled data that does not exist yet. |
 | Full-stack implementation first | Would show an end-to-end demo earlier. | Higher risk because core contracts, memory schema, and lifecycle behavior need to stabilize first. |
@@ -533,19 +533,19 @@ Future operational signals:
 
 - Should the next production storage backend be SQLite, Postgres, or a document database?
 - Which conversational dataset can validate transfer of Hippocorpus-trained importance scoring?
-- Which embedding model and vector database should be used for RAG retrieval?
-- What exact graph schema should represent users, memories, entities, relationships, and timestamps?
-- What evaluation dataset and metrics will compare CogniMem against baseline memory systems?
+- When should local BGE embeddings and exact SQLite scans move to an ANN service?
+- How should paragraph-level extraction extend the implemented typed bitemporal graph?
+- Which independent human judgments and full-system baselines should extend LoCoMo/LongMemEval?
 - How should privacy, deletion, and export be handled for user memories?
 
 ## 23. Recommended Next Steps
 
 1. Add controlled forgetting/archive cleanup and compaction.
 2. Add REST API endpoints and production storage.
-3. Add vector retrieval and RAG context building.
-4. Evaluate retrieval, conflict decisions, and personalization independently.
+3. Improve extraction coverage and evaluate hosted answer quality.
+4. Extend external retrieval/retention evidence with independent human conflict/personalization judgments.
 5. Add monitoring and privacy/deletion/export controls.
-6. Add the graph database layer after the non-graph pipeline is stable.
+6. Scale the implemented vector/graph indexes when workloads require it.
 
 ML modeling and its datasets are a separate research track.
 
@@ -557,7 +557,7 @@ The current milestone is:
 Structured Memory Core, ranked keyword retrieval, local JSONL store, and CLI implemented.
 ```
 
-The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It has not yet implemented production database storage, vector/hybrid retrieval, RAG, graph database, in-domain ML validation, REST APIs, or deployment.
+The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It now includes local vector/hybrid retrieval, cited RAG, temporal graph indexes, and external evaluation. Production concurrent storage, REST APIs, deployment, broader extraction, and human quality evaluation remain. ML research is separate.
 
 ## 25. Conversational Task Updates
 
@@ -639,3 +639,10 @@ bulk processing idempotent. It does not rewrite prior JSONL rows or lock writers
 
 See [README usage](README.md#conflicts-current-memories-and-consolidation) and
 [verification](reports/memory_reconciliation.md).
+
+## 28. Retrieval and temporal graph implementation
+
+The implementation contract, SQLite schema behavior, query examples, hosted
+configuration, time semantics, extraction bounds, and citation checks are in
+[docs/retrieval_graph.md](docs/retrieval_graph.md). External benchmark results and
+limits are in [reports/retrieval_graph_report.md](reports/retrieval_graph_report.md).

@@ -105,6 +105,7 @@ class MemoryRecord:
     first_observed_at: datetime | None = None
     last_observed_at: datetime | None = None
     last_confirmed_at: datetime | None = None
+    recorded_at: datetime | None = None
 
     @classmethod
     def from_input(
@@ -169,6 +170,7 @@ class MemoryRecord:
             "first_observed_at": _serialize_datetime(self.first_observed_at),
             "last_observed_at": _serialize_datetime(self.last_observed_at),
             "last_confirmed_at": _serialize_datetime(self.last_confirmed_at),
+            "recorded_at": _serialize_datetime(self.recorded_at),
         }
 
     @classmethod
@@ -209,4 +211,5 @@ class MemoryRecord:
             first_observed_at=_parse_datetime(payload.get('first_observed_at')),
             last_observed_at=_parse_datetime(payload.get('last_observed_at')),
             last_confirmed_at=_parse_datetime(payload.get('last_confirmed_at')),
+            recorded_at=_parse_datetime(payload.get('recorded_at')),
         )

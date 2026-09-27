@@ -2,9 +2,9 @@
 
 CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LLM agents.
 
-This repository currently implements the first foundation layer: the **Memory Core**. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
+This repository implements the **Memory Core**, local semantic/hybrid retrieval, cited RAG, and a temporal knowledge graph. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
 
-This phase does **not** implement a database server, RAG pipeline, vector search, graph database, API server. It now includes a local JSONL memory store and a CLI for processing and inspecting records.
+JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). Production database servers and REST APIs remain future work.
 
 ## Current Implementation Status
 
@@ -31,21 +31,19 @@ Implemented:
 - Local JSONL memory store
 - Advanced ranked keyword retrieval using relevance, category, tier, recency, and importance
 - CLI interface
-- Placeholder graph adapter interface only
+- Local neural embeddings, persistent vector storage, and hybrid retrieval
+- Bounded RAG context, Gemini prompt integration, and checked citations
+- Typed temporal graph, aliases, relationship history, and multi-hop evidence paths
+- External LoCoMo/LongMemEval evaluation and baseline reports
 - Unit tests for the Memory Core behavior
 
 Not implemented yet:
 
 - REST API
-- RAG retrieval
-- Vector database
-- Embeddings
 - Production database storage
-- Graph database layer
 - Neo4j integration
-- Temporal knowledge graph construction
 - Controlled forgetting job
-- Evaluation dashboard or experiment runner
+- Evaluation dashboard, independent human conflict/personalization labels, and live Gemini quality evaluation
 
 ## What This Layer Does
 
@@ -299,7 +297,7 @@ records = store.list(user_id="user_001")
 matches = store.search("technical summaries", user_id="user_001")
 ```
 
-The local store is intentionally simple. It does not provide database indexes, concurrent write guarantees, vector search, graph traversal, or server-side querying.
+The JSONL source store is intentionally simple and lacks concurrent writer guarantees or server-side querying. The optional retrieval layer adds SQLite vector/graph indexes; see [retrieval design](docs/retrieval_graph.md).
 
 ## Ranked Retrieval
 
@@ -351,7 +349,7 @@ matches = store.search("Python tests", user_id="user_001", limit=10)
 
 All five weights must be finite and nonnegative with a positive finite total.
 The half-life must be finite and positive. Ranking remains an in-process heuristic
-that scans the local store; vector retrieval and a trained ranker are future work.
+that scans the local store. Semantic/graph/hybrid modes are implemented separately; a learned reranker remains future work.
 
 ## What Still Needs To Be Implemented
 
@@ -361,9 +359,9 @@ The remaining work should be implemented in phases. The current system already h
 | --- | --- | --- | --- |
 | 1 | Persistent cleanup | Add scheduled physical cleanup/compaction beyond the implemented expiry filtering and archive views. | Reclaims storage without losing required history. |
 | 2 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 3 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
-| 4 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
-| 5 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
+| 3 | Retrieval quality | Improve paragraph-level fact extraction and assess Gemini answers after credentials are configured. | Current bounded graph extraction has low coverage on free-form conversations. |
+| 4 | Evaluation quality | Add independent human conflict/personalization labels and full memory-system baselines. | External retrieval/retention runners and recency/keyword/vector/graph/hybrid baselines now exist. |
+| 5 | Scale storage | Add an ANN vector backend and production concurrent storage when needed. | Current exact vector scans and local SQLite graph target local workloads. |
 | 6 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
 | 7 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
 
@@ -424,37 +422,18 @@ No learned classifier, retrieval ranker, consolidation model, or conflict detect
 model is trained. In-domain conversational importance labels and evaluation remain
 future work.
 
-## Graph Database Status
+## Graph and RAG Status
 
-The graph database layer is intentionally not implemented.
+Implemented: local BGE embeddings, chunked SQLite vector storage, hybrid ranking,
+context budgets, LangChain Gemini 2.5 Flash answers with checked citations, and a
+temporal SQLite graph with typed entities, aliases, provenance, valid/recorded
+time, task relationships, and bounded traversal. The local `.env` has blank key
+configuration; fill `GOOGLE_API_KEY` when ready. No hosted call has been made.
 
-The file `main/interfaces.py` only defines a future contract:
-
-```python
-class GraphMemoryAdapter(Protocol):
-    def index(self, record: MemoryRecord) -> None:
-        ...
-```
-
-This is only a placeholder interface. It does not connect to Neo4j, create nodes, create relationships, build a graph schema, perform graph traversal, or persist anything.
-
-## RAG Status
-
-RAG is not implemented yet.
-
-There is currently no:
-
-- chunking
-- embedding model
-- vector database
-- retriever
-- reranker
-- LLM prompt construction
-- answer generation
-- source citation
-- hybrid retrieval
-
-The current Memory Core can produce structured memory records that a future RAG layer may store and retrieve.
+See [full setup and examples](docs/retrieval_graph.md) and
+[external evaluation results](reports/retrieval_graph_report.md). Automatic graph
+extraction is limited to supported assertions; broad paragraph understanding is
+not solved. Citation checks verify source references/quotes, not entailment.
 
 ## CLI
 
@@ -724,10 +703,10 @@ Recommended order:
 
 1. Add scheduled cleanup and JSONL compaction.
 2. Add REST API endpoints and production storage.
-3. Add vector retrieval and RAG context building.
-4. Evaluate retrieval, conflict decisions, and personalization independently.
+3. Improve free-form entity/relation extraction and measure hosted answer quality.
+4. Extend external retrieval/retention evaluation with independent human conflict and personalization judgments.
 5. Add monitoring, deletion/export, and privacy controls.
-6. Add the temporal graph layer after the core pipeline is stable.
+6. Scale vector/graph storage beyond local workloads as needed.
 
 ML research is tracked separately in **ML Importance Model** above.
 
@@ -739,4 +718,4 @@ The current milestone is:
 Structured Memory Core, ranked keyword retrieval, optional trained XGBoost scoring, local JSONL store, and CLI implemented.
 ```
 
-In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. We have not yet implemented production database storage, in-domain ML validation, RAG/vector retrieval, graph, API, or deployment layers.
+In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. Semantic/hybrid retrieval, cited RAG, temporal graph storage, and external evaluation are now implemented. Production concurrent storage, APIs, deployment, broader extraction quality, and independent human answer/conflict/personalization validation remain. ML research is separate.

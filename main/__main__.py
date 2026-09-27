@@ -79,6 +79,31 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument('--user-id', required=True)
     reconcile.add_argument('--pretty', action='store_true')
 
+    search.add_argument('--mode', choices=['keyword', 'semantic', 'hybrid', 'graph'], default='keyword')
+    for name in ('ask', 'index', 'graph'):
+        command = subparsers.add_parser(name, help={'ask': 'Answer using retrieved memory evidence.',
+                                                   'index': 'Build or update vector and temporal graph indexes.',
+                                                   'graph': 'Inspect temporal relationships and evidence paths.'}[name])
+        command.add_argument('--user-id', required=True)
+        command.add_argument('--pretty', action='store_true')
+        if name == 'index':
+            command.add_argument('--graph-only', action='store_true')
+        else:
+            command.add_argument('--as-of', help='Valid time, ISO datetime with timezone.')
+            command.add_argument('--known-at', help='Recording-time cutoff, ISO datetime with timezone.')
+            command.add_argument('--hops', type=int, default=2)
+            if name == 'ask':
+                command.add_argument('query')
+                command.add_argument('--mode', choices=['keyword', 'semantic', 'hybrid', 'graph'], default='hybrid')
+                command.add_argument('--generator', choices=['gemini', 'extractive'], default='gemini')
+                command.add_argument('--limit', type=int, default=5)
+                command.add_argument('--budget', type=int, default=10000, help='Evidence context character budget.')
+                command.add_argument('--preview', action='store_true', help='Show context and prompt without an API call.')
+                command.add_argument('--env-file', default='.env')
+            else:
+                command.add_argument('--query', help='Entity names to seed traversal; omitted lists relationships.')
+                command.add_argument('--predicate')
+                command.add_argument('--direction', choices=['both', 'outgoing', 'incoming'], default='both')
     return parser
 
 
@@ -113,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             print_json([record.to_dict() for record in records], pretty=args.pretty)
             return 0
+        if args.command in {'ask', 'index', 'graph'} or (args.command == 'search' and args.mode != 'keyword'):
+            return rag_command(args, store)
         if args.command == "search":
             records = store.search(
                 args.query,
@@ -155,6 +182,40 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.print_help()
     return 2
+
+
+def rag_command(args, store):
+    from .rag import MemoryRAG
+    from .graph import parse_time
+    from .generation import answer, prompt
+    rag = MemoryRAG(store)
+    if args.command == 'index':
+        payload = rag.sync(user_id=args.user_id, semantic=not args.graph_only)
+    elif args.command == 'search':
+        payload = rag.search(args.query, user_id=args.user_id, mode=args.mode, limit=args.limit,
+                             session_id=args.session_id, category=args.category, tier=args.tier,
+                             include_expired=args.include_expired, include_resolved=args.include_resolved,
+                             include_history=args.include_history)
+    else:
+        as_of, known_at = parse_time(args.as_of), parse_time(args.known_at)
+        if args.command == 'graph':
+            rag.sync(user_id=args.user_id, semantic=False)
+            if args.query:
+                entities = rag.graph.entities(args.query, user_id=args.user_id, known_at=known_at)
+                paths = rag.graph.traverse([e['id'] for e in entities], user_id=args.user_id,
+                                          as_of=as_of, known_at=known_at, max_hops=args.hops, direction=args.direction)
+                if args.predicate:
+                    paths = [p for p in paths if any(e['predicate'] == args.predicate for e in p['edges'])]
+                payload = {'entities': entities, 'paths': paths}
+            else:
+                payload = rag.graph.relations(user_id=args.user_id, as_of=as_of, known_at=known_at, predicate=args.predicate)
+        else:
+            context = rag.context(args.query, user_id=args.user_id, mode=args.mode, limit=args.limit,
+                                  budget=args.budget, as_of=as_of, known_at=known_at, max_hops=args.hops)
+            payload = {'context': context, 'prompt': prompt(context)} if args.preview else answer(
+                context, generator=args.generator, env_file=args.env_file)
+    print_json(payload, pretty=args.pretty)
+    return 0
 
 
 def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:

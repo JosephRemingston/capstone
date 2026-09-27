@@ -35,11 +35,17 @@ class LocalMemoryStore:
         return record
 
     def _append(self, records: list[MemoryRecord]) -> None:
+        from .graph import validate_graph_metadata
+        for record in records:
+            validate_graph_metadata(record.source_metadata, record.created_at)
         owners = {item.id: item.user_id for item in self.all()}
         for record in records:
             if record.id in owners and owners[record.id] != record.user_id:
                 raise ValueError('A memory ID cannot change owner')
             owners[record.id] = record.user_id
+        recorded_at = utc_now()
+        for record in records:
+            record.recorded_at = recorded_at
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(''.join(json.dumps(record.to_dict(), sort_keys=True) + '\n' for record in records))

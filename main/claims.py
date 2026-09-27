@@ -87,6 +87,33 @@ def extract_claim(text: str) -> dict | None:
     match = re.fullmatch(r"I(?: am|'m) (not )?allergic to (.+)", text, re.I)
     if match:
         return claim('allergy', match[2], positive=match[1] is None, exclusive=False, kind='preference')
+    # Relationship assertions also participate in ordinary conflict resolution.
+    patterns = [
+        (r"(.+?) reports to (.+)", 'manager', 'person', 'person', True),
+        (r"(.+?)'s manager is (.+)", 'manager', 'person', 'person', True),
+        (r"(.+?) works? on (.+)", 'works_on', 'person', 'project', False),
+        (r"(.+?) is (?:a )?member of (.+)", 'member_of', 'person', 'organization', False),
+        (r"(.+?) is based in (.+)", 'headquarters', 'organization', 'location', True),
+        (r"(.+?) is owned by (.+)", 'owned_by', 'project', 'organization', True),
+        (r"(.+?) depends on (.+)", 'depends_on', 'project', 'project', False),
+        (r"(.+?) knows (.+)", 'knows', 'person', 'person', False),
+    ]
+    if re.fullmatch(r'My manager is .+', text, re.I):
+        text = re.sub(r'^My manager is ', "I's manager is ", text, flags=re.I)
+    for pattern, predicate, subject_type, object_type, exclusive in patterns:
+        match = re.fullmatch(pattern, text, re.I)
+        if not match:
+            continue
+        subject = match[1].strip()
+        if subject.lower() in {'he', 'she', 'they', 'it', 'we', 'you'}:
+            return None
+        key = 'self' if subject.lower() == 'i' else (
+            'entity:' if subject_type == 'person' else subject_type + ':') + normalized_value(subject)
+        result = claim(predicate, match[2], subject=key, display_subject='User' if key == 'self' else subject,
+                       exclusive=exclusive)
+        if result:
+            result.update(subject_type=subject_type, object_type=object_type)
+        return result
     return None
 
 
@@ -117,5 +144,10 @@ def claim_summary(claim: dict) -> str:
         return f"{subject} {'prefers' if positive else 'does not prefer'} {value} responses."
     if predicate.startswith('choice:'):
         return f"{subject} prefers {value} over {claim['alternative']}."
+    relationship_verbs = {'manager': 'reports to', 'works_on': 'works on', 'member_of': 'is a member of',
+                          'headquarters': 'is based in', 'owned_by': 'is owned by',
+                          'depends_on': 'depends on', 'knows': 'knows'}
+    if predicate in relationship_verbs and positive:
+        return f"{subject} {relationship_verbs[predicate]} {value}."
     label = 'favorite ' + predicate[9:] if predicate.startswith('favorite:') else predicate
     return f"{subject}'s {label} is {'' if positive else 'not '}{value}."
