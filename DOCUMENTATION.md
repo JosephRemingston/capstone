@@ -38,7 +38,7 @@ extraction, or independently human-rated answer quality.
 
 ## Architecture
 
-\`\`\`mermaid
+```mermaid
 flowchart TD
   A[CLI or Python caller] --> B[MemoryCore]
   B --> C[Classifier]
@@ -60,7 +60,7 @@ flowchart TD
   Q --> I
   Q --> L
   Q --> M
-\`\`\`
+```
 
 The key invariant is that JSONL revisions are authoritative. SQLite vectors and
 graph data are rebuildable derived indexes. An index failure must never be the
@@ -68,7 +68,7 @@ only loss of a memory.
 
 ## Source layout
 
-\`\`\`text
+```text
 main/
   __main__.py              CLI
   application/             MemoryCore and maintenance worker
@@ -81,42 +81,42 @@ training/                  optional importance-model training
 tests/                     unit and integration tests
 docs/                      focused guides and reports
 data/                      datasets, caches, and local artifacts
-\`\`\`
+```
 
-Use new module paths directly: \`main.application.core\`,
-\`main.domain.models\`, \`main.storage.store\`, \`main.retrieval.rag\`, and
-\`main.graph.temporal\`. Old flat compatibility source modules were removed.
+Use new module paths directly: `main.application.core`,
+`main.domain.models`, `main.storage.store`, `main.retrieval.rag`, and
+`main.graph.temporal`. Old flat compatibility source modules were removed.
 
 ## Install and configure
 
-\`\`\`bash
+```bash
 uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
-\`\`\`
+```
 
-For Gemini, create a repository-root \`.env\`:
+For Gemini, create a repository-root `.env`:
 
-\`\`\`dotenv
+```dotenv
 GOOGLE_API_KEY=your_key_here
 COGNIMEM_GEMINI_MODEL=gemini-2.5-flash
-\`\`\`
+```
 
-\`GEMINI_API_KEY\` is accepted as a fallback. Environment variables take
-precedence over \`.env\`. The key is ignored by Git. Local FastEmbed embeddings
+`GEMINI_API_KEY` is accepted as a fallback. Environment variables take
+precedence over `.env`. The key is ignored by Git. Local FastEmbed embeddings
 do not send memory text to an embedding provider; Gemini receives only the
 question and selected context when hosted generation is intentionally used.
 
 Runtime locations:
 
-- JSONL store: \`memory_store/memories.jsonl\`
-- SQLite index: beside the store, normally \`memories.index.sqlite3\`
-- embedding cache: \`data/rag/models\`
-- reports: \`docs/reports/\`
-- local configuration: \`.env\`
+- JSONL store: `memory_store/memories.jsonl`
+- SQLite index: beside the store, normally `memories.index.sqlite3`
+- embedding cache: `data/rag/models`
+- reports: `docs/reports/`
+- local configuration: `.env`
 
 ## Basic use
 
-\`\`\`bash
+```bash
 python3 -m main process "I prefer concise Python explanations" \
   --user-id joseph --session-id s1 --pretty
 
@@ -125,12 +125,93 @@ python3 -m main search "Python explanation style" --user-id joseph --pretty
 python3 -m main get MEMORY_ID --pretty
 python3 -m main history MEMORY_ID --user-id joseph --pretty
 python3 -m main stats --pretty
-\`\`\`
+```
 
-Use \`--no-save\` with \`process\` to inspect a result without writing JSONL.
+Use `--no-save` with `process` to inspect a result without writing JSONL.
 Normal reads hide expired, superseded, consolidated, completed, and cancelled
-records when appropriate. Use \`--include-expired\`, \`--include-resolved\`, or
-\`--include-history\` for deliberate inspection.
+records when appropriate. Use `--include-expired`, `--include-resolved`, or
+`--include-history` for deliberate inspection.
+
+## Real-world use and day-to-day integration
+
+CogniMem is most useful when an assistant, internal tool, or workflow repeatedly
+works with the same person, project, or team. It should run beside the agent
+that receives messages; it is not meant to replace a company system of record.
+For each integration, choose a stable `user_id` and a session ID for each chat,
+meeting, or work thread.
+
+| Work setting | Memories to retain | How CogniMem helps day to day |
+| --- | --- | --- |
+| Personal work assistant | Preferred writing style, active projects, reminders, constraints. | Starts each request with relevant preferences and open tasks rather than asking again. |
+| Engineering copilot | Repository conventions, deployment steps, incidents, owners, project dependencies. | Retrieves prior decisions and shows graph-backed evidence for “who owns this?” questions. |
+| Meeting assistant | Decisions, actions, deadlines, attendees, and later corrections. | Turns follow-up messages into task revisions and preserves the original decision trail. |
+| Customer-success assistant | Customer preferences, stated goals, product constraints, and commitments. | Keeps customer-specific context isolated by `user_id` and supports cited answers to account questions. |
+| Research assistant | Research interests, claims, sources, projects, and relationships. | Uses hybrid retrieval for prior notes and graph paths for supported people/project relationships. |
+| Personal productivity tool | Recurring routines, single reminders, completed work, and changing deadlines. | Maintains active task state instead of repeatedly resurfacing completed work. |
+
+### Recommended integration loop
+
+For every incoming message, create a `MemoryInput`, process it, and ingest it.
+Before generating an assistant response, retrieve a small evidence set for the
+current question. Use extractive context during development and Gemini only when
+the answer requires synthesis.
+
+```python
+from pathlib import Path
+
+from main.application.core import MemoryCore
+from main.domain.models import MemoryInput
+from main.storage.store import LocalMemoryStore
+from main.retrieval.rag import MemoryRAG
+
+store = LocalMemoryStore(Path("memory_store/memories.jsonl"))
+core = MemoryCore()
+
+incoming = MemoryInput(
+    content="I prefer brief weekly project updates.",
+    user_id="user-42",
+    session_id="chat-2026-09-28",
+    role="user",
+)
+record = core.process(incoming)
+store.ingest(record)
+
+rag = MemoryRAG(store)
+context = rag.context(
+    "How should I format this week's project update?",
+    user_id="user-42",
+    mode="hybrid",
+)
+# Give context to your existing application prompt, or call the built-in answer generator.
+```
+
+The host application remains responsible for authentication, user consent,
+session creation, displaying citations, and deciding which messages are allowed
+to enter memory. A useful production pattern is to store only user messages and
+explicitly approved assistant decisions, then present retrieved evidence to the
+user when an answer relies on remembered information.
+
+### Practical workflows
+
+**Daily planning:** ingest “remind me,” “I finished,” and “move the deadline”
+messages as they occur. At the start of the day, query open task records and use
+`history` when a task status needs explanation.
+
+**Project continuity:** ingest stable facts such as project ownership, technology
+choices, and review preferences. Use hybrid retrieval before drafting a status
+update; use graph metadata for stable relationships that need multi-hop queries.
+
+**Meeting follow-up:** process the meeting notes in separate, clear statements.
+Use `--split` only for independent clauses. Record a task for each action and
+send the resulting record IDs to the workflow that owns reminders.
+
+**Memory correction:** when a user changes a durable fact, ingest the new clear
+statement. Reconciliation preserves the old evidence and identifies the current
+one; use explicit `resolve` only when automatic evidence ordering is insufficient.
+
+**Retention hygiene:** run cleanup as a preview first, review the JSON response,
+then schedule the maintenance worker externally after retention policy is agreed.
+Do not use automatic cleanup as a substitute for user consent or backup policy.
 
 ## Data model
 
@@ -156,17 +237,17 @@ records when appropriate. Use \`--include-expired\`, \`--include-resolved\`, or
 
 ### Input and record
 
-\`MemoryInput\` requires nonempty \`content\`, \`user_id\`, and \`session_id\`.
-It accepts \`role\` and structured \`metadata\`.
+`MemoryInput` requires nonempty `content`, `user_id`, and `session_id`.
+It accepts `role` and structured `metadata`.
 
-\`MemoryRecord\` adds an ID, category, importance score, tier, timestamps,
+`MemoryRecord` adds an ID, category, importance score, tier, timestamps,
 expiry/archive hints, access count, source metadata, task state, claim details,
 conflict/consolidation state, confidence, and evidence IDs. Times are
 timezone-aware ISO values. A record is serializable to JSON.
 
 ## Processing pipeline
 
-\`MemoryCore.process()\` performs these steps:
+`MemoryCore.process()` performs these steps:
 
 1. Validate and normalize the input.
 2. Classify the content.
@@ -175,10 +256,10 @@ timezone-aware ISO values. A record is serializable to JSON.
 5. Score importance from 0 to 1.
 6. Assign lifecycle tier, expiry, and archive hints.
 7. Parse supported task, deadline, recurrence, claim, and graph metadata.
-8. Return the record; \`LocalMemoryStore.ingest()\` persists it and applies
+8. Return the record; `LocalMemoryStore.ingest()` persists it and applies
    task/reconciliation revisions when required.
 
-\`process_many()\` can conservatively split independent clauses. Ambiguous mixed
+`process_many()` can conservatively split independent clauses. Ambiguous mixed
 messages are intentionally not allowed to mutate several tasks silently.
 
 ## Conversational rules
@@ -222,7 +303,7 @@ These are product-policy thresholds, not statistically calibrated probabilities.
 
 ### Optional ML scorer
 
-\`MemoryCore.with_ml()\` can explicitly load the experimental XGBoost scorer.
+`MemoryCore.with_ml()` can explicitly load the experimental XGBoost scorer.
 It was trained on Hippocorpus personal-event ratings, not short conversational
 facts, tasks, preferences, or greetings. Reported held-out metrics are MAE
 0.2291, RMSE 0.2847, R² 0.0311, and Spearman 0.2367. It is not the default
@@ -233,21 +314,21 @@ because of this domain mismatch and uncalibrated lifecycle thresholds.
 Tasks are revisioned memories rather than mutable rows. Supported behavior:
 
 - create tasks/reminders;
-- parse explicit timezone-aware \`--due-at\` dates;
+- parse explicit timezone-aware `--due-at` dates;
 - complete, cancel, or reschedule supported task language;
 - match task references with normalized action nouns;
-- require explicit \`--task-id\` if a reference is ambiguous;
+- require explicit `--task-id` if a reference is ambiguous;
 - record status changes as history;
 - support recurring occurrences and occurrence-versus-series updates.
 
-\`\`\`bash
+```bash
 python3 -m main process "Remind me to submit the report tomorrow" \
   --user-id joseph --session-id s1
 python3 -m main process "I submitted the report" \
   --user-id joseph --session-id s1
 python3 -m main process "Reschedule the report submission to Friday" \
   --user-id joseph --session-id s1
-\`\`\`
+```
 
 ## Claims, conflicts, and consolidation
 
@@ -261,10 +342,10 @@ resolved using source priority, confidence, observation time, then importance.
 The losing fact remains historical evidence. For example, Bengaluru can replace
 Chennai as a current residence without destroying the older observation.
 
-\`\`\`bash
+```bash
 python3 -m main resolve --keep MEMORY_ID --user-id joseph --pretty
 python3 -m main reconcile --user-id joseph --pretty
-\`\`\`
+```
 
 Consolidation merges exact/compatible repetitions into a summary with evidence
 IDs. It reduces duplicate retrieval but does not invent unsupported abstractions
@@ -272,7 +353,7 @@ or reclaim physical storage by itself.
 
 ## Storage, locks, and cleanup
 
-\`LocalMemoryStore\` appends JSON objects to a JSONL revision log. Reads
+`LocalMemoryStore` appends JSON objects to a JSONL revision log. Reads
 materialize the latest relevant revision per memory ID. Participating ingestion,
 reads, RAG synchronization, reconciliation, and cleanup use reentrant
 process/file locks on macOS/Linux.
@@ -280,16 +361,16 @@ process/file locks on macOS/Linux.
 Cleanup physically removes eligible JSONL revisions and registered user vector
 and graph data. Preview is the default:
 
-\`\`\`bash
+```bash
 python3 -m main cleanup --user-id joseph --pretty
 python3 -m main cleanup --user-id joseph --apply --pretty
 python3 -m main.application.maintenance \
   --store /absolute/path/memories.jsonl --user-id joseph --once
-\`\`\`
+```
 
 A memory is removable only when its latest revision is expired beyond the grace
 period (seven days by default), belongs to the requested user, has no
-\`legal_hold\`/ \`retain\` protection, is not an open task, and is not needed as
+`legal_hold`/ `retain` protection, is not an open task, and is not needed as
 transitive evidence by retained records. Cleanup validates the full log, purges
 derived indexes, writes a fsynced replacement in the same directory, atomically
 renames it, and then records schedule progress. It removes active application
@@ -304,24 +385,24 @@ Keyword retrieval ranks whole-word matches with relevance, category, tier,
 recency, and importance signals. Visibility/user/session/category/tier filters
 apply before ranking.
 
-Semantic retrieval uses local FastEmbed \`BAAI/bge-small-en-v1.5\` vectors
+Semantic retrieval uses local FastEmbed `BAAI/bge-small-en-v1.5` vectors
 (384 dimensions). Documents are chunked at word boundaries into <=1,000
 characters with 150-character overlap. SQLite stores normalized float32 vectors;
 exact cosine candidates need similarity >=0.35. This is local persistent search,
 not an approximate-nearest-neighbor service.
 
 Hybrid mode combines keyword, semantic, and graph ranks using weighted reciprocal
-rank fusion: keyword 0.3, semantic 0.5, graph 0.2, each divided by \`60 + rank\`.
+rank fusion: keyword 0.3, semantic 0.5, graph 0.2, each divided by `60 + rank`.
 The fusion score is an ordering signal, not a probability.
 
-\`\`\`bash
+```bash
 python3 -m main index --user-id joseph
 python3 -m main search "project information" --user-id joseph --mode hybrid
 python3 -m main ask "What project does Alice work on?" \
   --user-id joseph --generator extractive --pretty
 python3 -m main ask "What project does Alice work on?" \
   --user-id joseph --preview --pretty
-\`\`\`
+```
 
 Context is capped at 10,000 characters. Whole chunks that do not fit are skipped.
 No evidence yields an explicit abstention without a Gemini call.
@@ -344,7 +425,7 @@ half-open intervals:
 | valid time | When an assertion is true in the represented world. |
 | known time | When the revision made it known to CogniMem. |
 
-Use \`--as-of\` for valid time and \`--known-at\` for knowledge time. A fact
+Use `--as-of` for valid time and `--known-at` for knowledge time. A fact
 observed January 5 but recorded January 8 can be valid January 5 but must not
 appear in a January 6 knowledge snapshot.
 
@@ -360,18 +441,18 @@ Negative facts can be direct evidence but are not traversed positively.
 
 Structured metadata supports explicit relationships outside the narrow grammar:
 
-\`\`\`json
+```json
 {
   "entities": [{"id": "person:alice", "type": "person", "label": "Alice"}],
   "relations": [{"subject": "person:alice", "predicate": "leads",
     "object": "self", "positive": true,
     "valid_from": "2026-09-01T00:00:00Z"}]
 }
-\`\`\`
+```
 
 ## Evaluation, limits, and results
 
-Historical reports under \`docs/reports/\` show:
+Historical reports under `docs/reports/` show:
 
 | Evaluation | Result and interpretation |
 | --- | --- |
@@ -384,19 +465,19 @@ These results show that retrieval infrastructure works but retention policy and
 broad natural-language graph extraction need improvement. The graph's zero
 LoCoMo retrieval reflects conservative extraction, not a broken graph store.
 
-The historical \`evaluation/\` command package is currently deleted from this
-working tree, though reports remain. Commands such as \`python -m
-evaluation.evaluate\` cannot run until that package is restored.
+The historical `evaluation/` command package is currently deleted from this
+working tree, though reports remain. Commands such as `python -m
+evaluation.evaluate` cannot run until that package is restored.
 
 Independent human labels for conversational importance/tier/category, conflict
 decisions, personalization, and live Gemini answer quality are still required.
 
 ## Testing
 
-\`\`\`bash
+```bash
 python3 -m unittest discover -s tests -q
 python3 -m compileall -q main training tests
-\`\`\`
+```
 
 The standard suite currently has 120 tests; four optional ML tests are skipped
 when trained artifact metadata is unavailable. Tests cover the core pipeline,
@@ -406,7 +487,7 @@ locks, and CLI behavior.
 ## Security and privacy
 
 - Memory files and indexes are local by default.
-- \`user_id\` is a primary retrieval/index/graph isolation boundary.
+- `user_id` is a primary retrieval/index/graph isolation boundary.
 - Embeddings run locally.
 - Hosted generation receives only selected evidence and the question.
 - API keys remain in ignored environment files.
@@ -416,7 +497,7 @@ locks, and CLI behavior.
 
 ## Development priorities
 
-1. Restore the deleted \`evaluation/\` package before relying on evaluation commands.
+1. Restore the deleted `evaluation/` package before relying on evaluation commands.
 2. Build independently labeled, consented conversational evaluation data.
 3. Improve evidence retention on unseen conversation benchmarks.
 4. Extend graph extraction through constrained, reviewable schemas.
@@ -424,7 +505,6 @@ locks, and CLI behavior.
 6. Add API, authentication, and production storage only after local policies and
    evaluation are stable.
 
-Focused supporting material remains in \`README.md\`, \`system_design.md\`,
-\`docs/retrieval_graph.md\`, \`docs/cleanup.md\`, and \`docs/reports/\`. This
+Focused supporting material remains in `README.md`, `system_design.md`,
+`docs/retrieval_graph.md`, `docs/cleanup.md`, and `docs/reports/`. This
 file is the complete single-document reference for the system.
-
