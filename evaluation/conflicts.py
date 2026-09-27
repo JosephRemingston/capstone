@@ -13,10 +13,10 @@ import re
 from tempfile import TemporaryDirectory
 import urllib.request
 
-from main.core import MemoryCore
-from main.models import MemoryInput
-from main.rag import MemoryRAG
-from main.store import LocalMemoryStore
+from main.application.core import MemoryCore
+from main.domain.models import MemoryInput
+from main.retrieval.rag import MemoryRAG
+from main.storage.store import LocalMemoryStore
 
 ROOT = Path('data/evaluation/babi')
 REVISION = '821006e33d6ff3674fd888792a4dd1c04648f69f'

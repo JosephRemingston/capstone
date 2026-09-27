@@ -9,8 +9,8 @@ from pathlib import Path
 import sqlite3
 import struct
 
-from .embeddings import Embedder, normalized
-from .models import MemoryRecord
+from ..retrieval.embeddings import Embedder, normalized
+from ..domain.models import MemoryRecord
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS index_state (kind TEXT, user_id TEXT, fingerprint TEXT, PRIMARY KEY(kind,user_id));

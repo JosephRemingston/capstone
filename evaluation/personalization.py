@@ -14,11 +14,11 @@ import random
 import statistics
 from tempfile import TemporaryDirectory
 
-from main.embeddings import FastEmbedder
-from main.generation import answer, gemini_client
-from main.indexes import digest
-from main.models import MemoryRecord, MemoryCategory, MemoryTier
-from main.rag import MemoryRAG
+from main.retrieval.embeddings import FastEmbedder
+from main.retrieval.generation import answer, gemini_client
+from main.storage.indexes import digest
+from main.domain.models import MemoryRecord, MemoryCategory, MemoryTier
+from main.retrieval.rag import MemoryRAG
 from .benchmark import SnapshotStore
 from .longmemeval import ROOT, SHA256, parse_date, chronology_valid
 

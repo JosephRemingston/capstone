@@ -1,8 +1,8 @@
 """Run developer cases or independently supplied human-reviewed labels.
 
-python -m tests.evaluation.evaluate
-python -m tests.evaluation.evaluate --export-review evaluation/review_template.jsonl
-python -m tests.evaluation.evaluate --labels FILE --reviewed-only
+python -m evaluation.evaluate
+python -m evaluation.evaluate --export-review evaluation/review_template.jsonl
+python -m evaluation.evaluate --labels FILE --reviewed-only
 """
 import argparse
 from collections import Counter

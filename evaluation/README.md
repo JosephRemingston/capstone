@@ -6,7 +6,7 @@ preferences/constraints, one-off/recurring tasks, negation, events, procedures, 
 indirect paraphrases. These examples were not used to train an ML model. They are
 regression/development checks, not an independent benchmark or human ground truth.
 
-Run `python3 -m tests.evaluation.evaluate` from the repository root. The report includes
+Run `python3 -m evaluation.evaluate` from the repository root. The report includes
 all predictions, a category confusion matrix, macro F1, tier accuracy, and agreement
 with the proposed importance ranges. Ranges represent a retention policy, not
 human-measured continuous scores. Never report range agreement as regression accuracy.
@@ -45,8 +45,8 @@ intensity alone. Reviewers may disagree with the existing policy and should reco
 that disagreement rather than copy predictions.
 
 ```bash
-python3 -m tests.evaluation.evaluate --export-review tests/evaluation/review_template.jsonl
-python3 -m tests.evaluation.evaluate --labels reviewed.jsonl --reviewed-only \
+python3 -m evaluation.evaluate --export-review evaluation/review_template.jsonl
+python3 -m evaluation.evaluate --labels reviewed.jsonl --reviewed-only \
   --output docs/reports/human_reviewed_evaluation.json
 ```
 
@@ -61,9 +61,9 @@ from these developer examples.
 
 ```bash
 uv pip install --python .venv/bin/python -r requirements-evaluation.txt
-.venv/bin/python -m tests.evaluation.benchmark --download
-.venv/bin/python -m tests.evaluation.longmemeval --download
-.venv/bin/python -m tests.evaluation.conflicts --download
+.venv/bin/python -m evaluation.benchmark --download
+.venv/bin/python -m evaluation.longmemeval --download
+.venv/bin/python -m evaluation.conflicts --download
 ```
 
 Downloads pin dataset revisions and verify SHA-256. Data/model caches live under
@@ -94,7 +94,7 @@ these three commands. The embedding model downloads once and runs locally.
   This tests conflict state updates on an external synthetic dataset; it is not
   a claim of natural-language parsing or independent human policy validation.
 
-See [the consolidated results](../../docs/reports/retrieval_graph_report.md). Reports
+See [the consolidated results](../docs/reports/retrieval_graph_report.md). Reports
 include predictions, dataset fingerprints, exclusions, protocols, and limitations.
 LoCoMo raw-turn retrieval bypasses memory lifecycle decisions deliberately to
 isolate retrieval; LongMemEval separately exposes end-to-end retention losses.
@@ -108,13 +108,13 @@ labels and must not be described as covering those other judgments.
 
 ## Unified evaluation, cleanup measurement, and independent answer review
 
-The evaluation package now lives under `tests/evaluation`; reports live under
+The evaluation package lives under `evaluation/`; reports live under
 `docs/reports`. Run from the repository root:
 
 ```bash
-.venv/bin/python -m tests.evaluation.suite
+.venv/bin/python -m evaluation.suite
 # If datasets are not downloaded:
-.venv/bin/python -m tests.evaluation.suite --download
+.venv/bin/python -m evaluation.suite --download
 ```
 
 The runner executes each stage, records its status and duration, hashes its report,
@@ -151,7 +151,7 @@ an unrestricted standalone Gemini response.
 
 ```bash
 # Real Gemini answers after configuring .env; up to 210 hosted answer requests.
-.venv/bin/python -m tests.evaluation.personalization --generator gemini
+.venv/bin/python -m evaluation.personalization --generator gemini
 ```
 
 Artifacts in `data/evaluation/personalization/`:
@@ -179,7 +179,7 @@ Record reasons and ambiguities in `notes`. These are answer-quality judgments,
 separate from the synthetic bAbI state-transition accuracy.
 
 ```bash
-python3 -m tests.evaluation.personalization --reviews /path/to/completed_reviews.jsonl
+python3 -m evaluation.personalization --reviews /path/to/completed_reviews.jsonl
 ```
 
 The scorer requires coverage of every successfully generated answer, rejects

@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 import json
 import re
 
-from .claims import extract_claim, normalized_value
-from .indexes import IndexDatabase, digest
-from .models import MemoryRecord, utc_now
+from ..domain.claims import extract_claim, normalized_value
+from ..storage.indexes import IndexDatabase, digest
+from ..domain.models import MemoryRecord, utc_now
 
 NODE_TYPES = {'person', 'organization', 'project', 'location', 'task', 'concept', 'literal'}
 PREDICATES = {

@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 
 from .locking import store_lock
-from .models import utc_now
+from ..domain.models import utc_now
 
 
 def atomic_write(path, payload):

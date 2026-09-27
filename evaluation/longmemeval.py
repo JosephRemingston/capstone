@@ -14,10 +14,10 @@ from tempfile import TemporaryDirectory
 import urllib.request
 from unittest.mock import patch
 
-from main.core import MemoryCore
-from main.models import MemoryInput
-from main.store import LocalMemoryStore
-from main.cleanup import cleanup
+from main.application.core import MemoryCore
+from main.domain.models import MemoryInput
+from main.storage.store import LocalMemoryStore
+from main.storage.cleanup import cleanup
 
 ROOT = Path('data/evaluation/longmemeval')
 REVISION = '98d7416c24c778c2fee6e6f3006e7a073259d48f'
@@ -55,9 +55,9 @@ def evaluate(row):
                 when = parse_date(date)
                 # Replay ingestion at observation time, rather than penalizing every
                 # historical input as if it arrived years late during evaluation.
-                with patch('main.features.FeatureExtractor._now', return_value=when), \
-                     patch('main.lifecycle.utc_now', return_value=when), \
-                     patch('main.store.utc_now', return_value=when):
+                with patch('main.domain.features.FeatureExtractor._now', return_value=when), \
+                     patch('main.domain.lifecycle.utc_now', return_value=when), \
+                     patch('main.storage.store.utc_now', return_value=when):
                     record = core.process(MemoryInput(text, owner, session_id, role=turn['role'], timestamp=when))
                     record.id = identifier
                     store.ingest(record)

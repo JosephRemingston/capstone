@@ -146,16 +146,16 @@ Default conversational rules use whole-word matching, indirect preferences, expl
 | Component | File | Responsibility | Input | Output |
 | --- | --- | --- | --- | --- |
 | Public API | `main/__init__.py` | Exposes the Memory Core classes and enums. | Imports from caller code. | Importable package API. |
-| Memory models | `main/models.py` | Defines memory input, memory record, categories, tiers, timestamps, and serialization. | Raw field values or dict payload. | `MemoryInput` and `MemoryRecord`. |
-| Classifier | `main/classification.py` | Categorizes content using deterministic keyword/pattern rules. | `MemoryInput`. | `MemoryCategory`. |
-| Feature extractor | `main/features.py` | Converts content and metadata into numeric scoring features. | `MemoryInput`, `MemoryRecord`. | `dict[str, float]`. |
-| Importance scorer | `main/scoring.py` | Applies heuristic weights to features. | Feature dictionary. | Float score from `0.0` to `1.0`. |
-| Lifecycle manager | `main/lifecycle.py` | Assigns memory tier and expiry/archive hints. | `MemoryRecord`, score. | `MemoryTier`, timestamp hints. |
-| Memory orchestrator | `main/core.py` | Runs the full processing pipeline. | `MemoryInput`. | Final `MemoryRecord`. |
-| Local memory store | `main/store.py` | Saves, loads, filters, gets, and keyword-searches JSONL memory records. | `MemoryRecord` or filter/query arguments. | Stored or retrieved `MemoryRecord` objects. |
-| Retrieval ranker | `main/retrieval.py` | Ranks whole-word matches by keyword coverage, category, tier, recency, and importance. | Query and filtered records. | Ordered records. |
+| Memory models | `main/domain/models.py` | Defines memory input, memory record, categories, tiers, timestamps, and serialization. | Raw field values or dict payload. | `MemoryInput` and `MemoryRecord`. |
+| Classifier | `main/domain/classification.py` | Categorizes content using deterministic keyword/pattern rules. | `MemoryInput`. | `MemoryCategory`. |
+| Feature extractor | `main/domain/features.py` | Converts content and metadata into numeric scoring features. | `MemoryInput`, `MemoryRecord`. | `dict[str, float]`. |
+| Importance scorer | `main/domain/scoring.py` | Applies heuristic weights to features. | Feature dictionary. | Float score from `0.0` to `1.0`. |
+| Lifecycle manager | `main/domain/lifecycle.py` | Assigns memory tier and expiry/archive hints. | `MemoryRecord`, score. | `MemoryTier`, timestamp hints. |
+| Memory orchestrator | `main/application/core.py` | Runs the full processing pipeline. | `MemoryInput`. | Final `MemoryRecord`. |
+| Local memory store | `main/storage/store.py` | Saves, loads, filters, gets, and keyword-searches JSONL memory records. | `MemoryRecord` or filter/query arguments. | Stored or retrieved `MemoryRecord` objects. |
+| Retrieval ranker | `main/retrieval/ranker.py` | Ranks whole-word matches by keyword coverage, category, tier, recency, and importance. | Query and filtered records. | Ordered records. |
 | CLI | `main/__main__.py` | Provides terminal commands for process, list, search, get, and stats. | Command-line arguments. | JSON output. |
-| Graph contract | `main/interfaces.py` | Defines a future adapter protocol only. | `MemoryRecord`. | No implementation. |
+| Graph contract | `main/graph/interfaces.py` | Defines the graph adapter protocol. | `MemoryRecord`. | Graph integration contract. |
 | Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
 
 Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: [lifecycle changes](docs/reports/lifecycle_improvements.md).
@@ -599,7 +599,7 @@ See [current behavior and verification](docs/reports/lifecycle_improvements.md) 
 
 ## 26. Assertion Reconciliation and Consolidation
 
-`main/claims.py` extracts a narrow single assertion: subject, predicate, normalized
+`main/domain/claims.py` extracts a narrow single assertion: subject, predicate, normalized
 value, polarity, and exclusivity. The default classifier recognizes those forms;
 the optional scorer retains its frozen classification preprocessing. Ingestion
 recomputes claims from the original content, including older records without
@@ -607,7 +607,7 @@ claim fields. Current user assertions with the same subject/predicate are checke
 for opposing polarity or different values on an exclusive attribute. Compatible
 likes and negative claims about different values remain independent.
 
-`main/reconciliation.py` compares source priority, confidence, observation time,
+`main/domain/reconciliation.py` compares source priority, confidence, observation time,
 then importance. The best actual supporting observation determines a group's
 rank. A rejected assertion does not supersede compatible existing facts. An exact
 tie keeps an existing assertion. Source priority/confidence are caller-supplied,
@@ -651,5 +651,5 @@ limits are in [reports/retrieval_graph_report.md](docs/reports/retrieval_graph_r
 
 See [cleanup policy, locking, failure recovery, and scheduling](docs/cleanup.md),
 [unified external evaluation](docs/reports/independent_evaluation.md), and
-[blind independent review instructions](tests/evaluation/README.md). Human
+[blind independent review instructions](evaluation/README.md). Human
 personalization and conflict-policy scores remain pending actual reviews.

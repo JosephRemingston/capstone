@@ -1,6 +1,6 @@
 import unittest
-from tests.evaluation.benchmark import metrics, conversation_records
-from tests.evaluation.longmemeval import evaluate
+from evaluation.benchmark import metrics, conversation_records
+from evaluation.longmemeval import evaluate
 
 
 class ExternalEvaluationTests(unittest.TestCase):

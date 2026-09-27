@@ -10,9 +10,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .core import MemoryCore
-from .models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
-from .store import DEFAULT_STORE_PATH, LocalMemoryStore
+from .application.core import MemoryCore
+from .domain.models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
+from .storage.store import DEFAULT_STORE_PATH, LocalMemoryStore
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == 'cleanup':
-            from .cleanup import cleanup
+            from .storage.cleanup import cleanup
             print_json(cleanup(store, user_id=args.user_id, grace_days=args.grace_days,
                                apply=args.apply, scheduled=args.scheduled, interval_hours=args.interval_hours), pretty=args.pretty)
             return 0
@@ -204,9 +204,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def rag_command(args, store):
-    from .rag import MemoryRAG
+    from .retrieval.rag import MemoryRAG
     from .graph import parse_time
-    from .generation import answer, prompt
+    from .retrieval.generation import answer, prompt
     rag = MemoryRAG(store)
     if args.command == 'index':
         payload = rag.sync(user_id=args.user_id, semantic=not args.graph_only)

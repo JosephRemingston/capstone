@@ -9,8 +9,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from .features import FeatureExtractor
-from .models import MemoryInput, MemoryRecord
+from .domain.features import FeatureExtractor
+from .domain.models import MemoryInput, MemoryRecord
 
 DEFAULT_MODEL_DIR = Path(__file__).resolve().parent.parent / "artifacts" / "importance"
 FEATURE_VERSION = "hippocorpus-text-v1"

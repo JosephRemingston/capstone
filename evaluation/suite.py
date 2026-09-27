@@ -18,7 +18,7 @@ OUT = ROOT / 'docs/reports'
 
 def report(stages):
     sources = {str(p.relative_to(ROOT)): sha256(p.read_bytes()).hexdigest()
-               for folder in ('main', 'tests/evaluation') for p in sorted((ROOT / folder).glob('*.py'))}
+               for folder in ('main', 'evaluation') for p in sorted((ROOT / folder).glob('*.py'))}
     dependencies = {}
     for package in ('fastembed', 'langchain-google-genai', 'pyarrow'):
         try:
@@ -83,8 +83,8 @@ def markdown(data):
         lines += ['', 'Personalization/update answers use **' + data['personalization_generator'] + '** generation. Human quality scores are pending, not zero or assumed correct.', '', '| Answer context baseline | Evidence recall | Generation failures |', '| --- | ---: | ---: |']
         for mode, values in data['personalization_evidence'].items():
             lines.append(f"| {mode} | {values['evidence_recall']:.2%} | {values['generation_failures']} |")
-    lines += ['', 'Blind review packets, frozen answer bindings, and baseline mappings are written to `data/evaluation/personalization/`. Complete independent reviews can be scored with `python -m tests.evaluation.personalization --reviews FILE`. Review assertions are supplied attestations; the software cannot certify reviewer independence.', '',
-              'No cleanup was applied to the real user store, and no background service was installed by this evaluation run. See [cleanup operations](../cleanup.md) and [evaluation instructions](../../tests/evaluation/README.md).']
+    lines += ['', 'Blind review packets, frozen answer bindings, and baseline mappings are written to `data/evaluation/personalization/`. Complete independent reviews can be scored with `python -m evaluation.personalization --reviews FILE`. Review assertions are supplied attestations; the software cannot certify reviewer independence.', '',
+              'No cleanup was applied to the real user store, and no background service was installed by this evaluation run. See [cleanup operations](../cleanup.md) and [evaluation instructions](../../evaluation/README.md).']
     return '\n'.join(lines) + '\n'
 
 
@@ -100,7 +100,7 @@ def main():
                 ('personalization', 'personalization', ['--generator', args.generator])]
     OUT.mkdir(parents=True, exist_ok=True)
     for name, module, flags in commands:
-        command = [sys.executable, '-m', 'tests.evaluation.' + module, *flags]
+        command = [sys.executable, '-m', 'evaluation.' + module, *flags]
         if args.download and module != 'personalization':
             command.append('--download')
         started = time.monotonic()

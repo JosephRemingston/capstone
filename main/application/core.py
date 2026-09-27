@@ -5,19 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .classification import MemoryClassifier
-from .features import FeatureExtractor
-from .lifecycle import LifecycleManager
-from .models import MemoryInput, MemoryRecord
-from .scoring import ImportanceScorer, ImportanceScoring
-from .models import MemoryCategory
-from .deadlines import parse_deadline
-from .text_rules import recurring
-from .segmentation import split_input
-from .tasks import task_action
-from .recurrence import parse_recurrence, scheduled_at
-from .claims import extract_claim
-from .reconciliation import validate_evidence
+from ..domain.classification import MemoryClassifier
+from ..domain.features import FeatureExtractor
+from ..domain.lifecycle import LifecycleManager
+from ..domain.models import MemoryInput, MemoryRecord
+from ..domain.scoring import ImportanceScorer, ImportanceScoring
+from ..domain.models import MemoryCategory
+from ..domain.deadlines import parse_deadline
+from ..domain.text_rules import recurring
+from ..domain.segmentation import split_input
+from ..domain.tasks import task_action
+from ..domain.recurrence import parse_recurrence, scheduled_at
+from ..domain.claims import extract_claim
+from ..domain.reconciliation import validate_evidence
 
 
 @dataclass(slots=True)
@@ -32,12 +32,12 @@ class MemoryCore:
     @classmethod
     def with_ml(cls, model_dir: str | Path | None = None) -> "MemoryCore":
         """Replace heuristic scoring with the experimental Hippocorpus model."""
-        from .ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
+        from ..ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
         return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
                    importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
-        from .graph import validate_graph_metadata
+        from ..graph import validate_graph_metadata
         validate_graph_metadata(memory_input.metadata, memory_input.timestamp)
         category = self.classifier.classify(memory_input)
         if (not self.classifier.legacy and memory_input.role == 'user'
@@ -76,7 +76,7 @@ class MemoryCore:
         record.tier = tier
         record.expires_at = self.lifecycle_manager.expiry_for(record)
         record.archive_after = self.lifecycle_manager.archive_after_for(record)
-        from .ml import MLImportanceScorer
+        from ..ml import MLImportanceScorer
         if isinstance(self.importance_scorer, MLImportanceScorer):
             record.source_metadata["importance_model"] = {
                 "type": "xgboost", "target": self.importance_scorer.metadata["target"],

@@ -153,7 +153,7 @@ whose underlying memory is expired for ordinary RAG.
 ## Evaluation
 
 See [the report](reports/retrieval_graph_report.md) and
-[evaluation instructions](../tests/evaluation/README.md). LoCoMo measures externally
+[evaluation instructions](../evaluation/README.md). LoCoMo measures externally
 annotated evidence retrieval with fixed baseline comparisons. LongMemEval checks
 labeled evidence retention in knowledge-update/preference examples. These are
 not claims of correct generated answers. Independent human judgments of conflict

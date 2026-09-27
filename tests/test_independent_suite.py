@@ -2,9 +2,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import unittest
 
-from main.indexes import digest
-from tests.evaluation.personalization import score_reviews, records_for, RUBRIC
-from tests.evaluation.suite import report
+from main.storage.indexes import digest
+from evaluation.personalization import score_reviews, records_for, RUBRIC
+from evaluation.suite import report
 
 
 class IndependentSuiteTests(unittest.TestCase):
@@ -55,7 +55,7 @@ class IndependentSuiteTests(unittest.TestCase):
         self.assertNotIn('has_answer', str(records[0].to_dict()))
 
     def test_future_sessions_are_rejected_before_scoring_or_context(self):
-        from tests.evaluation.longmemeval import chronology_valid, evaluate
+        from evaluation.longmemeval import chronology_valid, evaluate
         row = {'question_id': 'q', 'question_date': '2026/01/01 (Thu) 12:00',
                'haystack_dates': ['2026/01/02 (Fri) 12:00']}
         self.assertFalse(chronology_valid(row))

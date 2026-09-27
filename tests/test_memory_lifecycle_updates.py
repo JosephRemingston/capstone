@@ -10,8 +10,8 @@ from pathlib import Path
 
 from main import MemoryCore, MemoryInput, LocalMemoryStore, LifecycleManager, MemoryCategory, MemoryRecord, MemoryTier
 from main.__main__ import main as cli_main
-from main.deadlines import parse_deadline
-from main.tasks import task_outcome
+from main.domain.deadlines import parse_deadline
+from main.domain.tasks import task_outcome
 
 NOW = datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc)
 

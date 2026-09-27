@@ -65,9 +65,9 @@ The latest-assertion baseline also solves this simple task. This is external syn
 
 ```bash
 uv pip install --python .venv/bin/python -r requirements-evaluation.txt
-.venv/bin/python -m tests.evaluation.benchmark --download
-.venv/bin/python -m tests.evaluation.longmemeval --download
-.venv/bin/python -m tests.evaluation.conflicts --download
+.venv/bin/python -m evaluation.benchmark --download
+.venv/bin/python -m evaluation.longmemeval --download
+.venv/bin/python -m evaluation.conflicts --download
 python3 -m unittest discover -s tests -q
 ```
 

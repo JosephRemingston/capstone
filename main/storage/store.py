@@ -8,13 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from .models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
-from .retrieval import MemoryRanker, tokenize
-from .lifecycle import LifecycleManager
-from .tasks import task_action, match_tasks
-from .task_updates import revise_task
-from .deadlines import parse_deadline
-from .reconciliation import reconcile, select_current, eligible
+from ..domain.models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
+from ..retrieval import MemoryRanker, tokenize
+from ..domain.lifecycle import LifecycleManager
+from ..domain.tasks import task_action, match_tasks
+from ..domain.task_updates import revise_task
+from ..domain.deadlines import parse_deadline
+from ..domain.reconciliation import reconcile, select_current, eligible
 from .locking import locked
 
 
@@ -37,7 +37,7 @@ class LocalMemoryStore:
 
     @locked
     def _append(self, records: list[MemoryRecord]) -> None:
-        from .graph import validate_graph_metadata
+        from ..graph import validate_graph_metadata
         for record in records:
             validate_graph_metadata(record.source_metadata, record.created_at)
         owners = {item.id: item.user_id for item in self.all()}

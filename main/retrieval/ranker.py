@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable
 
-from .models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
+from ..domain.models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
 
 
 def tokenize(text: str) -> set[str]:

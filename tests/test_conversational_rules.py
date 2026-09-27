@@ -3,8 +3,8 @@ import unittest
 from datetime import datetime, timezone
 
 from main import MemoryCore, MemoryInput
-from main.classification import MemoryClassifier
-from main.features import FeatureExtractor
+from main.domain.classification import MemoryClassifier
+from main.domain.features import FeatureExtractor
 from main.ml import MLFeatureExtractor
 
 

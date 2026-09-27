@@ -75,7 +75,7 @@ separate work.
   negation, mixed messages, references, rescheduling, recurrence, month ends,
   leap years, serialization/timezones, ambiguity, owner/chronology checks,
   invalid metadata, retries, old-record upgrades, and CLI integration.
-- `python3 -m tests.evaluation.evaluate`: **48/48 category matches**, **48/48 tier
+- `python3 -m evaluation.evaluate`: **48/48 category matches**, **48/48 tier
   matches**, macro F1 **1.0**, and **48/48 importance-range matches**, up from
   44/48. Labels were not changed. These examples were used during development;
   this is regression coverage, not independent accuracy on unseen conversations.

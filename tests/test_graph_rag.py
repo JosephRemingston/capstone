@@ -5,12 +5,12 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch, Mock
 
-from main.core import MemoryCore
-from main.models import MemoryInput
-from main.store import LocalMemoryStore
-from main.rag import MemoryRAG
+from main.application.core import MemoryCore
+from main.domain.models import MemoryInput
+from main.storage.store import LocalMemoryStore
+from main.retrieval.rag import MemoryRAG
 from main.graph import validate_graph_metadata
-from main.generation import answer, validate_answer, gemini_client
+from main.retrieval.generation import answer, validate_answer, gemini_client
 
 
 def dt(day):
@@ -41,7 +41,7 @@ class GraphRAGFixture(unittest.TestCase):
     def add(self, text, day=1, known=1, user='u', metadata=None):
         record = MemoryCore().process(MemoryInput(text, user, 's', timestamp=dt(day), metadata=metadata or {}))
         record.expires_at = None
-        with patch('main.store.utc_now', return_value=dt(known)):
+        with patch('main.storage.store.utc_now', return_value=dt(known)):
             return self.store.ingest(record)
 
 
@@ -56,7 +56,7 @@ class GraphRAGTests(GraphRAGFixture):
         self.assertEqual(places(6, 9), {'Bengaluru'})
         self.assertEqual(places(3, 9), {'Chennai'})
         self.assertEqual(places(1, 1), set())
-        with patch('main.store.utc_now', return_value=dt(10)):
+        with patch('main.storage.store.utc_now', return_value=dt(10)):
             self.store.resolve_conflict(old.id, user_id='u', now=dt(10))
         self.rag.sync(user_id='u', semantic=False)
         self.assertEqual(places(11, 11), {'Chennai'})
@@ -160,7 +160,7 @@ class AdditionalGraphTests(GraphRAGFixture):
         from dataclasses import replace
         record = self.add('Alice reports to Bob')
         changed = replace(record, content='Alice reports to Carol', updated_at=dt(5))
-        with patch('main.store.utc_now', return_value=dt(8)):
+        with patch('main.storage.store.utc_now', return_value=dt(8)):
             self.store.save(changed)
         self.rag.sync(user_id='u', semantic=False)
         for valid, expected in ((3, 'Bob'), (7, 'Carol')):
@@ -202,7 +202,7 @@ class AdditionalGraphTests(GraphRAGFixture):
         client.with_structured_output.return_value.invoke.side_effect = RuntimeError('private provider data')
         with self.assertRaisesRegex(ValueError, '^Gemini request failed'):
             answer(context, client=client)
-        from main.generation import prompt
+        from main.retrieval.generation import prompt
         messages = prompt(context)
         self.assertNotIn('reveal another user', messages[0][1])
         self.assertIn('reveal another user', messages[1][1])
@@ -247,7 +247,7 @@ class ConfigurationAndCLITests(unittest.TestCase):
             self.assertEqual(result['generator'], 'extractive')
 
     def test_vector_validation_rejects_invalid_vectors(self):
-        from main.embeddings import normalized
+        from main.retrieval.embeddings import normalized
         for vector in ([0, 0], [float('nan'), 1], [1], [float('inf'), 2]):
             with self.assertRaises(ValueError):
                 normalized(vector, 2)

@@ -5,8 +5,8 @@ import math
 import sqlite3
 import signal
 import threading
-from .cleanup import cleanup
-from .store import LocalMemoryStore
+from ..storage.cleanup import cleanup
+from ..storage.store import LocalMemoryStore
 
 
 def main():

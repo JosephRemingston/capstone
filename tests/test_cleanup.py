@@ -7,11 +7,11 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from main.cleanup import cleanup
-from main.models import MemoryCategory, MemoryRecord
-from main.store import LocalMemoryStore
-from main.rag import MemoryRAG
-from main.locking import store_lock
+from main.storage.cleanup import cleanup
+from main.domain.models import MemoryCategory, MemoryRecord
+from main.storage.store import LocalMemoryStore
+from main.retrieval.rag import MemoryRAG
+from main.storage.locking import store_lock
 
 NOW = datetime(2026, 9, 27, tzinfo=timezone.utc)
 
@@ -93,7 +93,7 @@ class CleanupTests(CleanupFixture):
     def test_failure_keeps_source_and_schedule_retries(self):
         self.add('expired')
         before = self.store.path.read_bytes()
-        with patch('main.cleanup.atomic_write', side_effect=OSError('disk failure')):
+        with patch('main.storage.cleanup.atomic_write', side_effect=OSError('disk failure')):
             with self.assertRaises(OSError):
                 cleanup(self.store, user_id='u', now=NOW, apply=True, scheduled=True)
         self.assertEqual(before, self.store.path.read_bytes())
@@ -136,7 +136,7 @@ class CleanupFailureTests(CleanupFixture):
     def test_failed_index_purge_never_replaces_source(self):
         self.add('expired')
         before = self.store.path.read_bytes()
-        with patch('main.cleanup.purge_indexes', side_effect=ValueError('busy index')):
+        with patch('main.storage.cleanup.purge_indexes', side_effect=ValueError('busy index')):
             with self.assertRaises(ValueError):
                 cleanup(self.store, user_id='u', now=NOW, apply=True, scheduled=True)
         self.assertEqual(self.store.path.read_bytes(), before)
@@ -176,14 +176,14 @@ class CleanupFailureTests(CleanupFixture):
         self.assertFalse(Path(str(self.store.path) + '.cleanup-schedule.json').exists())
 
     def test_compaction_preserves_temporal_query_evidence(self):
-        from main.core import MemoryCore
-        from main.models import MemoryInput
+        from main.application.core import MemoryCore
+        from main.domain.models import MemoryInput
         first = NOW - timedelta(days=30)
         second = NOW - timedelta(days=20)
         for when, text in ((first, 'Alice reports to Bob'), (second, 'Alice reports to Carol')):
             record = MemoryCore().process(MemoryInput(text, 'u', 's', timestamp=when))
             record.expires_at = None
-            with patch('main.store.utc_now', return_value=when):
+            with patch('main.storage.store.utc_now', return_value=when):
                 self.store.ingest(record)
         raw = self.store.path.read_bytes().splitlines(keepends=True)
         with self.store.path.open('ab') as stream:
@@ -201,13 +201,13 @@ class CleanupFailureTests(CleanupFixture):
 
     def test_worker_once_returns_failure_and_retries_sqlite_errors(self):
         import sqlite3
-        from main.maintenance import main
-        with patch('main.maintenance.signal.signal'), patch('sys.argv', ['maintenance', '--user-id', 'u', '--once']), \
-             patch('main.maintenance.cleanup', side_effect=sqlite3.OperationalError('busy')), \
+        from main.application.maintenance import main
+        with patch('main.application.maintenance.signal.signal'), patch('sys.argv', ['maintenance', '--user-id', 'u', '--once']), \
+             patch('main.application.maintenance.cleanup', side_effect=sqlite3.OperationalError('busy')), \
              patch('builtins.print'):
             self.assertEqual(main(), 1)
-        with patch('main.maintenance.signal.signal'), patch('sys.argv', ['maintenance', '--user-id', 'u', '--once']), \
-             patch('main.maintenance.cleanup', return_value={'status': 'completed'}), \
+        with patch('main.application.maintenance.signal.signal'), patch('sys.argv', ['maintenance', '--user-id', 'u', '--once']), \
+             patch('main.application.maintenance.cleanup', return_value={'status': 'completed'}), \
              patch('builtins.print'):
             self.assertEqual(main(), 0)
 

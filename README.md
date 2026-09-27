@@ -6,6 +6,8 @@ This repository implements the **Memory Core**, local semantic/hybrid retrieval,
 
 JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). Production database servers and REST APIs remain future work.
 
+See [the repository architecture](docs/architecture.md) for package ownership and entry points.
+
 ## Current Implementation Status
 
 Implemented:
@@ -599,9 +601,9 @@ resolved tasks by default. Long-term memories are viewed as archived after 90
 inactive days, using the latest explicit access, supporting observation, or creation time. Scheduled physical cleanup is available; automatic archive migration is not implemented.
 Cooperating local operations are protected by process/file locks.
 
-Run `python3 -m tests.evaluation.evaluate` for the 48-case developer check. Its current
+Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
 category/tier agreement is 48/48, not independently reviewed accuracy. The blank
-[review template](tests/evaluation/review_template.jsonl) and [review guidance](tests/evaluation/README.md)
+[review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
 are ready; no human-reviewed labels have been collected.
 See [implementation and limits](docs/reports/lifecycle_improvements.md).
 
@@ -722,13 +724,13 @@ In other words, we have implemented the memory representation, decision pipeline
 
 ## Independent evaluation and scheduled cleanup
 
-Run `.venv/bin/python -m tests.evaluation.suite` for the unified external benchmark,
+Run `.venv/bin/python -m evaluation.suite` for the unified external benchmark,
 500-case retention/cleanup replay, synthetic conflict baselines, and personalized
 answer-context baselines. Default generation is extractive and makes no hosted
 API calls. `--generator gemini` explicitly enables hosted generation.
 
 See [the generated report](docs/reports/independent_evaluation.md),
-[evaluation and blind-review instructions](tests/evaluation/README.md), and
+[evaluation and blind-review instructions](evaluation/README.md), and
 [cleanup policy and scheduling](docs/cleanup.md). Independent human personalization
 and conflict-policy ratings remain pending until actual reviews are provided.
 Cleanup was tested on temporary stores; no real-user cleanup job was activated.

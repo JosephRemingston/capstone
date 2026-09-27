@@ -1,6 +1,6 @@
 """Frozen external LoCoMo retrieval benchmark; never index QA or generated summaries.
 
-Run: python -m tests.evaluation.benchmark --download
+Run: python -m evaluation.benchmark --download
 This evaluates evidence retrieval, not answer correctness or semantic entailment.
 """
 from __future__ import annotations
@@ -18,10 +18,10 @@ import statistics
 import time
 import urllib.request
 
-from main.embeddings import FastEmbedder, normalized
-from main.models import MemoryRecord, MemoryCategory, MemoryTier
-from main.store import LocalMemoryStore
-from main.rag import MemoryRAG
+from main.retrieval.embeddings import FastEmbedder, normalized
+from main.domain.models import MemoryRecord, MemoryCategory, MemoryTier
+from main.storage.store import LocalMemoryStore
+from main.retrieval.rag import MemoryRAG
 
 COMMIT = '3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376'
 SHA256 = '79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4'

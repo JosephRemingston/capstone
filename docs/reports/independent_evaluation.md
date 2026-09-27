@@ -51,6 +51,6 @@ Personalization/update answers use **extractive** generation. Human quality scor
 | keyword | 67.17% | 0 |
 | hybrid | 79.46% | 0 |
 
-Blind review packets, frozen answer bindings, and baseline mappings are written to `data/evaluation/personalization/`. Complete independent reviews can be scored with `python -m tests.evaluation.personalization --reviews FILE`. Review assertions are supplied attestations; the software cannot certify reviewer independence.
+Blind review packets, frozen answer bindings, and baseline mappings are written to `data/evaluation/personalization/`. Complete independent reviews can be scored with `python -m evaluation.personalization --reviews FILE`. Review assertions are supplied attestations; the software cannot certify reviewer independence.
 
-No cleanup was applied to the real user store, and no background service was installed by this evaluation run. See [cleanup operations](../cleanup.md) and [evaluation instructions](../../tests/evaluation/README.md).
+No cleanup was applied to the real user store, and no background service was installed by this evaluation run. See [cleanup operations](../cleanup.md) and [evaluation instructions](../../evaluation/README.md).

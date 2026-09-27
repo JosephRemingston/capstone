@@ -10,7 +10,7 @@ import unittest
 
 from main import MemoryCore, MemoryInput, LocalMemoryStore, MemoryRecord
 from main.__main__ import main as cli_main
-from main.recurrence import parse_recurrence, scheduled_at
+from main.domain.recurrence import parse_recurrence, scheduled_at
 
 NOW = datetime(2026, 9, 26, 10, tzinfo=timezone.utc)
 
