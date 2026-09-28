@@ -6,9 +6,9 @@ import re
 from dataclasses import dataclass, field
 
 from .models import MemoryCategory, MemoryInput
-from .text_rules import event_update, matches, preference_constraint, negated_task, uncertain
+from .text_rules import durable_fact, event_update, matches, preference_constraint, negated_task, uncertain
 from .tasks import task_action
-from .claims import extract_claim
+from .claims import extract_claim, extract_claims
 
 
 def _contains_any(text: str, terms: tuple[str, ...], *, legacy: bool = False) -> bool:
@@ -108,6 +108,9 @@ class MemoryClassifier:
             claim = extract_claim(text)
             if claim:
                 return MemoryCategory(claim['kind'])
+            paragraph_claims = extract_claims(text)
+            if paragraph_claims:
+                return MemoryCategory.PREFERENCE if all(c['kind'] == 'preference' for c in paragraph_claims) else MemoryCategory.SEMANTIC
             if matches(r"\b(?:don't|do not|no longer)\s+(?:need|want)\s+to\b", lowered):
                 return MemoryCategory.EPISODIC
             if negated_task(lowered):
@@ -119,6 +122,8 @@ class MemoryClassifier:
                 return MemoryCategory.TASK
             if event_update(lowered):
                 return MemoryCategory.EPISODIC
+            if durable_fact(text):
+                return MemoryCategory.SEMANTIC
         task_terms = self.task_terms if self.legacy else tuple(term for term in self.task_terms if term not in {"book", "schedule"})
         if _contains_any(lowered, task_terms, legacy=self.legacy):
             return MemoryCategory.TASK

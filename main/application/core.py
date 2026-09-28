@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..domain.classification import MemoryClassifier
@@ -18,6 +18,7 @@ from ..domain.tasks import task_action
 from ..domain.recurrence import parse_recurrence, scheduled_at
 from ..domain.claims import extract_claim
 from ..domain.reconciliation import validate_evidence
+from ..domain.privacy import redact_metadata, redact_sensitive
 
 
 @dataclass(slots=True)
@@ -37,6 +38,16 @@ class MemoryCore:
                    importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
+        sanitized, sensitive_types = redact_sensitive(memory_input.content)
+        sanitized_metadata, metadata_types = redact_metadata(memory_input.metadata)
+        sensitive_types = list(dict.fromkeys([*sensitive_types, *metadata_types]))
+        if sensitive_types:
+            memory_input = replace(memory_input, content=sanitized, metadata={
+                **sanitized_metadata,
+                'privacy': {'redacted': True, 'types': sensitive_types},
+            })
+        elif sanitized_metadata != memory_input.metadata:
+            memory_input = replace(memory_input, metadata=sanitized_metadata)
         from ..graph import validate_graph_metadata
         validate_graph_metadata(memory_input.metadata, memory_input.timestamp)
         category = self.classifier.classify(memory_input)

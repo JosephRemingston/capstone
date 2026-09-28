@@ -11,6 +11,10 @@ from .text_rules import uncertain
 
 _CATEGORIES = {MemoryCategory.SEMANTIC, MemoryCategory.PREFERENCE, MemoryCategory.PROCEDURAL}
 _RANK_NAMES = ('source_priority', 'confidence', 'observation_time', 'importance')
+_PARAPHRASE_WORDS = {'utilize': 'use', 'using': 'use', 'uses': 'use', 'preferred': 'prefer',
+                     'favourite': 'favorite', 'brief': 'concise', 'short': 'concise',
+                     'explanations': 'answers', 'responses': 'answers', 'replies': 'answers'}
+_STOP = {'a', 'an', 'the', 'i', 'we', 'my', 'our', 'is', 'are', 'to', 'for', 'that', 'please'}
 
 
 def validate_evidence(record: MemoryRecord) -> None:
@@ -38,7 +42,17 @@ def _prepared(record: MemoryRecord) -> MemoryRecord:
 def _same(left: MemoryRecord, right: MemoryRecord) -> bool:
     if left.claim and right.claim:
         return equivalent(left.claim, right.claim)
-    return left.category == right.category and normalized_value(left.content) == normalized_value(right.content)
+    if left.category != right.category:
+        return False
+    if normalized_value(left.content) == normalized_value(right.content):
+        return True
+    if left.category not in _CATEGORIES or uncertain(left.content) or uncertain(right.content):
+        return False
+    def terms(text):
+        words = re.findall(r'[a-z0-9]+', normalized_value(text))
+        return {_PARAPHRASE_WORDS.get(word, word) for word in words if word not in _STOP}
+    a, b = terms(left.content), terms(right.content)
+    return bool(a and b) and len(a & b) / len(a | b) >= .75
 
 
 def _rank(record: MemoryRecord) -> tuple:
@@ -115,7 +129,11 @@ def reconcile(incoming: MemoryRecord, stored: list[MemoryRecord], *, preserve_ev
         canonical.last_observed_at = max([sources[key].created_at for key in evidence] +
                                         [item.last_observed_at or item.created_at for item in duplicates])
         canonical.updated_at = max(canonical.updated_at, incoming.created_at)
-        canonical.summary = claim_summary(canonical.claim) if canonical.claim else canonical.content
+        if canonical.claim:
+            canonical.summary = claim_summary(canonical.claim)
+        else:
+            distinct = list(dict.fromkeys(item.content for item in [canonical, *duplicates, incoming]))
+            canonical.summary = distinct[0] if len(distinct) == 1 else ' Related observations: '.join(distinct)
         _refresh(canonical, canonical.last_observed_at)
         revisions[canonical.id] = canonical
         for item in [*duplicates, incoming]:

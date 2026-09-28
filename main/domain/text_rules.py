@@ -64,3 +64,15 @@ def deadline(text: str) -> bool:
     return matches(r"\b(?:deadline|due|today|tonight|tomorrow|next\s+(?:week|month)|"
                    r"by\s+(?:\w+)|in\s+\d+\s+(?:minutes?|hours?|days?|weeks?)|"
                    r"\d{4}-\d{2}-\d{2})\b", text)
+
+
+def durable_fact(text: str) -> bool:
+    """Recognize useful declarative conversational facts missed by narrow claims."""
+    text = normalize(text)
+    if uncertain(text, quoted_objects=True):
+        return False
+    return matches(
+        r"^(?:please remember(?: that)?|remember(?: that)?)\s+\S|"
+        r"^(?:i am|i'm)\s+(?:responsible for|working on|part of|based in)\s+\S|"
+        r"^(?:we|our (?:team|project|company))\s+(?:use|uses|work|works|is|are|has|have)\s+\S|"
+        r"^(?:the|this|that)\s+[\w -]{2,50}\s+(?:uses|requires|belongs to|depends on|is owned by)\s+\S", text)

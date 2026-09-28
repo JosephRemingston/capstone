@@ -1,6 +1,7 @@
 """Split independent clauses without losing quoted or conditional scope."""
 import re
 from dataclasses import replace
+from datetime import timedelta
 
 from .models import MemoryInput
 
@@ -29,6 +30,6 @@ def split_input(incoming: MemoryInput) -> list[MemoryInput]:
         return [incoming]
     if any(key in incoming.metadata for key in ('task_id', 'due_at', 'occurrence_at', 'task_scope')):
         raise ValueError('Split messages with task_id/due_at/occurrence_at/task_scope into separate inputs first')
-    return [replace(incoming, content=part, metadata={**incoming.metadata,
+    return [replace(incoming, content=part, timestamp=incoming.timestamp + timedelta(microseconds=index), metadata={**incoming.metadata,
             'source_content': text, 'segment_index': index, 'segment_count': len(parts)})
             for index, part in enumerate(parts)]

@@ -69,7 +69,7 @@ def references(record):
     return result
 
 
-def plan(store, *, user_id, now=None, grace_days=7):
+def plan(store, *, user_id, now=None, grace_days=7, retention_policy='balanced'):
     if not user_id or not math.isfinite(grace_days) or grace_days < 0:
         raise ValueError('Cleanup requires user_id and a finite nonnegative grace period')
     now = now or utc_now()
@@ -79,6 +79,8 @@ def plan(store, *, user_id, now=None, grace_days=7):
         cutoff = now - timedelta(days=grace_days)
     except OverflowError as exc:
         raise ValueError('Cleanup grace period is out of range') from exc
+    if retention_policy not in {'balanced', 'expiry'}:
+        raise ValueError('retention_policy must be balanced or expiry')
     revisions = store._read_log()  # Fail closed on corrupt input.
     if store.path.exists():
         raw_rows = [json.loads(line) for line in store.path.read_text().splitlines() if line.strip()]
@@ -86,9 +88,15 @@ def plan(store, *, user_id, now=None, grace_days=7):
             raise ValueError('Unknown record fields require a migration before cleanup')
     latest = {record.id: record for record in revisions}
     held = {record.id for record in revisions if record.source_metadata.get('legal_hold') or record.source_metadata.get('retain')}
+    archived = {key for key, record in latest.items() if record.user_id == user_id
+                and record.expires_at is not None and record.expires_at <= cutoff
+                and retention_policy == 'balanced'
+                and (record.importance_score >= .65
+                     or record.category.value in {'semantic', 'preference', 'procedural'}
+                     or bool(record.source_metadata.get('privacy', {}).get('redacted')))}
     eligible = {key for key, record in latest.items() if record.user_id == user_id
                 and record.expires_at is not None and record.expires_at <= cutoff
-                and key not in held
+                and key not in held and key not in archived
                 and not (record.category.value == 'task' and record.task_status not in {'completed', 'cancelled'})}
     # Follow references from ALL revisions of every retained root, across users.
     # A candidate cycle can be removed as a unit only if nothing retained needs it.
@@ -118,6 +126,7 @@ def plan(store, *, user_id, now=None, grace_days=7):
     payload = ''.join(json.dumps(r.to_dict(), sort_keys=True, separators=(',', ':')) + '\n' for r in compacted).encode()
     original = store.path.read_bytes() if store.path.exists() else b''
     result = {'user_id': user_id, 'cutoff': cutoff.isoformat(), 'grace_days': grace_days,
+              'retention_policy': retention_policy, 'archived_ids': sorted(archived),
               'removed_ids': sorted(removed), 'removed_memories': len(removed),
               'protected_referenced_expired': len(eligible & retained),
               'duplicate_revisions_removed': duplicate_count,
@@ -157,7 +166,8 @@ def purge_indexes(store, user_id):
     return purged
 
 
-def cleanup(store, *, user_id, now=None, grace_days=7, apply=False, scheduled=False, interval_hours=24):
+def cleanup(store, *, user_id, now=None, grace_days=7, apply=False, scheduled=False,
+            interval_hours=24, retention_policy='balanced'):
     if not math.isfinite(interval_hours) or not math.isfinite(interval_hours * 3600) or interval_hours <= 0:
         raise ValueError('Schedule interval must be finite and positive')
     now = now or utc_now()
@@ -169,7 +179,7 @@ def cleanup(store, *, user_id, now=None, grace_days=7, apply=False, scheduled=Fa
         if not isinstance(state, dict):
             raise ValueError('Invalid cleanup schedule state')
         # Separate schedules when policy changes; state contains no memory text.
-        key = sha256(json.dumps([user_id, float(grace_days), float(interval_hours)]).encode()).hexdigest()
+        key = sha256(json.dumps([user_id, float(grace_days), float(interval_hours), retention_policy]).encode()).hexdigest()
         last = state.get(key)
         if last is not None and (not isinstance(last, dict)
                 or type(last.get('completed_at')) not in (int, float)
@@ -177,7 +187,8 @@ def cleanup(store, *, user_id, now=None, grace_days=7, apply=False, scheduled=Fa
             raise ValueError('Invalid cleanup schedule timestamp')
         if scheduled and last and now.timestamp() < last['completed_at'] + interval_hours * 3600:
             return {'applied': False, 'status': 'not_due', 'next_run_timestamp': last['completed_at'] + interval_hours * 3600}
-        result, payload = plan(store, user_id=user_id, now=now, grace_days=grace_days)
+        result, payload = plan(store, user_id=user_id, now=now, grace_days=grace_days,
+                               retention_policy=retention_policy)
         result.update(applied=False, status='preview', indexes_invalidated=[])
         if not apply:
             return result

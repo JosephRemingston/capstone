@@ -111,6 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_cmd.add_argument('--apply', action='store_true', help='Physically delete eligible data; default is a preview.')
     cleanup_cmd.add_argument('--scheduled', action='store_true', help='Run only when the persisted schedule is due.')
     cleanup_cmd.add_argument('--interval-hours', type=float, default=24)
+    cleanup_cmd.add_argument('--retention-policy', choices=['balanced', 'expiry'], default='balanced',
+                             help='Balanced archives useful/sensitive expired memories; expiry deletes all eligible data.')
     cleanup_cmd.add_argument('--pretty', action='store_true')
     return parser
 
@@ -134,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == 'cleanup':
             from .storage.cleanup import cleanup
             print_json(cleanup(store, user_id=args.user_id, grace_days=args.grace_days,
-                               apply=args.apply, scheduled=args.scheduled, interval_hours=args.interval_hours), pretty=args.pretty)
+                               apply=args.apply, scheduled=args.scheduled, interval_hours=args.interval_hours,
+                               retention_policy=args.retention_policy), pretty=args.pretty)
             return 0
         if args.command == "process":
             return process_command(args, store)

@@ -15,6 +15,11 @@ def normalized_value(text: str) -> str:
 
 def assertion_text(text: str) -> str | None:
     text = text.strip().replace('’', "'")
+    transition = re.fullmatch(
+        r"I used to (?:live|reside) in (.+?),? but now I (?:live|reside) in (.+?)[.!]?",
+        text, re.I)
+    if transition:
+        text = f'I live in {transition[2]}'
     text = re.sub(r"^I(?: would rather|'d rather) (?:receive|have|get) ", 'I prefer ', text, flags=re.I)
     if uncertain(text) or re.search(
         r'\b(?:and|but|or|nor|used to|previously|formerly|yesterday|tomorrow|today|'
@@ -23,6 +28,22 @@ def assertion_text(text: str) -> str | None:
     ):
         return None
     return re.sub(r'^(?:actually,?\s+|currently,?\s+|please remember that\s+)', '', text.strip().replace('’', "'"), flags=re.I).rstrip('.! ')
+
+
+def extract_claims(text: str) -> list[dict]:
+    """Extract independent supported assertions from conversational paragraphs."""
+    claims = []
+    # Sentence boundaries plus conjunctions whose right side has an explicit subject.
+    parts = re.split(r'[;\n]+|(?<=[.!?])\s+|,?\s+(?:and|but|also)\s+(?=(?:I|My|We|Our|[A-Z][\w-]+)\b)', text)
+    for part in parts:
+        claim = extract_claim(part.strip())
+        if claim and not any(equivalent(claim, existing) for existing in claims):
+            claims.append(claim)
+    if not claims:
+        claim = extract_claim(text)
+        if claim:
+            claims.append(claim)
+    return claims
 
 
 def extract_claim(text: str) -> dict | None:

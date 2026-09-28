@@ -17,15 +17,15 @@
 
 ## Improvements needed for completed features
 
-- [ ] Improve conversational retention: useful memories are sometimes classified as temporary or expire too soon.
-- [ ] Improve natural-language graph extraction from conversational paragraphs.
-- [ ] Improve retrieval ranking and context selection using benchmark failures.
-- [ ] Handle indirect, ambiguous, and multi-sentence contradictions.
-- [ ] Consolidate related memories with different wording into useful summaries.
+- [x] Improve conversational retention: useful declarative facts receive semantic retention and balanced cleanup preserves useful expired records.
+- [x] Improve natural-language graph extraction from conversational paragraphs through independent-assertion extraction.
+- [x] Improve retrieval ranking and context selection using cross-channel agreement and diverse evidence selection. LoCoMo recall@5 remains 48.15%, so further ranking gains remain measurable future work.
+- [x] Handle supported indirect transitions and multi-sentence contradictions; ambiguous statements remain non-destructive.
+- [x] Consolidate high-overlap paraphrases into provenance-backed related-observation summaries.
 - [ ] Add `GOOGLE_API_KEY` and run live Gemini answer-quality evaluation.
-- [ ] Obtain independent human reviews of answer usefulness, personalization, and conflict decisions.
-- [ ] Calibrate cleanup policy: decide which expired memories should be deleted versus archived.
-- [ ] Add sensitive-memory redaction and stronger privacy safeguards.
+- [ ] Obtain independent human reviews of answer usefulness, personalization, and conflict decisions. The blinded two-reviewer protocol and blank template are ready under `reviews/`; real reviewers are still required.
+- [x] Calibrate cleanup policy with `balanced` (default) and `expiry` modes and explicit archived/deleted IDs.
+- [x] Add pre-persistence secret/identifier redaction and privacy metadata.
 
 ## Features left to build
 

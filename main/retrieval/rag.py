@@ -115,6 +115,12 @@ class MemoryRAG:
                 contribution = (weights[channel] if mode == 'hybrid' else 1) / (60 + rank)
                 scores[identifier] = scores.get(identifier, 0) + contribution
                 details.setdefault(identifier, {})[channel] = {'rank': rank, 'contribution': contribution}
+        # Reward agreement between independent channels. Benchmark failures often
+        # contained a lexical hit that was also semantically supported but lost a
+        # top-k slot to a one-channel candidate.
+        if mode == 'hybrid':
+            for identifier, signals in details.items():
+                scores[identifier] += .002 * max(0, len(signals) - 1)
         result = []
         for identifier in sorted(scores, key=lambda key: (-scores[key], key))[:limit]:
             record = by_id[identifier]
@@ -134,6 +140,24 @@ class MemoryRAG:
         if not 256 <= budget <= 100000:
             raise ValueError('Context budget must be between 256 and 100000 characters')
         hits = self.search(query, user_id=user_id, **search_options)
+        # Prefer evidence that adds query coverage and avoid spending the context
+        # budget on near-duplicate snippets.
+        query_terms = tokenize(query)
+        selected, covered = [], set()
+        remaining = list(hits)
+        while remaining:
+            best = max(remaining, key=lambda hit: (
+                len((tokenize(hit['text']) & query_terms) - covered),
+                -max((len(tokenize(hit['text']) & tokenize(old['text'])) /
+                      max(1, len(tokenize(hit['text']) | tokenize(old['text']))) for old in selected), default=0),
+                hit['score']))
+            remaining.remove(best)
+            if any(len(tokenize(best['text']) & tokenize(old['text'])) /
+                   max(1, len(tokenize(best['text']) | tokenize(old['text']))) > .9 for old in selected):
+                continue
+            selected.append(best)
+            covered.update(tokenize(best['text']) & query_terms)
+        hits = selected
         sources, blocks, used = {}, [], 0
         for hit in hits:
             record = hit['record']

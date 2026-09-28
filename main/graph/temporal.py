@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import json
 import re
 
-from ..domain.claims import extract_claim, normalized_value
+from ..domain.claims import extract_claims, normalized_value
 from ..storage.indexes import IndexDatabase, digest
 from ..domain.models import MemoryRecord, utc_now
 
@@ -117,8 +117,7 @@ class TemporalGraph:
                 found.append((mapping[relation['subject']], relation['predicate'], mapping[relation['object']],
                               relation.get('positive', True), parse_time(relation.get('valid_from'), record.created_at),
                               parse_time(relation.get('valid_to'))))
-            claim = extract_claim(record.content)
-            if claim:
+            for claim in extract_claims(record.content):
                 kind = claim.get('subject_type', 'person')
                 subject = subject_self if claim['subject'] == 'self' else node(
                     kind, claim['subject'].split(':', 1)[-1], claim['display_subject'], known)
