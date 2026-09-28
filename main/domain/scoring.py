@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
+
+
+class ImportanceScoring(Protocol):
+    """Shared contract for heuristic and trained importance scorers."""
+
+    def score(self, features: dict[str, float]) -> float:
+        ...
 
 
 @dataclass(slots=True)
@@ -16,7 +24,7 @@ class ImportanceScorer:
     weights: dict[str, float] = field(
         default_factory=lambda: {
             "access_frequency": 0.08,
-            "category_episodic": 0.12,
+            "category_episodic": 0.20,
             "category_preference": 0.38,
             "category_procedural": 0.34,
             "category_semantic": 0.38,

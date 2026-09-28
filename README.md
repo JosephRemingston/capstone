@@ -2,9 +2,13 @@
 
 CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LLM agents.
 
-This repository currently implements the first foundation layer: the **Memory Core**. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
+This repository implements the **Memory Core**, local semantic/hybrid retrieval, cited RAG, and a temporal knowledge graph. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
 
-This phase does **not** implement a database server, RAG pipeline, vector search, graph database, trained ML model, or API server. It now includes a local JSONL memory store and a CLI for processing and inspecting records.
+JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). Production database servers and REST APIs remain future work.
+
+See [the repository architecture](docs/architecture.md) for package ownership and entry points.
+For the complete product, usage, architecture, feature, and operational reference, see
+[DOCUMENTATION.md](DOCUMENTATION.md).
 
 ## Current Implementation Status
 
@@ -17,30 +21,33 @@ Implemented:
 - Rule-based memory classification
 - Feature extraction for importance scoring
 - Heuristic importance scoring
+- Optional trained XGBoost importance scorer, evaluated on Hippocorpus
+- Reproducible importance-model training, held-out metrics, and native model artifacts
 - Lifecycle tier assignment
-- Expiry/archive hints
+- Deadline-aware task expiry, inactivity archive views, and expiry-aware retrieval
+- Task completion, cancellation, rescheduling, and recurring occurrences with revision history
+- Supported fact/preference conflict detection and resolution
+- Durable memory consolidation with summaries and source evidence
+- History inspection, explicit conflict selection, and bulk reconciliation
+- Optional multi-memory segmentation
+- Conversational developer evaluation and a human-review template
 - Serialization and deserialization
 - Local JSONL memory store
+- Advanced ranked keyword retrieval using relevance, category, tier, recency, and importance
 - CLI interface
-- Placeholder graph adapter interface only
+- Local neural embeddings, persistent vector storage, and hybrid retrieval
+- Bounded RAG context, Gemini prompt integration, and checked citations
+- Typed temporal graph, aliases, relationship history, and multi-hop evidence paths
+- External LoCoMo/LongMemEval evaluation and baseline reports
 - Unit tests for the Memory Core behavior
 
 Not implemented yet:
 
-- Advanced ranked retrieval
 - REST API
-- RAG retrieval
-- Vector database
-- Embeddings
 - Production database storage
-- Graph database layer
 - Neo4j integration
-- Temporal knowledge graph construction
-- LightGBM/XGBoost training
-- Conflict resolution
-- Memory consolidation
-- Controlled forgetting job
-- Evaluation dashboard or experiment runner
+- Broader forgetting policies beyond conservative expiry cleanup
+- Evaluation dashboard, independent human conflict/personalization labels, and live Gemini quality evaluation
 
 ## What This Layer Does
 
@@ -150,13 +157,29 @@ Fields:
 - `tier`: lifecycle tier
 - `created_at`: creation timestamp
 - `updated_at`: latest update timestamp
-- `confidence`: confidence score, currently defaulted to `1.0`
+- `confidence`: caller-provided assertion confidence (0–1), default `1.0`
 - `importance_score`: score from the baseline importance scorer
 - `access_count`: number of times the memory has been touched/accessed
 - `source_metadata`: metadata copied from the input
 - `features`: extracted numeric scoring features
 - `expires_at`: expiry hint for working or short-term memory
 - `archive_after`: archive hint for long-term memory
+- `due_at`: parsed/explicit task deadline
+- `task_status`: active, completed, or cancelled for tasks
+- `related_task_id`: task changed by this observation
+- `last_accessed_at`: explicit access timestamp used for inactivity
+- `recurrence`: cadence, interval, calendar anchor, and occurrence index
+- `next_due_at`: deadline of the current unresolved recurring occurrence
+- `task_occurrences`: completed/cancelled occurrences with dates and source event IDs
+- `memory_status`: `active`, `superseded`, or `consolidated` (separate from lifecycle tier)
+- `claim`: extracted subject, attribute, value, polarity, and exclusivity
+- `superseded_by`: current replacement for a conflicting assertion
+- `consolidated_into`: canonical record for a repeated observation
+- `conflict_ids` / `conflict_resolution`: detected conflicts and the recorded decision/reason
+- `evidence_ids` / `evidence_session_ids`: supporting observations and their sessions
+- `summary`: faithful summary of a consolidated group
+- `first_observed_at` / `last_observed_at`: observation range; explicit selection also reaffirms the last observation time
+- `last_confirmed_at`: explicit selection timestamp used to order later assertions
 
 Records can be converted to plain dictionaries:
 
@@ -197,9 +220,25 @@ Current lifecycle behavior:
 
 - Temporary messages usually become `working` memory.
 - Low-score memories become `working` memory.
-- Durable high-score semantic, procedural, preference, and task memories become `long_term`.
+- Durable high-score semantic, procedural, and preference memories become `long_term`.
+- One-off tasks become `short_term`; explicitly recurring tasks can qualify as `long_term`.
 - Other useful memories become `short_term`.
 - Stale but useful memories can become `archive`.
+
+## Conversational Heuristic Improvements
+
+The default pipeline now uses whole-word keyword matching, recognizes explicit
+preferences/constraints, indirect preferences, and selected event updates, and keeps short one-off tasks
+in short-term memory. Mentions of today/tomorrow count as deadline signals only
+in task context. Fresh episodic memories receive a category weight of 0.20.
+Dated tasks expire 24 hours after their deadline; undated tasks use 14 days.
+List/search enforce expiry visibility without deleting records.
+
+See [the 15-sentence before/after experiment](docs/reports/heuristic_improvements.md).
+These are developer-authored regression examples, not human-labeled validation or
+training data. No statistical threshold calibration or model retraining occurred.
+The optional Hippocorpus model retains its legacy classification/feature inputs;
+new lifecycle rules apply to both pipelines. Existing records are unchanged.
 
 ## Extracted Features
 
@@ -222,7 +261,7 @@ These features are used by the heuristic importance scorer. They are also design
 
 The current importance scorer is heuristic. It applies configured weights to extracted features and returns a score between `0.0` and `1.0`.
 
-This is not machine learning yet.
+An optional XGBoost scorer is now trained and integrated. The heuristic remains the default because the Hippocorpus personal-event target has not been validated for conversational retention. See **ML Importance Model** below.
 
 The scorer is intentionally designed behind this simple interface:
 
@@ -262,7 +301,62 @@ records = store.list(user_id="user_001")
 matches = store.search("technical summaries", user_id="user_001")
 ```
 
-The local store is intentionally simple. It does not provide database indexes, concurrent write guarantees, vector search, graph traversal, or server-side querying.
+The JSONL source store is intentionally local. Cooperating store/RAG/cleanup operations use cross-process locks on macOS/Linux; direct file edits and server-side queries are outside that contract. The optional retrieval layer adds SQLite vector/graph indexes; see [retrieval design](docs/retrieval_graph.md).
+
+## Ranked Retrieval
+
+`LocalMemoryStore.search()` and the CLI `search` command rank matching records
+using `MemoryRanker`. The return format remains a list of memory records.
+User, session, category, and tier filters are applied before ranking; consolidated groups match their supporting sessions; the limit
+is applied afterward. A zero limit returns no results; negative limits are rejected.
+
+Queries, original content, and consolidated summaries are split into case-insensitive whole-word tokens. Punctuation
+separates tokens. At least one query token must match; unrelated records are never
+included merely because they are important. Duplicate query terms and repeated
+content words do not boost relevance. There is no stemming, synonym expansion,
+or semantic matching: `python` does not match `pythonic`.
+
+| Signal | Default weight | Calculation |
+| --- | --- | --- |
+| Keyword relevance | 0.65 | Fraction of unique query tokens present in the content. |
+| Category | 0.10 | Semantic/preference: 1.0; procedural/task: 0.9; episodic: 0.6; temporary: 0.1. |
+| Tier | 0.05 | Long-term: 1.0; short-term: 0.7; working: 0.4; archive: 0.2. |
+| Recency | 0.10 | Exponential decay from the latest supporting observation (creation time if absent), with a 30-day half-life. Future timestamps receive 1.0. |
+| Importance | 0.10 | Stored importance score clamped to 0–1; nonfinite values contribute 0. |
+
+The final score is the weighted sum divided by the total weight. Category and tier
+values are fixed usefulness preferences, not predictions of query intent. Ties
+are resolved by newest creation time, then ascending memory ID. Search does not
+modify records or increment access counts. Expired records and resolved tasks are
+omitted by default, and inactive long-term memories are returned as archive views.
+Use `--include-expired`, `--include-resolved`, and `--include-history` to include the corresponding hidden records. Superseded facts and consolidated duplicates are omitted by default.
+
+Weights and recency half-life can be configured through the Python API:
+
+```python
+from main import LocalMemoryStore, MemoryRanker
+
+store = LocalMemoryStore(
+    ranker=MemoryRanker(
+        weights={
+            "keyword_relevance": 0.65,
+            "category": 0.10,
+            "tier": 0.05,
+            "recency": 0.10,
+            "importance": 0.10,
+        },
+        recency_half_life_days=30.0,
+    )
+)
+matches = store.search("Python tests", user_id="user_001", limit=10)
+```
+
+All five weights must be finite and nonnegative with a positive finite total.
+The half-life must be finite and positive. Keyword ranking remains an in-process
+heuristic. Hybrid retrieval independently gathers keyword, vector, and graph
+candidates, fuses their ranks, and reranks the candidate pool with the local
+`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Use `--no-rerank` for the fusion
+baseline and `--candidate-limit` to bound reranking work.
 
 ## What Still Needs To Be Implemented
 
@@ -270,75 +364,83 @@ The remaining work should be implemented in phases. The current system already h
 
 | Priority | Component | What needs to be implemented | Why it matters |
 | --- | --- | --- | --- |
-| 1 | Improved retrieval | Add better ranking over stored memories using category, tier, recency, importance score, and keyword relevance. | Makes stored memories actually useful for context recall before vector search is added. |
-| 2 | Training dataset generation | Create/export labeled examples with content, category, features, importance labels, and tier labels. | Required before replacing heuristic scoring with ML. |
-| 3 | ML importance model | Train LightGBM/XGBoost on extracted features and plug it behind the existing scorer interface. | Moves the project from rule/heuristic scoring toward the proposed ML-based memory importance predictor. |
-| 4 | Conflict detection | Detect contradictory memories for the same user, entity, or preference. | Prevents the system from keeping outdated or incompatible facts as equally valid. |
-| 5 | Conflict resolution | Resolve contradictions using recency, confidence, importance score, and source metadata. | Supports consistent long-term personalization. |
-| 6 | Memory consolidation | Merge repeated memories into higher-level long-term memories. | Reduces memory bloat and turns repeated events into useful durable knowledge. |
-| 7 | Controlled forgetting | Expire low-value working/short-term memories and archive useful stale memories. | Keeps storage efficient and prevents irrelevant context buildup. |
-| 8 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 9 | Vector retrieval/RAG | Add embeddings, vector storage, retrieval, context building, and later LLM prompt integration. | Enables semantic retrieval instead of only keyword matching. |
-| 10 | Evaluation pipeline | Measure classification accuracy, retrieval quality, memory efficiency, and personalization quality. | Needed for capstone validation and comparison with baseline systems. |
-| 11 | Graph database layer | Add the temporal knowledge graph after the non-graph pipeline is stable. | Enables relationship-aware and time-aware reasoning, but is intentionally deferred. |
-| 12 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 13 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
+| 1 | Cleanup operations | Scheduled expiry cleanup and lossless compaction are implemented; configure a supervisor/cron job for your store. | Preserves referenced evidence, holds, open tasks, and meaningful history. |
+| 2 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
+| 3 | Retrieval quality | Improve paragraph-level fact extraction and assess Gemini answers after credentials are configured. | Current bounded graph extraction has low coverage on free-form conversations. |
+| 4 | Evaluation quality | Add independent human conflict/personalization labels and full memory-system baselines. | External retrieval/retention runners and recency/keyword/vector/graph/hybrid baselines now exist. |
+| 5 | Scale storage | Add an ANN vector backend and production concurrent storage when needed. | Current exact vector scans and local SQLite graph target local workloads. |
+| 6 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
+| 7 | Privacy/security controls | Add deletion/export APIs and production authorization around the implemented redaction and user isolation rules. | Important because long-term memory may contain sensitive user information. |
 
-## Training Data Status
+## ML Importance Model
 
-No training data is currently used.
+An XGBoost regression model has been trained on the existing **Hippocorpus**
+importance ratings, normalized from 1–5 to 0–1. It uses text-derived features and
+hashed word counts, with author/story-family-disjoint train, validation, and test
+sets. No synthetic labels were generated.
 
-The system does not currently train:
+| Held-out test metric | XGBoost | Mean baseline |
+| --- | ---: | ---: |
+| MAE | 0.2291 | 0.2424 |
+| RMSE | 0.2847 | 0.2947 |
+| R² | 0.0311 | -0.0381 |
+| Spearman | 0.2367 | Undefined (constant) |
 
-- a classifier
-- an importance model
-- a retrieval ranker
-- a consolidation model
-- a conflict detection model
+Training used 4,697 stories, validation 1,006, and test 1,007. The improvement is
+modest. This model predicts personal-event significance; conversational retention
+quality and lifecycle thresholds remain unvalidated. ML therefore replaces the
+heuristic only when explicitly selected.
 
-Future training data should likely contain examples like:
+Install optional dependencies and use the trained model:
 
-```csv
-content,category,importance_score,tier
-"I prefer Python examples",preference,0.90,long_term
-"hello",temporary,0.05,working
-"Yesterday I met my guide",episodic,0.50,short_term
-"Remind me to submit the report tomorrow",task,0.85,long_term
+```bash
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -r requirements-ml.txt
+.venv/bin/python -m main process "Yesterday I celebrated my graduation." \
+  --user-id user_001 --session-id session_001 --scorer xgboost --no-save --pretty
 ```
 
-That dataset can later be used to train a LightGBM/XGBoost importance predictor or a learned classifier.
-
-## Graph Database Status
-
-The graph database layer is intentionally not implemented.
-
-The file `main/interfaces.py` only defines a future contract:
+Python integration:
 
 ```python
-class GraphMemoryAdapter(Protocol):
-    def index(self, record: MemoryRecord) -> None:
-        ...
+from main import MemoryCore, MemoryInput
+
+core = MemoryCore.with_ml()
+record = core.process(MemoryInput(
+    content="Yesterday I celebrated my graduation.",
+    user_id="user_001", session_id="session_001",
+))
+print(record.importance_score)
 ```
 
-This is only a placeholder interface. It does not connect to Neo4j, create nodes, create relationships, build a graph schema, perform graph traversal, or persist anything.
+`MLImportanceScorer.score(features)` implements the same scoring contract as the
+heuristic. Use `MLFeatureExtractor` with it; `MemoryCore.with_ml()` configures both.
+`--model-dir PATH` or `MemoryCore.with_ml(PATH)` selects a custom artifact directory.
+The score flows through existing tier assignment, JSONL persistence, and ranking.
+Each ML record includes model provenance in its source metadata.
 
-## RAG Status
+Retrain and reproduce metrics with `.venv/bin/python -m training.train_importance`.
+It downloads the official Microsoft archive into ignored `data/hippocorpus/`.
+See [experiment report](docs/reports/importance_report.md),
+[full metrics](docs/reports/importance_metrics.json), and
+[model metadata](artifacts/importance/metadata.json).
 
-RAG is not implemented yet.
+No learned classifier, retrieval ranker, consolidation model, or conflict detection
+model is trained. In-domain conversational importance labels and evaluation remain
+future work.
 
-There is currently no:
+## Graph and RAG Status
 
-- chunking
-- embedding model
-- vector database
-- retriever
-- reranker
-- LLM prompt construction
-- answer generation
-- source citation
-- hybrid retrieval
+Implemented: local BGE embeddings, chunked SQLite vector storage, hybrid ranking,
+context budgets, LangChain Gemini 2.5 Flash answers with checked citations, and a
+temporal SQLite graph with typed entities, aliases, provenance, valid/recorded
+time, task relationships, and bounded traversal. The local `.env` has blank key
+configuration; fill `GOOGLE_API_KEY` when ready. No hosted call has been made.
 
-The current Memory Core can produce structured memory records that a future RAG layer may store and retrieve.
+See [full setup and examples](docs/retrieval_graph.md) and
+[external evaluation results](docs/reports/retrieval_graph_report.md). Automatic graph
+extraction is limited to supported assertions; broad paragraph understanding is
+not solved. Citation checks verify source references/quotes, not entailment.
 
 ## CLI
 
@@ -376,7 +478,7 @@ List stored memories:
 python3 -m main list --user-id user_001 --pretty
 ```
 
-Search stored memories by simple keyword matching:
+Search stored memories with ranked keyword retrieval:
 
 ```bash
 python3 -m main search "technical summaries" --user-id user_001 --pretty
@@ -420,6 +522,168 @@ print(record.to_dict())
 PY
 ```
 
+## Deadlines, Task Updates, and Multiple Memories
+
+```bash
+# Separate a standing preference and an actionable reminder.
+python3 -m main process "I prefer Python, and remind me to submit the report tomorrow." \
+  --user-id u1 --session-id s1 --split --pretty
+
+# Resolves a unique matching active task for this user, or records ambiguity.
+python3 -m main process "I submitted the report." --user-id u1 --session-id s1 --pretty
+
+# Explicit deadline / explicit task resolution when needed.
+python3 -m main process "Submit the application" --user-id u1 --session-id s1 \
+  --due-at "2026-12-01T17:00:00+05:30"
+python3 -m main process "I completed it." --user-id u1 --session-id s1 --task-id TASK_ID
+
+# Include historical records omitted from normal retrieval.
+python3 -m main list --user-id u1 --include-expired --include-resolved --pretty
+```
+
+Python: call `core.process_many(input)` for segmentation, then `store.ingest(record)`
+for each record to enable task updates. `process()` returns one record and `save()`
+is raw persistence. `--no-save` previews processing without resolving stored tasks.
+
+Deadline parsing supports ISO dates, today/tomorrow/tonight, next week, weekdays,
+and numeric durations, with optional times. Date-only deadlines mean end of day
+in the input timestamp timezone (UTC by default). Unknown phrasing is not guessed.
+Recurring tasks remain standing instructions with a separate occurrence cursor.
+Task updates support rescheduling, changed deadlines, completion, and cancellation.
+Exact object matches take priority; a unique noun subset supports “that report”
+for “budget report.” Numbers must agree. Bare “it” requires exactly one active
+candidate in the same session. Ambiguity returns candidate IDs for `--task-id`.
+Only user messages update tasks, and older observations cannot revise newer state.
+
+```bash
+python3 -m main process "Move the report from Monday to Friday at 5 pm" \
+  --user-id u1 --session-id s1
+python3 -m main process "Postpone the report by 2 days" --user-id u1 --session-id s1
+python3 -m main process "The report is not due Monday but Tuesday" --user-id u1 --session-id s1
+
+# --due-at sets the first occurrence when creating a recurring task.
+python3 -m main process "Remind me to pay rent monthly" \
+  --user-id u1 --session-id s1 --due-at "2026-10-01T09:00:00+05:30"
+python3 -m main process "I paid rent" --user-id u1 --session-id s1 \
+  --task-id TASK_ID --occurrence-at "2026-10-01"
+python3 -m main process "Cancel rent" --user-id u1 --session-id s1 \
+  --task-id TASK_ID --task-scope series
+```
+
+Supported recurrence: daily, weekly, monthly, yearly, every named weekday, and
+“every N days/weeks/months/years” (including “every other week”). A date/time
+anchor preserves month ends and leap days. Without an explicit time, the deadline
+is end of day; “morning/evening” does not invent a particular hour. Recurrence uses
+the anchor's fixed UTC offset; named timezones and daylight-saving rules are not
+implemented. Combined schedules/exclusions return `unsupported_schedule`.
+
+Completing or skipping the current occurrence records its outcome and advances
+`next_due_at`; the series stays active. Plain completion applies automatically
+only when the current occurrence is due on the observation's local date. For an
+early or overdue completion, pass `--occurrence-at` with the current occurrence's
+scheduled or rescheduled date/time. Occurrences are processed in order; reads do
+not skip overdue occurrences. Reusing an event ID is idempotent, and explicitly
+repeating a resolved occurrence returns `already_resolved`.
+
+Rescheduling defaults to the current occurrence and keeps the original cadence.
+Moving it to or past the next occurrence returns `occurrence_overlaps_next`.
+Use `--task-scope series` to re-anchor the series, or to cancel it entirely.
+“Stop reminding me to pay rent” also cancels the series. A new series anchor
+cannot overlap completed occurrence history. Unrecognized replacement dates
+return `missing_deadline` without changing the task. These statuses appear in
+`source_metadata.task_resolution`; applied changes include `task_change`.
+
+Preferences keep their original wording, including negation. The rules recognize
+“I'd rather…”, “not a fan of…”, “I don't dislike…”, and “works better for me.”
+Uncertain or reported completions do not change tasks. `--split` handles explicit
+independent clauses outside quoted spans, while preserving conditional scope,
+procedures, and object lists. Arbitrary paraphrases, sarcasm, and general language
+understanding remain outside these deterministic rules.
+
+Storage is now an append-only revision log: reads use the latest row per ID.
+`get()` and `all()` include historical visibility; list/search hide expired and
+resolved tasks by default. Long-term memories are viewed as archived after 90
+inactive days, using the latest explicit access, supporting observation, or creation time. Scheduled physical cleanup is available; automatic archive migration is not implemented.
+Cooperating local operations are protected by process/file locks.
+
+Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
+category/tier agreement is 48/48, not independently reviewed accuracy. The blank
+[review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
+are ready; no human-reviewed labels have been collected.
+See [implementation and limits](docs/reports/lifecycle_improvements.md).
+
+## Conflicts, Current Memories, and Consolidation
+
+CLI processing and `store.ingest(record)` reconcile durable user assertions.
+`store.save(record)` remains raw persistence. `process()` / `--no-save` extract
+supported claims without consulting or changing stored records.
+
+| Inputs | Result |
+| --- | --- |
+| “I live in Chennai.” → “I live in Bengaluru.” | Bengaluru becomes current by default; Chennai remains in history. |
+| “I like tea.” + “I like coffee.” | Both remain current because the preferences are compatible. |
+| “I like coffee.” → “I don't like coffee.” | The newer opposite preference becomes current. |
+| “I prefer short answers.” → “I prefer detailed answers.” | The explicit response-length preference changes. |
+| “I live in Chennai.” + “I reside in Chennai.” | One retrievable summary, “User lives in Chennai.”, with both source IDs. |
+
+Supported assertions include residence, employer, occupation, name, home city,
+hometown, timezone, a named entity's residence/employer, a pet/entity's name,
+favorites, likes/dislikes, allergies, response length, and explicit “X over Y”
+choices. Subjects and attributes must match. Different positive values conflict
+only for attributes treated as single-valued; opposite polarities conflict only
+for the same value. Multiple likes and multiple allergies can coexist.
+
+The automatic policy compares **source priority → confidence → observation
+timestamp → importance**, in that order. Priority defaults to 0 and confidence
+to 1, so later assertions normally win. Exact ties keep an existing assertion.
+`metadata.source_priority` / `--source-priority` accepts 0–100;
+`metadata.confidence` / `--confidence` accepts 0–1. These are caller-assigned
+values, not authenticated trust or automatically calibrated probabilities.
+Every decision records its reason and the replacement ID. A consolidated group
+uses its strongest actual supporting observation; repetition alone does not
+increase confidence or importance. Access timestamps do not decide truth. Explicit selection records a confirmation timestamp, so equal-quality late data does not undo that selection.
+
+Consolidation groups equivalent supported claims, or exact normalized duplicates
+of other durable facts, preferences, and procedures. It keeps the original
+content and source observations, adds a summary and evidence IDs, and hides
+redundant observations from normal retrieval. Counts are `len(evidence_ids)`.
+Fresh support renews retention and retrieval recency. Returning to an older value
+after a conflicting change starts a new evidence group. Tasks, transient chat,
+and separate episodic events are not merged as repeated facts.
+
+```bash
+# New assertions automatically reconcile when saved.
+python3 -m main process "I live in Chennai." --user-id u1 --session-id s1
+python3 -m main process "I live in Bengaluru." --user-id u1 --session-id s2
+
+# Include superseded/consolidated records, or inspect every revision of one ID.
+python3 -m main list --user-id u1 --include-history --pretty
+python3 -m main history MEMORY_ID --user-id u1 --pretty
+
+# Explicitly choose a supported original/canonical assertion in an active conflict.
+python3 -m main resolve --keep MEMORY_ID --user-id u1 --pretty
+
+# Apply reconciliation to existing records, including older/raw-saved memories.
+python3 -m main reconcile --user-id u1 --pretty
+```
+
+Python equivalents: `store.history(id, user_id=...)`,
+`store.resolve_conflict(id, user_id=...)`, and
+`store.reconcile_memories(user_id=...)`. Bulk reconciliation appends only changed
+rows and is idempotent. Explicit resolution can restore a superseded root,
+reaffirm it now, and supersede its current contradictions; subsequent ingestion
+still follows the normal policy. All these operations preserve original rows.
+
+These rules do not infer preferences from mere mentions, generalize repeated
+events into new facts, resolve arbitrary prose, or recognize geographical/name
+aliases. Questions, uncertain/reported statements, historical wording, and
+ambiguous compound assertions do not automatically replace supported facts.
+Use `--split` for supported independent clauses. Unrecognized content remains
+stored without an inferred conflict. The JSONL store still needs production
+server-grade concurrency controls. Local cooperative locking and safe physical expiry cleanup are implemented.
+
+See [behavior and verification](docs/reports/memory_reconciliation.md).
+
 ## Tests
 
 Run the test suite:
@@ -435,55 +699,43 @@ The tests cover:
 - lifecycle tier assignment
 - record serialization/deserialization
 - local JSONL storage
+- ranked retrieval signals, whole-word matching, filters, limits, deterministic ordering, and CLI search
 - CLI process/list/get behavior
 - graph database isolation
+- conflict resolution, duplicate summaries, provenance, history visibility, and bulk reconciliation
 
 ## Recommended Next Implementation Steps
 
 Recommended order:
 
-1. Improve retrieval
-   - Retrieve by user ID
-   - Filter by category and tier
-   - Current keyword search can be expanded into ranked retrieval and later vector retrieval
+1. Configure the implemented cleanup worker for your store after reviewing its preview.
+2. Add REST API endpoints and production storage.
+3. Improve free-form entity/relation extraction and measure hosted answer quality.
+4. Extend external retrieval/retention evaluation with independent human conflict and personalization judgments.
+5. Add monitoring, deletion/export, and privacy controls.
+6. Scale vector/graph storage beyond local workloads as needed.
 
-2. Add training dataset generation
-   - Create labeled examples for category, importance, and tier
-   - Export CSV for ML experiments
-
-3. Add ML importance model
-   - Train LightGBM/XGBoost using extracted features
-   - Keep the same `score(features)` interface
-
-4. Add conflict detection
-   - Detect incompatible memories
-   - Prefer newer or higher-confidence facts
-
-5. Add memory consolidation
-   - Merge repeated observations into stronger long-term memories
-   - Example: repeated coffee mentions become `User prefers coffee`
-
-6. Add controlled forgetting
-   - Periodically expire low-value working/short-term memories
-   - Archive useful old memories
-
-7. Add RAG/vector retrieval
-   - Generate embeddings
-   - Store vectors
-   - Retrieve relevant memories for prompts
-
-8. Add graph database layer later
-   - Temporal knowledge graph
-   - Entity relationships
-   - Conflict-aware graph updates
-   - Graph traversal as one retrieval signal
+ML research is tracked separately in **ML Importance Model** above.
 
 ## Current Milestone
 
 The current milestone is:
 
 ```text
-Structured Memory Core, local JSONL store, and CLI implemented.
+Structured Memory Core, ranked keyword retrieval, optional trained XGBoost scoring, local JSONL store, and CLI implemented.
 ```
 
-In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. We have not yet implemented production database storage, advanced retrieval, ML training, RAG, graph, API, or deployment layers.
+In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. Semantic/hybrid retrieval, cited RAG, temporal graph storage, and external evaluation are now implemented. Production concurrent storage, APIs, deployment, broader extraction quality, and independent human answer/conflict/personalization validation remain. ML research is separate.
+
+## Independent evaluation and scheduled cleanup
+
+Run `.venv/bin/python -m evaluation.suite` for the unified external benchmark,
+500-case retention/cleanup replay, synthetic conflict baselines, and personalized
+answer-context baselines. Default generation is extractive and makes no hosted
+API calls. `--generator gemini` explicitly enables hosted generation.
+
+See [the generated report](docs/reports/independent_evaluation.md),
+[evaluation and blind-review instructions](evaluation/README.md), and
+[cleanup policy and scheduling](docs/cleanup.md). Independent human personalization
+and conflict-policy ratings remain pending until actual reviews are provided.
+Cleanup was tested on temporary stores; no real-user cleanup job was activated.

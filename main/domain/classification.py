@@ -6,15 +6,22 @@ import re
 from dataclasses import dataclass, field
 
 from .models import MemoryCategory, MemoryInput
+from .text_rules import durable_fact, event_update, matches, preference_constraint, negated_task, uncertain
+from .tasks import task_action
+from .claims import extract_claim, extract_claims
 
 
-def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term in text for term in terms)
+def _contains_any(text: str, terms: tuple[str, ...], *, legacy: bool = False) -> bool:
+    if legacy:
+        return any(term in text for term in terms)
+    return any(re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text) for term in terms)
 
 
 @dataclass(slots=True)
 class MemoryClassifier:
     """Deterministic classifier with an easy replacement point for ML/LLM models."""
+
+    legacy: bool = False  # Frozen preprocessing for the existing Hippocorpus artifact.
 
     temporary_terms: tuple[str, ...] = (
         "hi",
@@ -81,22 +88,53 @@ class MemoryClassifier:
 
     def classify(self, memory_input: MemoryInput) -> MemoryCategory:
         text = memory_input.content.strip()
+        if not self.legacy:
+            text = text.replace("’", "'")
         lowered = text.lower()
 
         if not text:
             return MemoryCategory.TEMPORARY
 
         normalized = re.sub(r"[^\w\s'-]", "", lowered).strip()
-        if normalized in self.temporary_terms or len(normalized.split()) <= 2:
+        if normalized in self.temporary_terms or (self.legacy and len(normalized.split()) <= 2):
             return MemoryCategory.TEMPORARY
 
-        if _contains_any(lowered, self.task_terms):
+        if not self.legacy:
+            if task_action(lowered):
+                return MemoryCategory.EPISODIC
+            # Polite reminder requests are actionable; speculative statements are not.
+            if uncertain(lowered, quoted_objects=True) and not matches(r"^(?:could|can|would) you (?:please )?remind me\b", lowered):
+                return MemoryCategory.TEMPORARY
+            claim = extract_claim(text)
+            if claim:
+                return MemoryCategory(claim['kind'])
+            paragraph_claims = extract_claims(text)
+            if paragraph_claims:
+                return MemoryCategory.PREFERENCE if all(c['kind'] == 'preference' for c in paragraph_claims) else MemoryCategory.SEMANTIC
+            if matches(r"\b(?:don't|do not|no longer)\s+(?:need|want)\s+to\b", lowered):
+                return MemoryCategory.EPISODIC
+            if negated_task(lowered):
+                return MemoryCategory.TASK
+            if preference_constraint(lowered):
+                return MemoryCategory.PREFERENCE
+            # An explicit new request takes precedence over an event it mentions.
+            if matches(r"\b(?:remind me|need to|please do|todo|to-do)\b", lowered):
+                return MemoryCategory.TASK
+            if event_update(lowered):
+                return MemoryCategory.EPISODIC
+            if durable_fact(text):
+                return MemoryCategory.SEMANTIC
+        task_terms = self.task_terms if self.legacy else tuple(term for term in self.task_terms if term not in {"book", "schedule"})
+        if _contains_any(lowered, task_terms, legacy=self.legacy):
             return MemoryCategory.TASK
 
-        if _contains_any(lowered, self.preference_terms):
+        if not self.legacy and matches(r"^(?:please\s+)?(?:book|schedule|buy|submit|send|call|review|cancel|finish|pay)\b\s+\S", lowered):
+            return MemoryCategory.TASK
+
+        if _contains_any(lowered, self.preference_terms, legacy=self.legacy):
             return MemoryCategory.PREFERENCE
 
-        if _contains_any(lowered, self.procedural_terms):
+        if _contains_any(lowered, self.procedural_terms, legacy=self.legacy):
             return MemoryCategory.PROCEDURAL
 
         if any(pattern.search(text) for pattern in self.episodic_patterns):

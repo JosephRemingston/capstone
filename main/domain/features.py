@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .models import MemoryCategory, MemoryInput, MemoryRecord
+from .text_rules import deadline, event_update, preference_constraint
 
 
 POSITIVE_WORDS = {
@@ -42,6 +43,8 @@ ENTITY_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
 class FeatureExtractor:
     """Extracts simple numeric signals used by the baseline scorer."""
 
+    legacy: bool = False
+
     def extract(self, memory_input: MemoryInput, record: MemoryRecord) -> dict[str, float]:
         text = memory_input.content
         lowered = text.lower()
@@ -67,9 +70,11 @@ class FeatureExtractor:
             "category_task": self._is_category(record, MemoryCategory.TASK),
             "category_temporary": self._is_category(record, MemoryCategory.TEMPORARY),
             "entity_density": entity_density,
-            "has_deadline": self._bool_signal(r"\b(deadline|due|tomorrow|today|next week|schedule)\b", lowered),
+            "has_deadline": (self._bool_signal(r"\b(deadline|due|tomorrow|today|next week|schedule)\b", lowered)
+                             if self.legacy else float(record.category is MemoryCategory.TASK and deadline(lowered) and not event_update(lowered))),
             "interaction_signal": interaction_signal,
-            "preference_signal": self._bool_signal(r"\b(like|love|prefer|favorite|favourite|dislike|hate)\b", lowered),
+            "preference_signal": max(self._bool_signal(r"\b(like|love|prefer|favorite|favourite|dislike|hate)\b", lowered),
+                                     float(not self.legacy and preference_constraint(lowered))),
             "recency": recency,
             "sentiment_strength": abs(sentiment),
             "task_signal": self._bool_signal(r"\b(remind|todo|to-do|task|follow up|need to|please)\b", lowered),

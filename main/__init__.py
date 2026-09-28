@@ -1,13 +1,15 @@
 """Cognitive Hybrid Memory Core public API."""
 
-from .core import MemoryCore
-from .features import FeatureExtractor
-from .interfaces import GraphMemoryAdapter
-from .lifecycle import LifecycleManager
-from .models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
-from .scoring import ImportanceScorer
-from .classification import MemoryClassifier
-from .store import LocalMemoryStore
+from .application.core import MemoryCore
+from .domain.features import FeatureExtractor
+from .graph.interfaces import GraphMemoryAdapter
+from .domain.lifecycle import LifecycleManager
+from .domain.models import MemoryCategory, MemoryInput, MemoryRecord, MemoryTier
+from .domain.scoring import ImportanceScorer
+from .domain.classification import MemoryClassifier
+from .storage.store import LocalMemoryStore
+from .retrieval.ranker import MemoryRanker
+from .ml import MLFeatureExtractor, MLImportanceScorer
 
 __all__ = [
     "FeatureExtractor",
@@ -20,5 +22,8 @@ __all__ = [
     "MemoryCore",
     "MemoryInput",
     "MemoryRecord",
+    "MemoryRanker",
+    "MLFeatureExtractor",
+    "MLImportanceScorer",
     "MemoryTier",
 ]
