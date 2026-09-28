@@ -26,11 +26,13 @@ from main.retrieval.rag import MemoryRAG
 COMMIT = '3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376'
 SHA256 = '79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4'
 ROOT = Path('data/evaluation/locomo')
-MODES = ('recency', 'keyword', 'semantic', 'graph', 'hybrid')
+MODES = ('recency', 'keyword', 'semantic', 'graph', 'hybrid_fusion', 'hybrid_reranked')
 PROTOCOL = {
     'dataset': 'LoCoMo', 'source': 'https://github.com/snap-research/locomo',
     'commit': COMMIT, 'sha256': SHA256, 'split': 'all 10 external conversations, no fitting',
-    'k': 5, 'rrf_constant': 60, 'weights': {'keyword': .3, 'semantic': .5, 'graph': .2},
+    'k': 5, 'candidate_limit': 20, 'rrf_constant': 60,
+    'weights': {'keyword': .3, 'semantic': .5, 'graph': .2},
+    'reranker': 'Xenova/ms-marco-MiniLM-L-6-v2',
     'adversarial_category_5': 'Included in overall reference-evidence retrieval; reported separately from answerable categories. Evidence retrieval does not imply these questions are answerable.',
     'dense_min_cosine': .35, 'graph_hops': 2, 'context_characters': 10000,
     'excluded': 'questions without evidence, evidence IDs absent from text turns, or image-only evidence turns',
@@ -115,7 +117,8 @@ def summarize(results):
         selected = [r for r in results if r['mode'] == mode]
         if not selected:
             continue
-        measures = ['recall_at_5', 'hit_at_5', 'mrr_at_5', 'ndcg_at_5', 'context_characters']
+        measures = ['recall_at_5', 'hit_at_5', 'mrr_at_5', 'ndcg_at_5', 'context_characters',
+                    'latency_seconds', 'candidate_pool_size']
         means = {key: statistics.mean(r[key] for r in selected) for key in measures}
         groups = defaultdict(list)
         for row in selected:
@@ -172,10 +175,17 @@ def main():
         rag.sync(user_id=owner)
         for index, qa in questions:
             for mode in MODES:
-                hits = rag.search(qa['question'], user_id=owner, mode=mode, limit=5)
+                call_started = time.monotonic()
+                search_mode = 'hybrid' if mode.startswith('hybrid_') else mode
+                rerank = mode == 'hybrid_reranked'
+                hits = rag.search(qa['question'], user_id=owner, mode=search_mode, limit=5,
+                                  rerank=rerank, candidate_limit=20)
                 predicted = [hit['memory_id'] for hit in hits]
                 result = {'conversation': owner, 'question_index': index, 'mode': mode,
                           'category': str(qa['category']), 'predicted': predicted,
+                          'latency_seconds': time.monotonic() - call_started,
+                          'candidate_pool_size': hits[0]['candidate_pool_size'] if hits else 0,
+                          'reranker_status': hits[0]['reranker']['status'] if hits else 'empty',
                           'personalization_proxy': bool(re.search(r'\b(prefer|favorite|favourite|like|enjoy|hobby|hobbies)\b', qa['question'], re.I)),
                           'context_characters': sum(len(hit['text']) for hit in hits),
                           **metrics(predicted, qa['evidence'])}
@@ -201,4 +211,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

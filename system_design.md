@@ -384,7 +384,7 @@ Planned complete architecture responsibilities:
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
 | Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
 | Forgetting engine | Expire/archive memories based on value and age. | Read visibility, archive views, physical expiry cleanup, and lossless compaction implemented. |
-| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion implemented; importance/category/tier/recency enter the keyword channel. |
+| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion builds a candidate pool; a local cross-encoder reranks Top-K. Importance/category/tier/recency enter the keyword channel. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
 | REST API | HTTP access surface for backend/UI/agent integration. | Planned. |
 | Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | External retrieval/retention reports implemented; human judgment and generated-answer quality pending. |
@@ -443,7 +443,10 @@ The final retrieval strategy should combine:
 - user/session context
 - memory tier
 
-The local implementation uses keyword/dense/graph rank fusion, a character-budgeted context, and cited Gemini responses. See [implementation details](docs/retrieval_graph.md); production scale and broader extraction remain future work.
+The local implementation uses keyword/dense/graph rank fusion, local cross-encoder
+reranking, a character-budgeted context, and cited Gemini responses. See
+[implementation details](docs/retrieval_graph.md); production scale and broader
+extraction remain future work.
 
 ## 18. APIs and Interfaces
 

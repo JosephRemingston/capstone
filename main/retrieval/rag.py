@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import math
 import re
 
 from .embeddings import FastEmbedder
@@ -10,6 +11,7 @@ from ..graph import TemporalGraph, iso
 from ..storage.indexes import IndexDatabase, VectorIndex, document_text, chunks, digest
 from ..domain.models import utc_now
 from .ranker import tokenize
+from .reranker import FastEmbedCrossEncoderReranker
 from ..storage.locking import locked, store_lock
 from ..storage.cleanup import register_index
 
@@ -17,13 +19,20 @@ MODES = ('keyword', 'semantic', 'graph', 'hybrid', 'recency')
 
 
 class MemoryRAG:
-    def __init__(self, store, *, embedder=None, index_path=None):
+    def __init__(self, store, *, embedder=None, index_path=None, reranker='auto'):
         self.store = store
         with store_lock(store.path):
             self.database = IndexDatabase(index_path or store.path.with_suffix('.index.sqlite3'))
             register_index(store.path, self.database.path)
         self.graph = TemporalGraph(self.database)
         self._embedder = embedder
+        self._reranker = reranker
+
+    @property
+    def reranker(self):
+        if self._reranker == 'auto':
+            self._reranker = FastEmbedCrossEncoderReranker()
+        return self._reranker
 
     @property
     def vectors(self):
@@ -64,12 +73,17 @@ class MemoryRAG:
 
     @locked
     def search(self, query, *, user_id, mode='hybrid', limit=5, as_of=None, known_at=None,
-               max_hops=2, **filters):
+               max_hops=2, rerank=None, candidate_limit=None, **filters):
         for timestamp in (as_of, known_at):
             if timestamp is not None:
                 iso(timestamp)
-        if mode not in MODES or not isinstance(limit, int) or not 0 <= limit <= 100:
+        if mode not in MODES or isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= 100:
             raise ValueError('Invalid retrieval mode or limit (0–100)')
+        pool = max(20, limit * 4) if candidate_limit is None else candidate_limit
+        if (isinstance(pool, bool) or not isinstance(pool, int) or not limit <= pool <= 200):
+            raise ValueError('candidate_limit must be an integer between limit and 200')
+        if rerank not in (None, True, False):
+            raise ValueError('rerank must be true, false, or null')
         if not user_id:
             raise ValueError('A user_id is required for RAG')
         if not query.strip() or not limit:
@@ -77,7 +91,6 @@ class MemoryRAG:
         records = self.candidates(user_id=user_id, as_of=as_of, known_at=known_at, **filters)
         by_id = {record.id: record for record in records}
         allowed = set(by_id)
-        pool = max(20, limit * 4)
         channels, dense, paths = {}, {}, []
         if mode == 'recency':
             channels['recency'] = [r.id for r in sorted(records, key=lambda r: (r.created_at, r.id), reverse=True)[:pool]]
@@ -121,16 +134,64 @@ class MemoryRAG:
         if mode == 'hybrid':
             for identifier, signals in details.items():
                 scores[identifier] += .002 * max(0, len(signals) - 1)
-        result = []
-        for identifier in sorted(scores, key=lambda key: (-scores[key], key))[:limit]:
+        fused = sorted(scores, key=lambda key: (-scores[key], key))[:pool]
+        snippets = {}
+        for identifier in fused:
             record = by_id[identifier]
             if identifier in dense:
                 snippet = dense[identifier]['text']
             else:
                 terms = tokenize(query)
-                snippets = chunks(record)
-                snippet = max(snippets, key=lambda c: len(terms & tokenize(c.text))).text if snippets else ''
-            result.append({'memory_id': identifier, 'text': snippet, 'score': scores[identifier],
+                record_chunks = chunks(record)
+                snippet = max(record_chunks, key=lambda c: len(terms & tokenize(c.text))).text if record_chunks else ''
+            snippets[identifier] = snippet
+
+        should_rerank = (mode == 'hybrid') if rerank is None else rerank
+        reranker_scores = {}
+        reranker_status = {'status': 'disabled', 'model': None, 'error_type': None}
+        ordered = fused
+        if should_rerank and fused:
+            try:
+                model = self.reranker
+                if model is None:
+                    raise ValueError('Reranker is disabled')
+                documents, owners = [], []
+                terms = tokenize(query)
+                for identifier in fused:
+                    record = by_id[identifier]
+                    choices = []
+                    if identifier in dense:
+                        choices.append(dense[identifier]['text'])
+                    ranked_chunks = sorted(chunks(record),
+                                           key=lambda item: (-len(terms & tokenize(item.text)), item.start))
+                    choices.extend(item.text for item in ranked_chunks)
+                    for text in list(dict.fromkeys(choices))[:3]:
+                        documents.append(text)
+                        owners.append((identifier, text))
+                values = list(model.rerank(query, documents))
+                if len(values) != len(documents) or any(not isinstance(value, (int, float))
+                        or isinstance(value, bool) or not math.isfinite(value) for value in values):
+                    raise ValueError('Reranker returned invalid scores')
+                winning = {}
+                for (identifier, text), value in zip(owners, values):
+                    if identifier not in winning or value > winning[identifier][0]:
+                        winning[identifier] = (float(value), text)
+                for identifier, (value, text) in winning.items():
+                    reranker_scores[identifier] = value
+                    snippets[identifier] = text
+                ordered = sorted(fused, key=lambda key: (-reranker_scores[key], -scores[key], key))
+                reranker_status = {'status': 'applied', 'model': model.model_id, 'error_type': None}
+            except Exception as exc:
+                reranker_status = {'status': 'fallback', 'model': getattr(self._reranker, 'model_id', None),
+                                   'error_type': type(exc).__name__}
+
+        result = []
+        for identifier in ordered[:limit]:
+            record = by_id[identifier]
+            metadata = {**reranker_status, 'score': reranker_scores.get(identifier)}
+            result.append({'memory_id': identifier, 'text': snippets[identifier], 'score': scores[identifier],
+                           'fusion_score': scores[identifier], 'reranker_score': reranker_scores.get(identifier),
+                           'reranker': metadata, 'candidate_pool_size': len(fused),
                            'signals': details[identifier], 'record': record.to_dict(),
                            'paths': [path for path in paths if identifier in path['source_ids']]})
         return result

@@ -81,6 +81,10 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument('--pretty', action='store_true')
 
     search.add_argument('--mode', choices=['keyword', 'semantic', 'hybrid', 'graph'], default='keyword')
+    search.add_argument('--no-rerank', action='store_false', dest='rerank', default=None,
+                        help='Disable the local cross-encoder for hybrid search.')
+    search.add_argument('--candidate-limit', type=int,
+                        help='Fused candidates considered before Top-K reranking (default: max(20, 4×limit)).')
     for name in ('ask', 'index', 'graph'):
         command = subparsers.add_parser(name, help={'ask': 'Answer using retrieved memory evidence.',
                                                    'index': 'Build or update vector and temporal graph indexes.',
@@ -98,6 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
                 command.add_argument('--mode', choices=['keyword', 'semantic', 'hybrid', 'graph'], default='hybrid')
                 command.add_argument('--generator', choices=['gemini', 'extractive'], default='gemini')
                 command.add_argument('--limit', type=int, default=5)
+                command.add_argument('--no-rerank', action='store_false', dest='rerank', default=None,
+                                     help='Disable the local cross-encoder for hybrid retrieval.')
+                command.add_argument('--candidate-limit', type=int,
+                                     help='Fused candidates considered before Top-K reranking.')
                 command.add_argument('--budget', type=int, default=10000, help='Evidence context character budget.')
                 command.add_argument('--preview', action='store_true', help='Show context and prompt without an API call.')
                 command.add_argument('--env-file', default='.env')
@@ -215,6 +223,7 @@ def rag_command(args, store):
         payload = rag.sync(user_id=args.user_id, semantic=not args.graph_only)
     elif args.command == 'search':
         payload = rag.search(args.query, user_id=args.user_id, mode=args.mode, limit=args.limit,
+                             rerank=args.rerank, candidate_limit=args.candidate_limit,
                              session_id=args.session_id, category=args.category, tier=args.tier,
                              include_expired=args.include_expired, include_resolved=args.include_resolved,
                              include_history=args.include_history)
@@ -233,7 +242,8 @@ def rag_command(args, store):
                 payload = rag.graph.relations(user_id=args.user_id, as_of=as_of, known_at=known_at, predicate=args.predicate)
         else:
             context = rag.context(args.query, user_id=args.user_id, mode=args.mode, limit=args.limit,
-                                  budget=args.budget, as_of=as_of, known_at=known_at, max_hops=args.hops)
+                                  budget=args.budget, as_of=as_of, known_at=known_at, max_hops=args.hops,
+                                  rerank=args.rerank, candidate_limit=args.candidate_limit)
             payload = {'context': context, 'prompt': prompt(context)} if args.preview else answer(
                 context, generator=args.generator, env_file=args.env_file)
     print_json(payload, pretty=args.pretty)

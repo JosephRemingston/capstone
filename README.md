@@ -352,8 +352,11 @@ matches = store.search("Python tests", user_id="user_001", limit=10)
 ```
 
 All five weights must be finite and nonnegative with a positive finite total.
-The half-life must be finite and positive. Ranking remains an in-process heuristic
-that scans the local store. Semantic/graph/hybrid modes are implemented separately; a learned reranker remains future work.
+The half-life must be finite and positive. Keyword ranking remains an in-process
+heuristic. Hybrid retrieval independently gathers keyword, vector, and graph
+candidates, fuses their ranks, and reranks the candidate pool with the local
+`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Use `--no-rerank` for the fusion
+baseline and `--candidate-limit` to bound reranking work.
 
 ## What Still Needs To Be Implemented
 
@@ -367,7 +370,7 @@ The remaining work should be implemented in phases. The current system already h
 | 4 | Evaluation quality | Add independent human conflict/personalization labels and full memory-system baselines. | External retrieval/retention runners and recency/keyword/vector/graph/hybrid baselines now exist. |
 | 5 | Scale storage | Add an ANN vector backend and production concurrent storage when needed. | Current exact vector scans and local SQLite graph target local workloads. |
 | 6 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 7 | Privacy/security controls | Add redaction, deletion/export, user isolation checks, and safe logging rules. | Important because long-term memory may contain sensitive user information. |
+| 7 | Privacy/security controls | Add deletion/export APIs and production authorization around the implemented redaction and user isolation rules. | Important because long-term memory may contain sensitive user information. |
 
 ## ML Importance Model
 

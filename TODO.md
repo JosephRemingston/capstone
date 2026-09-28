@@ -19,7 +19,7 @@
 
 - [x] Improve conversational retention: useful declarative facts receive semantic retention and balanced cleanup preserves useful expired records.
 - [x] Improve natural-language graph extraction from conversational paragraphs through independent-assertion extraction.
-- [x] Improve retrieval ranking and context selection using cross-channel agreement and diverse evidence selection. LoCoMo recall@5 remains 48.15%, so further ranking gains remain measurable future work.
+- [x] Improve retrieval ranking and context selection using cross-channel agreement, weighted reciprocal-rank fusion, local cross-encoder reranking, and diverse evidence selection. On the frozen LoCoMo run, reranking raised recall@5 from 48.15% to 55.83%.
 - [x] Handle supported indirect transitions and multi-sentence contradictions; ambiguous statements remain non-destructive.
 - [x] Consolidate high-overlap paraphrases into provenance-backed related-observation summaries.
 - [ ] Add `GOOGLE_API_KEY` and run live Gemini answer-quality evaluation.

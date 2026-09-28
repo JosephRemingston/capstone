@@ -393,11 +393,16 @@ not an approximate-nearest-neighbor service.
 
 Hybrid mode combines keyword, semantic, and graph ranks using weighted reciprocal
 rank fusion: keyword 0.3, semantic 0.5, graph 0.2, each divided by `60 + rank`.
-The fusion score is an ordering signal, not a probability.
+The fusion score is an ordering signal, not a probability. The highest fused
+candidates are reranked locally by `Xenova/ms-marco-MiniLM-L-6-v2`; the best of
+up to three representative chunks supplies each memory's score and answer
+snippet. The cross-encoder is enabled by default for hybrid mode, cached under
+`data/rag/models`, and falls back to fusion ordering if it cannot run.
 
 ```bash
 python3 -m main index --user-id joseph
 python3 -m main search "project information" --user-id joseph --mode hybrid
+python3 -m main search "project information" --user-id joseph --mode hybrid --no-rerank
 python3 -m main ask "What project does Alice work on?" \
   --user-id joseph --generator extractive --pretty
 python3 -m main ask "What project does Alice work on?" \
@@ -456,18 +461,21 @@ Historical reports under `docs/reports/` show:
 
 | Evaluation | Result and interpretation |
 | --- | --- |
-| LoCoMo retrieval | Hybrid recall@5 48.15%; semantic 43.26%; keyword 37.65%; graph 0.00% on long raw turns. |
+| LoCoMo hybrid fusion | Recall@5 48.15%; hit@5 53.07%; MRR@5 37.30%; nDCG@5 38.54%; personalization evidence recall 36.70%. |
+| LoCoMo hybrid reranked | Recall@5 55.83%; hit@5 61.07%; MRR@5 50.47%; nDCG@5 49.84%; personalization evidence recall 47.59%. The mean 20-candidate reranking latency was 122.9 ms versus 25.0 ms for fusion. |
 | LongMemEval retention | Low evidence retention for knowledge updates (11.81%) and preference cases (8.33%) in the reported subset. |
 | bAbI QA1 | Conflict resolver and graph 100%; first-assertion baseline 39.60%; latest baseline also 100%. |
 | Cleanup replay | 3,169 eligible memories removed; visible state preserved in 457/457 replayed cases. |
 
-These results show that retrieval infrastructure works but retention policy and
-broad natural-language graph extraction need improvement. The graph's zero
-LoCoMo retrieval reflects conservative extraction, not a broken graph store.
+The cross-encoder improved LoCoMo recall@5 by 7.69 percentage points over the
+frozen fusion baseline. These are evidence-retrieval results, not generated-answer
+accuracy. Retention policy and broad natural-language graph extraction still need
+improvement. The graph's low coverage on LoCoMo reflects conservative extraction,
+not a broken graph store.
 
-The historical `evaluation/` command package is currently deleted from this
-working tree, though reports remain. Commands such as `python -m
-evaluation.evaluate` cannot run until that package is restored.
+The `evaluation/` package provides the deterministic 48-case rule evaluation and
+the frozen LoCoMo benchmark. Run `python3 -m evaluation.evaluate` for the former
+and `.venv/bin/python -m evaluation.benchmark` for the latter.
 
 Independent human labels for conversational importance/tier/category, conflict
 decisions, personalization, and live Gemini answer quality are still required.
@@ -479,10 +487,10 @@ python3 -m unittest discover -s tests -q
 python3 -m compileall -q main training tests
 ```
 
-The standard suite currently has 120 tests; four optional ML tests are skipped
+The standard suite currently has 134 tests; four optional ML tests are skipped
 when trained artifact metadata is unavailable. Tests cover the core pipeline,
-rules, lifecycle, tasks, revisions, ranking, conflicts, graph/RAG, cleanup,
-locks, and CLI behavior.
+rules, lifecycle, tasks, revisions, ranking, conflicts, graph/RAG, local reranking,
+cleanup, locks, and CLI behavior.
 
 ## Security and privacy
 
@@ -497,12 +505,11 @@ locks, and CLI behavior.
 
 ## Development priorities
 
-1. Restore the deleted `evaluation/` package before relying on evaluation commands.
-2. Build independently labeled, consented conversational evaluation data.
-3. Improve evidence retention on unseen conversation benchmarks.
-4. Extend graph extraction through constrained, reviewable schemas.
-5. Add independent human review of Gemini answer quality and citations.
-6. Add API, authentication, and production storage only after local policies and
+1. Build independently labeled, consented conversational evaluation data.
+2. Improve evidence retention on unseen conversation benchmarks.
+3. Extend graph extraction through constrained, reviewable schemas.
+4. Add independent human review of Gemini answer quality and citations.
+5. Add API, authentication, and production storage only after local policies and
    evaluation are stable.
 
 Focused supporting material remains in `README.md`, `system_design.md`,
