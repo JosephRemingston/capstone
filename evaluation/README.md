@@ -1,5 +1,58 @@
 # Conversational evaluation and review
 
+## Controlled graph and reranker ablation
+
+The capstone experiment is implemented under `evaluation/retrieval/`,
+`evaluation/rag/`, `evaluation/analysis/`, and `evaluation/experiments/`. Its
+frozen dataset contains 240 developer-labeled queries, with 20 examples for each
+of semantic, episodic, temporal, historical, multi-hop, entity-relationship,
+conflict, preference, procedural, recency, negative/absence, and unanswerable
+queries. Run all four controlled systems with:
+
+```bash
+.venv/bin/python -m evaluation.run
+```
+
+The runner holds the embedding model, candidate limit, Top-K values, context
+budget, answer generator, prompts, labels, and metrics constant while comparing:
+
+- vector;
+- vector plus local reranker;
+- vector plus temporal graph;
+- vector plus temporal graph plus local reranker.
+
+It writes JSON and Markdown results, an SVG Recall@5 chart, per-query predictions,
+query-type analysis, paired confidence intervals/randomization tests, failure
+cases, P50/P95/P99 stage latency, and a blinded 60-question human-review packet
+under `docs/reports/ablation/`. The default extractive generator makes the run
+local and deterministic. `--generator gemini` uses the same Gemini configuration
+for all four systems after `GOOGLE_API_KEY` is configured.
+
+The pinned FastEmbed release does not support `BAAI/bge-reranker-v2-m3`. The
+experiment therefore uses the already integrated Apache-2.0
+`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder for both reranked arms. Changing the
+model requires a new named protocol rather than silently mixing rerankers.
+
+The included labels are controlled developer-authored cases, not independent
+human gold. The generated human-review packet deliberately contains blank scores;
+only completed ratings from independent reviewers can satisfy that part of the
+study.
+
+The unified report also runs a 14-check lifecycle audit covering working,
+short-term, long-term, and archive behavior; deadline expiry; completion;
+cancellation; rescheduling; recurring occurrences; visibility; and history
+preservation. Run that audit alone with `python3 -m evaluation.lifecycle`.
+
+After reviewers fill every score from 0–4, identify themselves, and add a
+timezone-aware review timestamp, validate and summarize the packet with:
+
+```bash
+python3 -m evaluation.human completed_reviews.jsonl
+```
+
+The scorer rejects blank, malformed, duplicate, future-dated, and out-of-range
+ratings. It cannot verify that a named reviewer is truly independent.
+
 `conversational_cases.jsonl` contains 48 developer-authored examples with proposed
 category, tier, and importance ranges. It covers greetings, factual statements,
 preferences/constraints, one-off/recurring tasks, negation, events, procedures, and
@@ -196,4 +249,3 @@ implemented; independent human personalization/conflict-policy validation still
 requires actual completed reviews. Live Gemini answer evaluation requires the key
 the user elected to configure later. Unit-test ratings are test fixtures only and
 are never included in evaluation reports.
-

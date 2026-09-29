@@ -40,15 +40,22 @@ def evaluate(rows):
     count = len(results)
     if not count:
         raise ValueError('No eligible labels; human review has not been supplied')
-    f1s = []
+    f1s, per_category = [], {}
     for category in sorted({r['expected_category'] for r in results} | {r['category'] for r in results}):
         tp = confusion[category, category]
         fp = sum(n for (a,b),n in confusion.items() if b == category and a != category)
         fn = sum(n for (a,b),n in confusion.items() if a == category and b != category)
-        f1s.append(2*tp / (2*tp+fp+fn) if 2*tp+fp+fn else 0)
+        precision = tp / (tp + fp) if tp + fp else 0
+        recall = tp / (tp + fn) if tp + fn else 0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0
+        f1s.append(f1)
+        per_category[category] = {'precision': precision, 'recall': recall, 'f1': f1,
+                                  'support': sum(n for (actual, predicted), n in confusion.items()
+                                                 if actual == category)}
     return {'count': count, 'label_sources': dict(Counter(r['label_source'] for r in rows)),
             'category_accuracy': sum(r['category_correct'] for r in results) / count,
             'category_macro_f1': sum(f1s) / len(f1s),
+            'category_metrics': per_category,
             'tier_accuracy': sum(r['tier_correct'] for r in results) / count,
             'importance_range_agreement': sum(r['importance_in_range'] for r in results) / count,
             'confusion': [{'expected': a, 'predicted': b, 'count': n} for (a,b),n in sorted(confusion.items())],
@@ -86,4 +93,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

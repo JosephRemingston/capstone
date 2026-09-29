@@ -487,7 +487,7 @@ python3 -m unittest discover -s tests -q
 python3 -m compileall -q main training tests
 ```
 
-The standard suite currently has 134 tests; four optional ML tests are skipped
+The standard suite currently has 139 tests; four optional ML tests are skipped
 when trained artifact metadata is unavailable. Tests cover the core pipeline,
 rules, lifecycle, tasks, revisions, ranking, conflicts, graph/RAG, local reranking,
 cleanup, locks, and CLI behavior.

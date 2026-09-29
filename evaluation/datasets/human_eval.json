@@ -1,0 +1,555 @@
+{
+  "schema_version": 1,
+  "sample_size": 60,
+  "selection": "first five frozen cases per query type; answers and system labels are populated by python -m evaluation.run",
+  "blind_labels": [
+    "System A",
+    "System B",
+    "System C",
+    "System D"
+  ],
+  "rubric": {
+    "correctness": "0\u20134",
+    "relevance": "0\u20134",
+    "faithfulness": "0\u20134",
+    "citation_usefulness": "0\u20134",
+    "temporal_correctness": "0\u20134"
+  },
+  "questions": [
+    {
+      "query_id": "q-s00-semantic",
+      "query": "What is Asha's occupation?",
+      "query_type": "semantic",
+      "expected_answer": "architect",
+      "supporting_memory_ids": [
+        "s00-occupation"
+      ]
+    },
+    {
+      "query_id": "q-s01-semantic",
+      "query": "What is Ben's occupation?",
+      "query_type": "semantic",
+      "expected_answer": "chemist",
+      "supporting_memory_ids": [
+        "s01-occupation"
+      ]
+    },
+    {
+      "query_id": "q-s02-semantic",
+      "query": "What is Clara's occupation?",
+      "query_type": "semantic",
+      "expected_answer": "designer",
+      "supporting_memory_ids": [
+        "s02-occupation"
+      ]
+    },
+    {
+      "query_id": "q-s03-semantic",
+      "query": "What is Diego's occupation?",
+      "query_type": "semantic",
+      "expected_answer": "engineer",
+      "supporting_memory_ids": [
+        "s03-occupation"
+      ]
+    },
+    {
+      "query_id": "q-s04-semantic",
+      "query": "What is Elena's occupation?",
+      "query_type": "semantic",
+      "expected_answer": "financial analyst",
+      "supporting_memory_ids": [
+        "s04-occupation"
+      ]
+    },
+    {
+      "query_id": "q-s00-episodic",
+      "query": "What milestone did Asha complete?",
+      "query_type": "episodic",
+      "expected_answer": "Atlas certification",
+      "supporting_memory_ids": [
+        "s00-event"
+      ]
+    },
+    {
+      "query_id": "q-s01-episodic",
+      "query": "What milestone did Ben complete?",
+      "query_type": "episodic",
+      "expected_answer": "Atlas certification",
+      "supporting_memory_ids": [
+        "s01-event"
+      ]
+    },
+    {
+      "query_id": "q-s02-episodic",
+      "query": "What milestone did Clara complete?",
+      "query_type": "episodic",
+      "expected_answer": "Atlas certification",
+      "supporting_memory_ids": [
+        "s02-event"
+      ]
+    },
+    {
+      "query_id": "q-s03-episodic",
+      "query": "What milestone did Diego complete?",
+      "query_type": "episodic",
+      "expected_answer": "Atlas certification",
+      "supporting_memory_ids": [
+        "s03-event"
+      ]
+    },
+    {
+      "query_id": "q-s04-episodic",
+      "query": "What milestone did Elena complete?",
+      "query_type": "episodic",
+      "expected_answer": "Atlas certification",
+      "supporting_memory_ids": [
+        "s04-event"
+      ]
+    },
+    {
+      "query_id": "q-s00-temporal",
+      "query": "Where does Asha currently live?",
+      "query_type": "temporal",
+      "expected_answer": "Lisbon",
+      "supporting_memory_ids": [
+        "s00-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s01-temporal",
+      "query": "Where does Ben currently live?",
+      "query_type": "temporal",
+      "expected_answer": "Kyoto",
+      "supporting_memory_ids": [
+        "s01-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s02-temporal",
+      "query": "Where does Clara currently live?",
+      "query_type": "temporal",
+      "expected_answer": "Nairobi",
+      "supporting_memory_ids": [
+        "s02-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s03-temporal",
+      "query": "Where does Diego currently live?",
+      "query_type": "temporal",
+      "expected_answer": "Oslo",
+      "supporting_memory_ids": [
+        "s03-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s04-temporal",
+      "query": "Where does Elena currently live?",
+      "query_type": "temporal",
+      "expected_answer": "Pune",
+      "supporting_memory_ids": [
+        "s04-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s00-historical",
+      "query": "Where was Asha's home in 2023?",
+      "query_type": "historical",
+      "expected_answer": "Chennai",
+      "supporting_memory_ids": [
+        "s00-old_home"
+      ]
+    },
+    {
+      "query_id": "q-s01-historical",
+      "query": "Where was Ben's home in 2023?",
+      "query_type": "historical",
+      "expected_answer": "Lisbon",
+      "supporting_memory_ids": [
+        "s01-old_home"
+      ]
+    },
+    {
+      "query_id": "q-s02-historical",
+      "query": "Where was Clara's home in 2023?",
+      "query_type": "historical",
+      "expected_answer": "Kyoto",
+      "supporting_memory_ids": [
+        "s02-old_home"
+      ]
+    },
+    {
+      "query_id": "q-s03-historical",
+      "query": "Where was Diego's home in 2023?",
+      "query_type": "historical",
+      "expected_answer": "Nairobi",
+      "supporting_memory_ids": [
+        "s03-old_home"
+      ]
+    },
+    {
+      "query_id": "q-s04-historical",
+      "query": "Where was Elena's home in 2023?",
+      "query_type": "historical",
+      "expected_answer": "Oslo",
+      "supporting_memory_ids": [
+        "s04-old_home"
+      ]
+    },
+    {
+      "query_id": "q-s00-multi_hop",
+      "query": "Where is the company that Asha works for based?",
+      "query_type": "multi_hop",
+      "expected_answer": "Lisbon",
+      "supporting_memory_ids": [
+        "s00-employer",
+        "s00-headquarters"
+      ]
+    },
+    {
+      "query_id": "q-s01-multi_hop",
+      "query": "Where is the company that Ben works for based?",
+      "query_type": "multi_hop",
+      "expected_answer": "Kyoto",
+      "supporting_memory_ids": [
+        "s01-employer",
+        "s01-headquarters"
+      ]
+    },
+    {
+      "query_id": "q-s02-multi_hop",
+      "query": "Where is the company that Clara works for based?",
+      "query_type": "multi_hop",
+      "expected_answer": "Nairobi",
+      "supporting_memory_ids": [
+        "s02-employer",
+        "s02-headquarters"
+      ]
+    },
+    {
+      "query_id": "q-s03-multi_hop",
+      "query": "Where is the company that Diego works for based?",
+      "query_type": "multi_hop",
+      "expected_answer": "Oslo",
+      "supporting_memory_ids": [
+        "s03-employer",
+        "s03-headquarters"
+      ]
+    },
+    {
+      "query_id": "q-s04-multi_hop",
+      "query": "Where is the company that Elena works for based?",
+      "query_type": "multi_hop",
+      "expected_answer": "Pune",
+      "supporting_memory_ids": [
+        "s04-employer",
+        "s04-headquarters"
+      ]
+    },
+    {
+      "query_id": "q-s00-entity_relationship",
+      "query": "Who does Asha report to?",
+      "query_type": "entity_relationship",
+      "expected_answer": "Diego",
+      "supporting_memory_ids": [
+        "s00-manager"
+      ]
+    },
+    {
+      "query_id": "q-s01-entity_relationship",
+      "query": "Who does Ben report to?",
+      "query_type": "entity_relationship",
+      "expected_answer": "Elena",
+      "supporting_memory_ids": [
+        "s01-manager"
+      ]
+    },
+    {
+      "query_id": "q-s02-entity_relationship",
+      "query": "Who does Clara report to?",
+      "query_type": "entity_relationship",
+      "expected_answer": "Farah",
+      "supporting_memory_ids": [
+        "s02-manager"
+      ]
+    },
+    {
+      "query_id": "q-s03-entity_relationship",
+      "query": "Who does Diego report to?",
+      "query_type": "entity_relationship",
+      "expected_answer": "Gavin",
+      "supporting_memory_ids": [
+        "s03-manager"
+      ]
+    },
+    {
+      "query_id": "q-s04-entity_relationship",
+      "query": "Who does Elena report to?",
+      "query_type": "entity_relationship",
+      "expected_answer": "Hana",
+      "supporting_memory_ids": [
+        "s04-manager"
+      ]
+    },
+    {
+      "query_id": "q-s00-conflict",
+      "query": "Which city replaced Chennai as Asha's current home?",
+      "query_type": "conflict",
+      "expected_answer": "Lisbon",
+      "supporting_memory_ids": [
+        "s00-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s01-conflict",
+      "query": "Which city replaced Lisbon as Ben's current home?",
+      "query_type": "conflict",
+      "expected_answer": "Kyoto",
+      "supporting_memory_ids": [
+        "s01-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s02-conflict",
+      "query": "Which city replaced Kyoto as Clara's current home?",
+      "query_type": "conflict",
+      "expected_answer": "Nairobi",
+      "supporting_memory_ids": [
+        "s02-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s03-conflict",
+      "query": "Which city replaced Nairobi as Diego's current home?",
+      "query_type": "conflict",
+      "expected_answer": "Oslo",
+      "supporting_memory_ids": [
+        "s03-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s04-conflict",
+      "query": "Which city replaced Oslo as Elena's current home?",
+      "query_type": "conflict",
+      "expected_answer": "Pune",
+      "supporting_memory_ids": [
+        "s04-new_home"
+      ]
+    },
+    {
+      "query_id": "q-s00-preference",
+      "query": "What does Asha prefer?",
+      "query_type": "preference",
+      "expected_answer": "oolong tea",
+      "supporting_memory_ids": [
+        "s00-preference"
+      ]
+    },
+    {
+      "query_id": "q-s01-preference",
+      "query": "What does Ben prefer?",
+      "query_type": "preference",
+      "expected_answer": "quiet hotel rooms",
+      "supporting_memory_ids": [
+        "s01-preference"
+      ]
+    },
+    {
+      "query_id": "q-s02-preference",
+      "query": "What does Clara prefer?",
+      "query_type": "preference",
+      "expected_answer": "morning meetings",
+      "supporting_memory_ids": [
+        "s02-preference"
+      ]
+    },
+    {
+      "query_id": "q-s03-preference",
+      "query": "What does Diego prefer?",
+      "query_type": "preference",
+      "expected_answer": "dark mode",
+      "supporting_memory_ids": [
+        "s03-preference"
+      ]
+    },
+    {
+      "query_id": "q-s04-preference",
+      "query": "What does Elena prefer?",
+      "query_type": "preference",
+      "expected_answer": "window seats",
+      "supporting_memory_ids": [
+        "s04-preference"
+      ]
+    },
+    {
+      "query_id": "q-s00-procedural",
+      "query": "How does Asha prepare the weekly report?",
+      "query_type": "procedural",
+      "expected_answer": "collecting updates, checking figures, and sending a concise summary",
+      "supporting_memory_ids": [
+        "s00-procedure"
+      ]
+    },
+    {
+      "query_id": "q-s01-procedural",
+      "query": "How does Ben prepare the weekly report?",
+      "query_type": "procedural",
+      "expected_answer": "collecting updates, checking figures, and sending a concise summary",
+      "supporting_memory_ids": [
+        "s01-procedure"
+      ]
+    },
+    {
+      "query_id": "q-s02-procedural",
+      "query": "How does Clara prepare the weekly report?",
+      "query_type": "procedural",
+      "expected_answer": "collecting updates, checking figures, and sending a concise summary",
+      "supporting_memory_ids": [
+        "s02-procedure"
+      ]
+    },
+    {
+      "query_id": "q-s03-procedural",
+      "query": "How does Diego prepare the weekly report?",
+      "query_type": "procedural",
+      "expected_answer": "collecting updates, checking figures, and sending a concise summary",
+      "supporting_memory_ids": [
+        "s03-procedure"
+      ]
+    },
+    {
+      "query_id": "q-s04-procedural",
+      "query": "How does Elena prepare the weekly report?",
+      "query_type": "procedural",
+      "expected_answer": "collecting updates, checking figures, and sending a concise summary",
+      "supporting_memory_ids": [
+        "s04-procedure"
+      ]
+    },
+    {
+      "query_id": "q-s00-recency",
+      "query": "What is the most recent status of Project A1?",
+      "query_type": "recency",
+      "expected_answer": "launched",
+      "supporting_memory_ids": [
+        "s00-new_update"
+      ]
+    },
+    {
+      "query_id": "q-s01-recency",
+      "query": "What is the most recent status of Project B2?",
+      "query_type": "recency",
+      "expected_answer": "launched",
+      "supporting_memory_ids": [
+        "s01-new_update"
+      ]
+    },
+    {
+      "query_id": "q-s02-recency",
+      "query": "What is the most recent status of Project C3?",
+      "query_type": "recency",
+      "expected_answer": "launched",
+      "supporting_memory_ids": [
+        "s02-new_update"
+      ]
+    },
+    {
+      "query_id": "q-s03-recency",
+      "query": "What is the most recent status of Project D4?",
+      "query_type": "recency",
+      "expected_answer": "launched",
+      "supporting_memory_ids": [
+        "s03-new_update"
+      ]
+    },
+    {
+      "query_id": "q-s04-recency",
+      "query": "What is the most recent status of Project E5?",
+      "query_type": "recency",
+      "expected_answer": "launched",
+      "supporting_memory_ids": [
+        "s04-new_update"
+      ]
+    },
+    {
+      "query_id": "q-s00-negative_absence",
+      "query": "Is Asha allergic to peanuts?",
+      "query_type": "negative_absence",
+      "expected_answer": "not allergic to peanuts",
+      "supporting_memory_ids": [
+        "s00-negative"
+      ]
+    },
+    {
+      "query_id": "q-s01-negative_absence",
+      "query": "Is Ben allergic to shellfish?",
+      "query_type": "negative_absence",
+      "expected_answer": "not allergic to shellfish",
+      "supporting_memory_ids": [
+        "s01-negative"
+      ]
+    },
+    {
+      "query_id": "q-s02-negative_absence",
+      "query": "Is Clara allergic to soy?",
+      "query_type": "negative_absence",
+      "expected_answer": "not allergic to soy",
+      "supporting_memory_ids": [
+        "s02-negative"
+      ]
+    },
+    {
+      "query_id": "q-s03-negative_absence",
+      "query": "Is Diego allergic to sesame?",
+      "query_type": "negative_absence",
+      "expected_answer": "not allergic to sesame",
+      "supporting_memory_ids": [
+        "s03-negative"
+      ]
+    },
+    {
+      "query_id": "q-s04-negative_absence",
+      "query": "Is Elena allergic to latex?",
+      "query_type": "negative_absence",
+      "expected_answer": "not allergic to latex",
+      "supporting_memory_ids": [
+        "s04-negative"
+      ]
+    },
+    {
+      "query_id": "q-s00-unanswerable",
+      "query": "What is the name of Asha's pet?",
+      "query_type": "unanswerable",
+      "expected_answer": null,
+      "supporting_memory_ids": []
+    },
+    {
+      "query_id": "q-s01-unanswerable",
+      "query": "What is the name of Ben's pet?",
+      "query_type": "unanswerable",
+      "expected_answer": null,
+      "supporting_memory_ids": []
+    },
+    {
+      "query_id": "q-s02-unanswerable",
+      "query": "What is the name of Clara's pet?",
+      "query_type": "unanswerable",
+      "expected_answer": null,
+      "supporting_memory_ids": []
+    },
+    {
+      "query_id": "q-s03-unanswerable",
+      "query": "What is the name of Diego's pet?",
+      "query_type": "unanswerable",
+      "expected_answer": null,
+      "supporting_memory_ids": []
+    },
+    {
+      "query_id": "q-s04-unanswerable",
+      "query": "What is the name of Elena's pet?",
+      "query_type": "unanswerable",
+      "expected_answer": null,
+      "supporting_memory_ids": []
+    }
+  ]
+}

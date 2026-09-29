@@ -26,6 +26,8 @@
 - [ ] Obtain independent human reviews of answer usefulness, personalization, and conflict decisions. The blinded two-reviewer protocol and blank template are ready under `reviews/`; real reviewers are still required.
 - [x] Calibrate cleanup policy with `balanced` (default) and `expiry` modes and explicit archived/deleted IDs.
 - [x] Add pre-persistence secret/identifier redaction and privacy metadata.
+- [x] Add the controlled 240-query vector/graph/reranker ablation runner with retrieval, RAG, citation, latency, query-type, statistical, and failure-case reports.
+- [ ] Complete the generated blind human-review packet with independent evaluators; the software leaves all ratings blank.
 
 ## Features left to build
 
