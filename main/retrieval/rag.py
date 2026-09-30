@@ -8,7 +8,7 @@ import re
 
 from .embeddings import FastEmbedder
 from ..graph import TemporalGraph, iso
-from ..storage.indexes import IndexDatabase, VectorIndex, document_text, chunks, digest
+from ..storage.indexes import IndexDatabase, VectorIndex, ApproximateVectorIndex, document_text, chunks, digest
 from ..domain.models import utc_now
 from .ranker import tokenize
 from .reranker import FastEmbedCrossEncoderReranker
@@ -19,7 +19,16 @@ MODES = ('keyword', 'semantic', 'graph', 'hybrid', 'recency')
 
 
 class MemoryRAG:
-    def __init__(self, store, *, embedder=None, index_path=None, reranker='auto'):
+    def __init__(
+        self,
+        store,
+        *,
+        embedder=None,
+        index_path=None,
+        reranker='auto',
+        ann_enabled=True,
+        ann_exact_threshold=256,
+    ):
         self.store = store
         with store_lock(store.path):
             self.database = IndexDatabase(index_path or store.path.with_suffix('.index.sqlite3'))
@@ -27,6 +36,19 @@ class MemoryRAG:
         self.graph = TemporalGraph(self.database)
         self._embedder = embedder
         self._reranker = reranker
+
+        if not isinstance(ann_enabled, bool):
+            raise ValueError('ann_enabled must be a boolean')
+
+        if (
+            isinstance(ann_exact_threshold, bool)
+            or not isinstance(ann_exact_threshold, int)
+            or ann_exact_threshold < 1
+        ):
+            raise ValueError('ann_exact_threshold must be a positive integer')
+
+        self.ann_enabled = ann_enabled
+        self.ann_exact_threshold = ann_exact_threshold
 
     @property
     def reranker(self):
@@ -38,7 +60,22 @@ class MemoryRAG:
     def vectors(self):
         if self._embedder is None:
             self._embedder = FastEmbedder()
-        return VectorIndex(self.database, self._embedder)
+
+        if not self.ann_enabled:
+            return VectorIndex(self.database, self._embedder)
+
+        corpus_size = len(self.store.list())
+
+        if corpus_size >= self.ann_exact_threshold:
+            return ApproximateVectorIndex(
+                self.database,
+                self._embedder,
+            )
+
+        return VectorIndex(
+            self.database,
+            self._embedder,
+        )
 
     @locked
     def sync(self, *, user_id, semantic=True):
@@ -99,6 +136,9 @@ class MemoryRAG:
             lexical = [replace(r, content=document_text(r), summary=None) for r in records]
             channels['keyword'] = [r.id for r in self.store.ranker.rank(query, lexical, now=as_of)[:pool]]
         if mode in {'semantic', 'hybrid'}:
+            # Select exact search for smaller corpora and ANN search for
+            # larger workloads. The vector index remains persistent and
+            # restrictive session filters are applied after retrieval.
             vectors = self.vectors
             # Sync the whole current user's corpus, then filter results. A restrictive
             # session query must not evict other sessions from the persistent index.

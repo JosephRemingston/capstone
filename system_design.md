@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, and external evaluation. Production server storage and API/demo surfaces remain planned; a local scheduled cleanup worker is implemented. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
+The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, external evaluation, an authenticated FastAPI/demo surface, privacy endpoints, operational probes/metrics, and deterministic LSH ANN retrieval. Production database migration and deployment remain separate planned work. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
 
 ## 2. Repository Analysis
 
@@ -39,7 +39,7 @@ The current repository contains:
 | RAG/vector layer | Implemented locally | BGE embeddings, SQLite vectors, hybrid retrieval, bounded context, and LangChain Gemini with checked citations. |
 | Graph layer | Implemented locally | Typed SQLite graph with provenance, valid/recorded time, aliases, task edges, and traversal. |
 | ML training | Experimental implementation | XGBoost trained on Hippocorpus importance ratings; reproducible training and held-out metrics in `reports/importance_report.md`. |
-| REST API | Not implemented | No HTTP API exists yet. |
+| REST API | Implemented | FastAPI authentication, memory, search, health, metrics, and privacy endpoints. |
 
 ## 3. Implemented, Partial, Planned, and Out of Scope
 
@@ -70,11 +70,9 @@ Partially implemented:
 
 Planned:
 
-- REST API using FastAPI or similar.
 - In-domain validation and calibration of XGBoost importance prediction.
 - In-domain conversational training labels beyond Hippocorpus.
 - Production storage backend.
-- ANN vector storage for larger workloads.
 - Broader graph entity/relation extraction from paragraphs.
 - Controlled forgetting.
 - Continuous learning from feedback/retrieval success.
@@ -87,7 +85,6 @@ Out of scope for the current phase:
 - Unbounded graph reasoning.
 - Training custom embedding models.
 - Fine-tuning generation models.
-- Authentication and authorization.
 - Cloud deployment.
 
 ## 4. Current System Overview
@@ -379,14 +376,14 @@ Planned complete architecture responsibilities:
 | Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Deadlines, inactivity archival, and expiry visibility implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
-| Vector store | Store embeddings for retrieval. | SQLite normalized vectors and exact cosine retrieval implemented. |
+| Vector store | Store embeddings for retrieval. | SQLite normalized vectors with exact cosine retrieval for small corpora and random-hyperplane LSH ANN retrieval above the configured threshold. |
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | SQLite graph with bitemporal edges, aliases, evidence, and bounded traversal implemented. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
 | Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
 | Forgetting engine | Expire/archive memories based on value and age. | Read visibility, archive views, physical expiry cleanup, and lossless compaction implemented. |
 | Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion builds a candidate pool; a local cross-encoder reranks Top-K. Importance/category/tier/recency enter the keyword channel. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
-| REST API | HTTP access surface for backend/UI/agent integration. | Planned. |
+| REST API | HTTP access surface for backend/UI/agent integration. | FastAPI implementation with JWT/RBAC, privacy endpoints, validation, and standardized responses. |
 | Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | External retrieval/retention reports implemented; human judgment and generated-answer quality pending. |
 
 ## 16. Complete Training Pipeline
@@ -476,38 +473,43 @@ python3 -m main get MEMORY_ID --pretty
 python3 -m main stats --pretty
 ```
 
-Planned REST API examples:
+Implemented REST API examples:
 
 ```text
-POST /memories/process
-GET /memories?user_id=...
-GET /memories/search?user_id=...&query=...
-POST /memories/feedback
+POST /api/v1/auth/signup
+POST /api/v1/auth/login
+POST /api/v1/memories
+GET  /api/v1/memories
+GET  /api/v1/memories/{id}
+POST /api/v1/memories/search
+GET  /api/v1/me/export?format=json|csv
+DELETE /api/v1/me
+GET /health/live
+GET /health/ready
+GET /metrics
 ```
-
-REST API endpoints are not implemented yet.
 
 ## 19. Security and Privacy Considerations
 
 Current state:
 
-- Local JSONL persistence exists and may contain sensitive user memory content.
-- No authentication exists yet.
-- No logging exists yet.
-- No API surface exists yet.
+- Local JSONL persistence remains authoritative and may contain sensitive user memory content.
+- Argon2 password hashing and short-lived JWT access tokens are implemented.
+- Protected routes enforce user/admin roles and derive ownership from the authenticated subject.
+- Structured JSON logging, request IDs, Prometheus metrics, and health probes are implemented.
+- JSON/CSV export and account deletion are implemented.
 
 Future requirements:
 
 - User memory must be isolated by `user_id`.
 - Sensitive content should be minimized and redacted where possible.
 - Logs should not leak raw private memory content.
-- Deletion/export workflows should be added before production use.
 - Any graph/vector/database layer must enforce user-level data boundaries.
 - Retrieval must avoid mixing memories between users or sessions.
 
 ## 20. Operational Readiness
 
-Current operational readiness is limited to local unit tests and manual CLI smoke testing.
+Operational signals now include HTTP request counts/latency, authentication events, memory-ingestion counts, JSON structured request logs, and liveness/readiness checks.
 
 Future operational signals:
 
@@ -536,7 +538,7 @@ Future operational signals:
 
 - Should the next production storage backend be SQLite, Postgres, or a document database?
 - Which conversational dataset can validate transfer of Hippocorpus-trained importance scoring?
-- When should local BGE embeddings and exact SQLite scans move to an ANN service?
+- How should the local LSH ANN configuration be tuned against workload size and recall?
 - How should paragraph-level extraction extend the implemented typed bitemporal graph?
 - Which independent human judgments and full-system baselines should extend LoCoMo/LongMemEval?
 - How should privacy, deletion, and export be handled for user memories?
@@ -544,11 +546,11 @@ Future operational signals:
 ## 23. Recommended Next Steps
 
 1. Configure the implemented conservative expiry cleanup worker; broader forgetting policies remain future work.
-2. Add REST API endpoints and production storage.
+2. Complete production storage and deployment as a separate infrastructure track.
 3. Improve extraction coverage and evaluate hosted answer quality.
 4. Extend external retrieval/retention evidence with independent human conflict/personalization judgments.
-5. Add monitoring and privacy/deletion/export controls.
-6. Scale the implemented vector/graph indexes when workloads require it.
+5. Add background reminder delivery and the human feedback loop as separate capstone tracks.
+6. Tune the implemented LSH ANN configuration when workloads require it.
 
 ML modeling and its datasets are a separate research track.
 
@@ -560,7 +562,7 @@ The current milestone is:
 Structured Memory Core, ranked keyword retrieval, local JSONL store, and CLI implemented.
 ```
 
-The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It now includes local vector/hybrid retrieval, cited RAG, temporal graph indexes, and external evaluation. Production concurrent storage, REST APIs, deployment, broader extraction, and human quality evaluation remain. ML research is separate.
+The project has implemented memory structure, processing decisions, local JSONL storage, ranked keyword search, and CLI access. It now includes local vector/hybrid retrieval, cited RAG, temporal graph indexes, and external evaluation. Production concurrent storage, deployment, broader extraction, background reminder delivery, human feedback, and human quality evaluation remain. ML research is separate.
 
 ## 25. Conversational Task Updates
 

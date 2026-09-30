@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS vectors (
  text TEXT NOT NULL, start_offset INTEGER, end_offset INTEGER, digest TEXT NOT NULL,
  dimension INTEGER NOT NULL, vector BLOB NOT NULL, PRIMARY KEY(user_id,model,chunk_id));
 CREATE INDEX IF NOT EXISTS vector_owner ON vectors(user_id,model,memory_id);
+CREATE TABLE IF NOT EXISTS lsh_state (user_id TEXT NOT NULL, model TEXT NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(user_id,model));
+CREATE TABLE IF NOT EXISTS lsh_buckets (
+ user_id TEXT NOT NULL, model TEXT NOT NULL, table_id INTEGER NOT NULL, bucket INTEGER NOT NULL, chunk_id TEXT NOT NULL,
+ PRIMARY KEY(user_id,model,table_id,bucket,chunk_id));
+CREATE INDEX IF NOT EXISTS lsh_lookup ON lsh_buckets(user_id,model,table_id,bucket);
 CREATE TABLE IF NOT EXISTS nodes (
  user_id TEXT NOT NULL, id TEXT NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL,
  PRIMARY KEY(user_id,id));
@@ -140,6 +145,130 @@ class VectorIndex:
         results = []
         with self.database.connect() as db:
             for row in db.execute('SELECT * FROM vectors WHERE user_id=? AND model=?', (user_id, self.embedder.model_id)):
+                if row['memory_id'] not in allowed_ids:
+                    continue
+                if row['dimension'] != self.embedder.dimension:
+                    raise ValueError('Vector index dimension mismatch; rebuild the index')
+                stored = struct.unpack('<' + 'f' * row['dimension'], row['vector'])
+                similarity = sum(a * b for a, b in zip(vector, stored))
+                if similarity >= minimum:
+                    results.append({'memory_id': row['memory_id'], 'chunk_id': row['chunk_id'],
+                                    'text': row['text'], 'score': similarity,
+                                    'start': row['start_offset'], 'end': row['end_offset']})
+        return sorted(results, key=lambda item: (-item['score'], item['chunk_id']))[:limit]
+
+
+class ApproximateVectorIndex:
+    """Random-hyperplane LSH index for approximate cosine search.
+
+    The existing SQLite vector table remains the source of vector data. This index
+    adds multiple locality-sensitive hash tables, so large searches inspect only
+    vectors that share one or more signatures with the query instead of scanning
+    the complete corpus. It is deterministic for a given embedding model.
+    """
+
+    def __init__(self, database: IndexDatabase, embedder: Embedder, *, tables: int = 8, bits: int = 10,
+                 seed: int = 1729):
+        if not 1 <= tables <= 32 or not 1 <= bits <= 20:
+            raise ValueError('LSH tables must be 1–32 and bits must be 1–20')
+        self.database, self.embedder = database, embedder
+        self.tables, self.bits, self.seed = tables, bits, seed
+        self._planes = self._build_planes()
+        self.exact = VectorIndex(database, embedder)
+
+    def _build_planes(self):
+        import random
+        planes = []
+        for table_id in range(self.tables):
+            table = []
+            for bit in range(self.bits):
+                rng = random.Random(f'{self.seed}:{self.embedder.model_id}:{table_id}:{bit}')
+                vector = [rng.gauss(0.0, 1.0) for _ in range(self.embedder.dimension)]
+                norm = sum(value * value for value in vector) ** 0.5
+                table.append([value / norm for value in vector])
+            planes.append(table)
+        return planes
+
+    @staticmethod
+    def _fingerprint(rows) -> str:
+        return sha256(''.join(f"{row['chunk_id']}:{row['digest']}\n" for row in sorted(rows, key=lambda r: r['chunk_id'])).encode()).hexdigest()
+
+    def _signature(self, vector, table_id: int) -> int:
+        signature = 0
+        for bit, plane in enumerate(self._planes[table_id]):
+            dot = sum(a * b for a, b in zip(vector, plane))
+            if dot >= 0:
+                signature |= 1 << bit
+        return signature
+
+    def _rebuild_buckets(self, user_id: str, rows) -> None:
+        with self.database.connect() as db:
+            db.execute('DELETE FROM lsh_buckets WHERE user_id=? AND model=?', (user_id, self.embedder.model_id))
+            inserts = []
+            for row in rows:
+                if row['dimension'] != self.embedder.dimension:
+                    raise ValueError('Vector index dimension mismatch; rebuild the index')
+                vector = struct.unpack('<' + 'f' * row['dimension'], row['vector'])
+                for table_id in range(self.tables):
+                    inserts.append((user_id, self.embedder.model_id, table_id, self._signature(vector, table_id), row['chunk_id']))
+            db.executemany('INSERT INTO lsh_buckets VALUES (?,?,?,?,?)', inserts)
+
+    def sync(self, records: list[MemoryRecord], *, user_id: str) -> dict:
+        result = self.exact.sync(records, user_id=user_id)
+        with self.database.connect() as db:
+            rows = list(db.execute('SELECT chunk_id,digest,dimension,vector FROM vectors WHERE user_id=? AND model=?',
+                                   (user_id, self.embedder.model_id)))
+            fingerprint = self._fingerprint(rows)
+            state = db.execute('SELECT fingerprint FROM lsh_state WHERE user_id=? AND model=?',
+                               (user_id, self.embedder.model_id)).fetchone()
+        if state is None or state['fingerprint'] != fingerprint:
+            self._rebuild_buckets(user_id, rows)
+            with self.database.connect() as db:
+                db.execute('INSERT OR REPLACE INTO lsh_state VALUES (?,?,?)',
+                           (user_id, self.embedder.model_id, fingerprint))
+        result['ann'] = {'algorithm': 'random_hyperplane_lsh', 'tables': self.tables, 'bits': self.bits,
+                         'indexed_chunks': len(rows)}
+        return result
+
+    def search(self, query: str, *, user_id: str, allowed_ids: set[str], limit=20, minimum=0.35) -> list[dict]:
+        if limit < 0 or not -1 <= minimum <= 1 or not user_id:
+            raise ValueError('Invalid vector search parameters')
+        if not query.strip() or not allowed_ids or limit == 0:
+            return []
+        vector = normalized(self.embedder.query(query), self.embedder.dimension)
+        candidate_chunks: set[str] = set()
+        with self.database.connect() as db:
+            # Multi-probe LSH: inspect the exact bucket first, then Hamming-distance
+            # one and two buckets when necessary. This keeps the search approximate
+            # while reducing false negatives caused by a single random projection.
+            for radius in (0, 1, 2):
+                for table_id in range(self.tables):
+                    bucket = self._signature(vector, table_id)
+                    masks = [0] if radius == 0 else []
+                    if radius >= 1:
+                        masks.extend(1 << bit for bit in range(self.bits))
+                    if radius >= 2:
+                        for first in range(self.bits):
+                            for second in range(first + 1, self.bits):
+                                masks.append((1 << first) | (1 << second))
+                    for mask in masks:
+                        candidate = bucket ^ mask
+                        for row in db.execute(
+                            'SELECT chunk_id FROM lsh_buckets WHERE user_id=? AND model=? AND table_id=? AND bucket=?',
+                            (user_id, self.embedder.model_id, table_id, candidate),
+                        ):
+                            candidate_chunks.add(row['chunk_id'])
+                if candidate_chunks:
+                    break
+            if not candidate_chunks:
+                return []
+            placeholders = ','.join('?' for _ in candidate_chunks)
+            params = [user_id, self.embedder.model_id, *candidate_chunks]
+            rows = db.execute(
+                f'SELECT * FROM vectors WHERE user_id=? AND model=? AND chunk_id IN ({placeholders})', params
+            )
+            results = []
+            for row in rows:
                 if row['memory_id'] not in allowed_ids:
                     continue
                 if row['dimension'] != self.embedder.dimension:

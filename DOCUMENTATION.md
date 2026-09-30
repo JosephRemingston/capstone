@@ -10,8 +10,7 @@ cited answers from that evidence.
 It is designed to answer questions a plain transcript cannot answer well:
 which messages should persist, which fact is current after an update, whether a
 task remains open, which evidence supports an answer, and what the system knew
-at a past time. It is a Python memory-core implementation, not a hosted chat
-product or production database service.
+at a past time. It is a Python memory-core implementation with a local authenticated HTTP/demo surface; production database migration and deployment remain separate concerns.
 
 ## What it builds
 
@@ -32,9 +31,7 @@ CogniMem provides these connected capabilities:
 | Cleanup | Safely removes eligible expired memories and derived index data. |
 | ML experiment | Offers an optional XGBoost importance scorer; it is not the default. |
 
-Not currently provided: a REST API, web UI, authenticated multi-user server,
-production database, automated scheduler installation, general-purpose relation
-extraction, or independently human-rated answer quality.
+Not currently provided: production database migration, automated scheduler installation, general-purpose relation extraction, or independently human-rated answer quality.
 
 ## Architecture
 
@@ -487,7 +484,7 @@ python3 -m unittest discover -s tests -q
 python3 -m compileall -q main training tests
 ```
 
-The standard suite currently has 134 tests; four optional ML tests are skipped
+The standard suite currently has 139 tests; four optional ML tests are skipped
 when trained artifact metadata is unavailable. Tests cover the core pipeline,
 rules, lifecycle, tasks, revisions, ranking, conflicts, graph/RAG, local reranking,
 cleanup, locks, and CLI behavior.
@@ -515,3 +512,79 @@ cleanup, locks, and CLI behavior.
 Focused supporting material remains in `README.md`, `system_design.md`,
 `docs/retrieval_graph.md`, `docs/cleanup.md`, and `docs/reports/`. This
 file is the complete single-document reference for the system.
+
+## 14. HTTP API and security layer
+
+The HTTP surface is implemented in `api/` without changing the Memory Core's
+ownership boundaries. `MemoryCore` still owns processing and privacy redaction;
+`LocalMemoryStore` remains the authoritative JSONL observation log; SQLite remains
+used for rebuildable indexes. The API layer supplies transport validation,
+identity, authorization, privacy endpoints, and operational instrumentation.
+
+### Endpoints
+
+| Method | Endpoint | Purpose | Auth |
+| --- | --- | --- | --- |
+| GET | `/health/live` | Liveness probe | No |
+| GET | `/health/ready` | Readiness checks for auth, memory, and index stores | No |
+| GET | `/metrics` | Prometheus exposition | No |
+| POST | `/api/v1/auth/signup` | Create a user account | No |
+| POST | `/api/v1/auth/login` | Issue a short-lived access token | No |
+| GET | `/api/v1/me` | Return the authenticated account | Bearer token |
+| POST | `/api/v1/memories` | Process and persist a memory | Bearer token |
+| GET | `/api/v1/memories` | List the caller's memories | Bearer token |
+| GET | `/api/v1/memories/{id}` | Read one caller-owned memory | Bearer token |
+| POST | `/api/v1/memories/search` | Keyword, semantic, hybrid, graph, or recency retrieval | Bearer token |
+| GET | `/api/v1/me/export?format=json\|csv` | Export account and memory data | Bearer token |
+| DELETE | `/api/v1/me` | Delete the account and its persisted memory/index data | Bearer token |
+| GET | `/demo/` | Lightweight browser demo | No |
+
+All JSON API responses use a common envelope containing `success`, `data`,
+`error`, and `request_id`. FastAPI/Pydantic validation failures use the same
+error envelope rather than leaking framework internals.
+
+### Authentication and authorization
+
+Passwords are hashed with Argon2id through `argon2-cffi`; plaintext passwords,
+password hashes, bearer tokens, and secrets are never returned by the API.
+Access tokens are signed HS256 JWTs with `sub`, `role`, `iat`, `exp`, and `typ`
+claims. The secret must contain at least 32 bytes and is supplied through the
+environment. Protected resources use a role dependency (`user` or `admin`) and
+always derive the memory owner from the authenticated token. A caller cannot
+supply another user's `user_id` to read or search their data.
+
+### Privacy operations
+
+JSON export contains the non-secret account fields plus every persisted memory
+revision owned by the caller. CSV export provides a tabular memory export. Account
+deletion removes the caller's observations from the authoritative JSONL log and
+purges their vector/graph/index rows before removing the identity record. No
+password hash or authentication secret is included in exports.
+
+### Observability
+
+HTTP requests emit JSON structured logs with request ID, method, route, status,
+and duration. Sensitive request headers and credential fields are excluded from
+logs. Prometheus counters/histograms cover request traffic and latency, while
+separate counters track authentication events and memory ingestion. Readiness
+checks verify the auth database, authoritative memory store, and rebuildable
+index database.
+
+### Approximate-nearest-neighbor retrieval
+
+`ApproximateVectorIndex` adds deterministic random-hyperplane locality-sensitive
+hashing (multi-table, multi-probe) on top of the existing normalized cosine
+vectors. Small corpora continue to use the exact SQLite vector scan. Once the
+configured corpus threshold is reached, semantic retrieval uses LSH buckets to
+produce a candidate set and scores only those candidates. The authoritative
+vector table is unchanged, so the ANN index is rebuildable and does not replace
+the existing source/index separation. The threshold is configured by
+`COGNIMEM_ANN_EXACT_THRESHOLD` and ANN can be disabled with
+`COGNIMEM_ANN_ENABLED=false`.
+
+### Scope boundary
+
+This implementation intentionally does **not** implement the other remaining
+capstone items: production database migration, deployment setup, background
+reminder delivery, broader entity/coreference/relationship extraction, or the
+human feedback loop. Those remain available for the other contributor.
