@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 import math
 import re
+import time
 
 from .embeddings import FastEmbedder
 from ..graph import TemporalGraph, iso
@@ -16,6 +17,28 @@ from ..storage.locking import locked, store_lock
 from ..storage.cleanup import register_index
 
 MODES = ('keyword', 'semantic', 'graph', 'hybrid', 'recency')
+
+
+def graph_predicates(query):
+    """Return graph predicates explicitly suggested by a natural-language query."""
+    lowered = query.casefold()
+    predicates = set()
+    cues = (
+        (r'\b(live|lives|lived|home|residence|city)\b', {'lives_in'}),
+        (r'\b(work|works|worked|employer|company|office|based|headquarter)\w*\b', {'works_at', 'based_in'}),
+        (r'\b(report(?:s|ed)? to|manager|supervisor)\b', {'reports_to'}),
+        (r'\b(prefer|prefers|preference|like|likes|favorite|favourite)\w*\b', {'likes'}),
+        (r'\b(allerg|allergy)\w*\b', {'allergic_to'}),
+        (r'\b(occupation|profession|job|role)\b', {'occupation'}),
+        (r'\b(task|deadline|due)\b', {'has_task', 'task_status', 'due_at'}),
+        (r'\b(project|depends|dependency)\b', {'works_on', 'depends_on'}),
+        (r'\b(member|membership|belongs)\b', {'member_of'}),
+        (r'\b(owner|owned)\b', {'owned_by'}),
+    )
+    for pattern, values in cues:
+        if re.search(pattern, lowered):
+            predicates.update(values)
+    return predicates
 
 
 class MemoryRAG:
@@ -36,17 +59,14 @@ class MemoryRAG:
         self.graph = TemporalGraph(self.database)
         self._embedder = embedder
         self._reranker = reranker
-
         if not isinstance(ann_enabled, bool):
             raise ValueError('ann_enabled must be a boolean')
-
         if (
             isinstance(ann_exact_threshold, bool)
             or not isinstance(ann_exact_threshold, int)
             or ann_exact_threshold < 1
         ):
             raise ValueError('ann_exact_threshold must be a positive integer')
-
         self.ann_enabled = ann_enabled
         self.ann_exact_threshold = ann_exact_threshold
 
@@ -60,22 +80,12 @@ class MemoryRAG:
     def vectors(self):
         if self._embedder is None:
             self._embedder = FastEmbedder()
-
         if not self.ann_enabled:
             return VectorIndex(self.database, self._embedder)
-
         corpus_size = len(self.store.list())
-
         if corpus_size >= self.ann_exact_threshold:
-            return ApproximateVectorIndex(
-                self.database,
-                self._embedder,
-            )
-
-        return VectorIndex(
-            self.database,
-            self._embedder,
-        )
+            return ApproximateVectorIndex(self.database, self._embedder)
+        return VectorIndex(self.database, self._embedder)
 
     @locked
     def sync(self, *, user_id, semantic=True):
@@ -110,7 +120,8 @@ class MemoryRAG:
 
     @locked
     def search(self, query, *, user_id, mode='hybrid', limit=5, as_of=None, known_at=None,
-               max_hops=2, rerank=None, candidate_limit=None, **filters):
+               max_hops=2, rerank=None, candidate_limit=None, channels=None, **filters):
+        search_started = time.perf_counter()
         for timestamp in (as_of, known_at):
             if timestamp is not None:
                 iso(timestamp)
@@ -121,24 +132,34 @@ class MemoryRAG:
             raise ValueError('candidate_limit must be an integer between limit and 200')
         if rerank not in (None, True, False):
             raise ValueError('rerank must be true, false, or null')
+        defaults = {'keyword': ('keyword',), 'semantic': ('semantic',),
+                    'graph': ('graph',), 'hybrid': ('keyword', 'semantic', 'graph'),
+                    'recency': ('recency',)}
+        active_channels = defaults[mode] if channels is None else tuple(channels)
+        if (channels is not None and mode != 'hybrid') or not active_channels or len(set(active_channels)) != len(active_channels):
+            raise ValueError('Custom channels require hybrid mode and must be unique')
+        if any(channel not in {'keyword', 'semantic', 'graph'} for channel in active_channels):
+            raise ValueError('Custom channels may contain keyword, semantic, and graph')
         if not user_id:
             raise ValueError('A user_id is required for RAG')
         if not query.strip() or not limit:
             return []
         records = self.candidates(user_id=user_id, as_of=as_of, known_at=known_at, **filters)
+        timings = {'filter': time.perf_counter() - search_started, 'keyword': 0.0,
+                   'vector': 0.0, 'graph': 0.0, 'fusion': 0.0, 'reranker': 0.0}
         by_id = {record.id: record for record in records}
         allowed = set(by_id)
         channels, dense, paths = {}, {}, []
-        if mode == 'recency':
+        if 'recency' in active_channels:
             channels['recency'] = [r.id for r in sorted(records, key=lambda r: (r.created_at, r.id), reverse=True)[:pool]]
-        if mode in {'keyword', 'hybrid'}:
+        if 'keyword' in active_channels:
+            stage_started = time.perf_counter()
             # Speaker/date metadata are part of the retrieval document, not labels.
             lexical = [replace(r, content=document_text(r), summary=None) for r in records]
             channels['keyword'] = [r.id for r in self.store.ranker.rank(query, lexical, now=as_of)[:pool]]
-        if mode in {'semantic', 'hybrid'}:
-            # Select exact search for smaller corpora and ANN search for
-            # larger workloads. The vector index remains persistent and
-            # restrictive session filters are applied after retrieval.
+            timings['keyword'] = time.perf_counter() - stage_started
+        if 'semantic' in active_channels:
+            stage_started = time.perf_counter()
             vectors = self.vectors
             # Sync the whole current user's corpus, then filter results. A restrictive
             # session query must not evict other sessions from the persistent index.
@@ -147,20 +168,32 @@ class MemoryRAG:
             for hit in vectors.search(query, user_id=user_id, allowed_ids=allowed, limit=pool * 3):
                 dense.setdefault(hit['memory_id'], hit)
             channels['semantic'] = list(dense)[:pool]
-        if mode in {'graph', 'hybrid'}:
+            timings['vector'] = time.perf_counter() - stage_started
+        if 'graph' in active_channels:
+            stage_started = time.perf_counter()
             self.graph.sync(self.store._read_log(), user_id=user_id)
+            desired_predicates = graph_predicates(query)
             seeds = self.graph.entities(query, user_id=user_id, known_at=known_at)
             if re.search(r'\b(my|me|i)\b', query, re.I):
                 seeds += self.graph.entities('User', user_id=user_id, known_at=known_at, exact=True)
             paths = self.graph.traverse([s['id'] for s in seeds], user_id=user_id,
                                        as_of=as_of, known_at=known_at, max_hops=max_hops, allowed_ids=allowed)
+            if mode == 'hybrid':
+                paths = [path for path in paths if desired_predicates and
+                         all(edge['predicate'] in desired_predicates for edge in path['edges'])]
+                paths.sort(key=lambda path: (-sum(edge['predicate'] in desired_predicates
+                                                   for edge in path['edges']),
+                                             len(path['edges']), tuple(path['source_ids'])))
             # Negative assertions are useful direct evidence, but are never traversed
             # as positive links when constructing multi-hop paths.
             seed_ids = {s['id'] for s in seeds}
             negatives = [e['source_id'] for e in self.graph.relations(user_id=user_id, as_of=as_of, known_at=known_at)
                          if not e['positive'] and e['source_id'] in allowed
+                         and (not desired_predicates or e['predicate'] in desired_predicates)
                          and (e['subject'] in seed_ids or e['object'] in seed_ids)]
             channels['graph'] = list(dict.fromkeys([*negatives, *(identifier for path in paths for identifier in path['source_ids'])]))[:pool]
+            timings['graph'] = time.perf_counter() - stage_started
+        stage_started = time.perf_counter()
         weights = {'keyword': .3, 'semantic': .5, 'graph': .2, 'recency': 1.0}
         scores, details = {}, {}
         for channel, identifiers in channels.items():
@@ -185,12 +218,14 @@ class MemoryRAG:
                 record_chunks = chunks(record)
                 snippet = max(record_chunks, key=lambda c: len(terms & tokenize(c.text))).text if record_chunks else ''
             snippets[identifier] = snippet
+        timings['fusion'] = time.perf_counter() - stage_started
 
         should_rerank = (mode == 'hybrid') if rerank is None else rerank
         reranker_scores = {}
         reranker_status = {'status': 'disabled', 'model': None, 'error_type': None}
         ordered = fused
         if should_rerank and fused:
+            stage_started = time.perf_counter()
             try:
                 model = self.reranker
                 if model is None:
@@ -224,14 +259,18 @@ class MemoryRAG:
             except Exception as exc:
                 reranker_status = {'status': 'fallback', 'model': getattr(self._reranker, 'model_id', None),
                                    'error_type': type(exc).__name__}
+            timings['reranker'] = time.perf_counter() - stage_started
 
         result = []
+        timings['total'] = time.perf_counter() - search_started
+        timing_ms = {key: value * 1000 for key, value in timings.items()}
         for identifier in ordered[:limit]:
             record = by_id[identifier]
             metadata = {**reranker_status, 'score': reranker_scores.get(identifier)}
             result.append({'memory_id': identifier, 'text': snippets[identifier], 'score': scores[identifier],
                            'fusion_score': scores[identifier], 'reranker_score': reranker_scores.get(identifier),
                            'reranker': metadata, 'candidate_pool_size': len(fused),
+                           'channels': list(active_channels), 'timings_ms': timing_ms,
                            'signals': details[identifier], 'record': record.to_dict(),
                            'paths': [path for path in paths if identifier in path['source_ids']]})
         return result
