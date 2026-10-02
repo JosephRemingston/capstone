@@ -87,6 +87,8 @@ Raw message
 
 Step by step:
 
+
+
 1. `MemoryInput` receives the raw content and metadata.
 2. `MemoryClassifier` assigns one memory category.
 3. `MemoryRecord.from_input()` creates the normalized memory object.
