@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CogniMem Demo</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#11182b; --border:#263452; --text:#e8eefc; --muted:#93a4c5; --accent:#7c9cff; --danger:#ff6b81; }
+    * { box-sizing:border-box; } body { margin:0; font-family:Inter,system-ui,sans-serif; background:linear-gradient(135deg,#0b1020,#10182c); color:var(--text); }
+    main { max-width:1100px; margin:auto; padding:32px 18px 60px; } h1 { margin:0 0 6px; } p { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; } .card { background:rgba(17,24,43,.9); border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:0 14px 40px rgba(0,0,0,.18); }
+    label { display:block; margin:10px 0 6px; color:var(--muted); font-size:.9rem; } input,textarea,select,button { width:100%; border:1px solid var(--border); border-radius:10px; padding:11px; background:#0c1324; color:var(--text); } textarea { min-height:120px; resize:vertical; }
+    button { cursor:pointer; background:var(--accent); border-color:var(--accent); color:#081020; font-weight:700; margin-top:10px; } button.secondary { background:transparent; color:var(--text); } button.danger { background:var(--danger); border-color:var(--danger); }
+    pre { white-space:pre-wrap; word-break:break-word; background:#080d19; padding:14px; border-radius:10px; max-height:500px; overflow:auto; } .row { display:flex; gap:10px; } .row > * { flex:1; } #status { min-height:24px; color:var(--muted); } .hidden { display:none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>CogniMem</h1><p>Lightweight demo for the authenticated memory API.</p>
+  <div id="status"></div>
+  <section class="grid" id="auth">
+    <div class="card"><h2>Sign up</h2><label>Email</label><input id="suEmail" type="email"><label>Password</label><input id="suPass" type="password"><button onclick="signup()">Create account</button></div>
+    <div class="card"><h2>Log in</h2><label>Email</label><input id="liEmail" type="email"><label>Password</label><input id="liPass" type="password"><button onclick="login()">Log in</button></div>
+  </section>
+  <section class="grid hidden" id="app">
+    <div class="card"><h2>Add memory</h2><label>Session ID</label><input id="session" value="demo"><label>Content</label><textarea id="content" placeholder="I prefer concise technical explanations."></textarea><button onclick="addMemory()">Store memory</button></div>
+    <div class="card"><h2>Search</h2><label>Query</label><input id="query" placeholder="What do I prefer?"><label>Mode</label><select id="mode"><option>hybrid</option><option>keyword</option><option>semantic</option><option>graph</option><option>recency</option></select><button onclick="search()">Search</button></div>
+    <div class="card"><h2>Privacy</h2><button class="secondary" onclick="downloadExport('json')">Export JSON</button><button class="secondary" onclick="downloadExport('csv')">Export CSV</button><button class="danger" onclick="deleteAccount()">Delete account</button><button class="secondary" onclick="logout()">Log out</button></div>
+    <div class="card"><h2>Memories</h2><button class="secondary" onclick="loadMemories()">Refresh</button><pre id="output">[]</pre></div>
+  </section>
+</main>
+<script>
+const API = '/api/v1'; let token = sessionStorage.getItem('cognimem_token');
+const $ = id => document.getElementById(id);
+function status(msg){ $('status').textContent = msg; }
+function headers(json=true){ const h={}; if(json) h['Content-Type']='application/json'; if(token) h.Authorization=`Bearer ${token}`; return h; }
+async function api(path, options={}) { const r=await fetch(path,{...options,headers:{...headers(options.body!==undefined),...(options.headers||{})}}); const data=await r.json().catch(()=>({})); if(!r.ok) throw new Error(data.error?.message||data.detail||`HTTP ${r.status}`); return data.data; }
+function showApp(){ $('auth').classList.toggle('hidden',!!token); $('app').classList.toggle('hidden',!token); if(token) loadMemories(); }
+async function signup(){ try { const data=await api(`${API}/auth/signup`,{method:'POST',body:JSON.stringify({email:$('suEmail').value,password:$('suPass').value})}); token=data.access_token; sessionStorage.setItem('cognimem_token',token); status('Account created.'); showApp(); } catch(e){status(e.message)} }
+async function login(){ try { const data=await api(`${API}/auth/login`,{method:'POST',body:JSON.stringify({email:$('liEmail').value,password:$('liPass').value})}); token=data.access_token; sessionStorage.setItem('cognimem_token',token); status('Logged in.'); showApp(); } catch(e){status(e.message)} }
+async function addMemory(){ try { await api(`${API}/memories`,{method:'POST',body:JSON.stringify({content:$('content').value,session_id:$('session').value,role:'user',metadata:{}})}); $('content').value=''; status('Memory stored.'); loadMemories(); } catch(e){status(e.message)} }
+async function search(){ try { const data=await api(`${API}/memories/search`,{method:'POST',body:JSON.stringify({query:$('query').value,mode:$('mode').value,limit:10})}); $('output').textContent=JSON.stringify(data,null,2); } catch(e){status(e.message)} }
+async function loadMemories(){ try { const data=await api(`${API}/memories?limit=50`); $('output').textContent=JSON.stringify(data,null,2); } catch(e){status(e.message)} }
+async function downloadExport(format){ try { const r=await fetch(`${API}/me/export?format=${format}`,{headers:headers(false)}); if(!r.ok) throw new Error('Export failed'); const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cognimem-export.${format}`; a.click(); URL.revokeObjectURL(a.href); } catch(e){status(e.message)} }
+async function deleteAccount(){ if(!confirm('Permanently delete your CogniMem account and memory data?')) return; try { await api(`${API}/me`,{method:'DELETE'}); logout(); status('Account deleted.'); } catch(e){status(e.message)} }
+function logout(){ token=null; sessionStorage.removeItem('cognimem_token'); showApp(); }
+showApp();
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import time
 
 from .embeddings import FastEmbedder
 from ..graph import TemporalGraph, iso
-from ..storage.indexes import IndexDatabase, VectorIndex, document_text, chunks, digest
+from ..storage.indexes import IndexDatabase, VectorIndex, ApproximateVectorIndex, document_text, chunks, digest
 from ..domain.models import utc_now
 from .ranker import tokenize
 from .reranker import FastEmbedCrossEncoderReranker
@@ -42,7 +42,16 @@ def graph_predicates(query):
 
 
 class MemoryRAG:
-    def __init__(self, store, *, embedder=None, index_path=None, reranker='auto'):
+    def __init__(
+        self,
+        store,
+        *,
+        embedder=None,
+        index_path=None,
+        reranker='auto',
+        ann_enabled=True,
+        ann_exact_threshold=256,
+    ):
         self.store = store
         with store_lock(store.path):
             self.database = IndexDatabase(index_path or store.path.with_suffix('.index.sqlite3'))
@@ -50,6 +59,16 @@ class MemoryRAG:
         self.graph = TemporalGraph(self.database)
         self._embedder = embedder
         self._reranker = reranker
+        if not isinstance(ann_enabled, bool):
+            raise ValueError('ann_enabled must be a boolean')
+        if (
+            isinstance(ann_exact_threshold, bool)
+            or not isinstance(ann_exact_threshold, int)
+            or ann_exact_threshold < 1
+        ):
+            raise ValueError('ann_exact_threshold must be a positive integer')
+        self.ann_enabled = ann_enabled
+        self.ann_exact_threshold = ann_exact_threshold
 
     @property
     def reranker(self):
@@ -61,6 +80,11 @@ class MemoryRAG:
     def vectors(self):
         if self._embedder is None:
             self._embedder = FastEmbedder()
+        if not self.ann_enabled:
+            return VectorIndex(self.database, self._embedder)
+        corpus_size = len(self.store.list())
+        if corpus_size >= self.ann_exact_threshold:
+            return ApproximateVectorIndex(self.database, self._embedder)
         return VectorIndex(self.database, self._embedder)
 
     @locked

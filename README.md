@@ -4,7 +4,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 This repository implements the **Memory Core**, local semantic/hybrid retrieval, cited RAG, and a temporal knowledge graph. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
 
-JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). Production database servers and REST APIs remain future work.
+JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). The HTTP API, authenticated demo, privacy endpoints, observability, and scalable ANN retrieval are implemented in `api/` and the retrieval/storage layers.
 
 See [the repository architecture](docs/architecture.md) for package ownership and entry points.
 For the complete product, usage, architecture, feature, and operational reference, see
@@ -43,7 +43,6 @@ Implemented:
 
 Not implemented yet:
 
-- REST API
 - Production database storage
 - Neo4j integration
 - Broader forgetting policies beyond conservative expiry cleanup
@@ -362,15 +361,15 @@ baseline and `--candidate-limit` to bound reranking work.
 
 The remaining work should be implemented in phases. The current system already has memory structuring, lifecycle decisions, local JSONL persistence, and CLI access.
 
-| Priority | Component | What needs to be implemented | Why it matters |
+| Priority | Component | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | Cleanup operations | Scheduled expiry cleanup and lossless compaction are implemented; configure a supervisor/cron job for your store. | Preserves referenced evidence, holds, open tasks, and meaningful history. |
-| 2 | REST API | Expose memory processing, listing, lookup, and search through HTTP endpoints. | Makes the memory system usable by a backend, UI, or LLM agent. |
-| 3 | Retrieval quality | Improve paragraph-level fact extraction and assess Gemini answers after credentials are configured. | Current bounded graph extraction has low coverage on free-form conversations. |
-| 4 | Evaluation quality | Add independent human conflict/personalization labels and full memory-system baselines. | External retrieval/retention runners and recency/keyword/vector/graph/hybrid baselines now exist. |
-| 5 | Scale storage | Add an ANN vector backend and production concurrent storage when needed. | Current exact vector scans and local SQLite graph target local workloads. |
-| 6 | Monitoring/logging | Add structured logs, metrics, and store health checks. | Required before treating the system as production-ready. |
-| 7 | Privacy/security controls | Add deletion/export APIs and production authorization around the implemented redaction and user isolation rules. | Important because long-term memory may contain sensitive user information. |
+| 1 | Cleanup operations | Implemented | Scheduled/preview cleanup and lossless compaction are available. |
+| 2 | REST API | Implemented | FastAPI endpoints cover auth, memory ingestion/list/get/search, health, metrics, and privacy operations. |
+| 3 | Retrieval quality | Existing implementation | Hybrid retrieval, graph evidence, reranking, and evaluation remain available for research work. |
+| 4 | Evaluation quality | Existing pending work | Independent human reviews and live Gemini quality evaluation remain research tasks. |
+| 5 | Scale storage | Partially implemented | Deterministic LSH ANN retrieval is implemented; production database migration remains future work. |
+| 6 | Monitoring/logging | Implemented | JSON logs, Prometheus metrics, request IDs, and readiness/liveness checks are available. |
+| 7 | Privacy/security controls | Implemented | Argon2 authentication, JWT/RBAC, user isolation, export, and deletion are available. |
 
 ## ML Importance Model
 
@@ -739,3 +738,28 @@ See [the generated report](docs/reports/independent_evaluation.md),
 [cleanup policy and scheduling](docs/cleanup.md). Independent human personalization
 and conflict-policy ratings remain pending until actual reviews are provided.
 Cleanup was tested on temporary stores; no real-user cleanup job was activated.
+
+## HTTP API, security, observability, and ANN
+
+The production-facing HTTP layer is under `api/` and deliberately leaves the
+remaining capstone TODO items (production database migration, deployment,
+background reminders, broader extraction, and human feedback) untouched.
+
+Install the API dependencies with `python -m pip install -r requirements-api.txt`,
+set `COGNIMEM_JWT_SECRET` to a random secret of at least 32 bytes, and start with:
+
+```bash
+python -m api
+```
+
+The demo UI is available at `/demo/`. API responses use the envelope
+`success/data/error/request_id`. Authentication uses Argon2 password hashes and
+short-lived HS256 access tokens; memory ownership is always derived from the
+authenticated subject rather than request input. `/metrics` exposes Prometheus
+metrics and `/health/live` and `/health/ready` provide liveness/readiness probes.
+
+Semantic retrieval automatically switches to a deterministic random-hyperplane
+LSH approximate-nearest-neighbor index after the configured corpus threshold.
+The existing exact SQLite vector index remains available for smaller corpora and
+as the authoritative vector store. Configure the threshold with
+`COGNIMEM_ANN_EXACT_THRESHOLD`.

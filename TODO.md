@@ -31,13 +31,13 @@
 
 ## Features left to build
 
-- [ ] REST API.
-- [ ] Frontend or demo application.
-- [ ] Authentication and authorization.
-- [ ] User data export and deletion endpoints.
-- [ ] Monitoring, metrics, structured logging, and store health checks.
+- [x] REST API.
+- [x] Frontend or demo application.
+- [x] Authentication and authorization.
+- [x] User data export and deletion endpoints.
+- [x] Monitoring, metrics, structured logging, and store health checks.
 - [ ] Production database backend.
-- [ ] Approximate-nearest-neighbor vector search for larger workloads.
+- [x] Approximate-nearest-neighbor vector search for larger workloads.
 - [ ] Deployment setup.
 - [ ] Background task/reminder delivery service.
 - [ ] Broader entity extraction, coreference resolution, and relationship extraction.

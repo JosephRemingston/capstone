@@ -12,3 +12,5 @@ memory_store/
 *.sqlite3-shm
 /docs/*
 !/docs/architecture.md
+memory_store/*.indexes.json
+memory_store/*.cleanup-schedule.json
