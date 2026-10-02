@@ -6,7 +6,7 @@ import unittest
 
 from main.application.core import MemoryCore
 from main.domain.models import MemoryInput, MemoryTier
-from main.retrieval.rag import MemoryRAG
+from main.retrieval.rag import MemoryRAG, graph_predicates
 from main.storage.store import LocalMemoryStore
 
 
@@ -91,7 +91,7 @@ class RerankerPipelineTests(unittest.TestCase):
     def test_parallel_channels_and_graph_provenance_survive_reranking(self):
         relation = self.add('Alice reports to Bob')
         rag = self.rag(FakeReranker())
-        hit = rag.search('Alice', user_id='u', mode='hybrid', limit=1)[0]
+        hit = rag.search('Who does Alice report to?', user_id='u', mode='hybrid', limit=1)[0]
         self.assertEqual(hit['memory_id'], relation.id)
         self.assertEqual(set(hit['signals']), {'keyword', 'semantic', 'graph'})
         self.assertTrue(hit['paths'])
@@ -147,6 +147,12 @@ class RerankerPipelineTests(unittest.TestCase):
             'alpha', user_id='u', mode='hybrid', limit=1, budget=512)
         self.assertEqual(list(context['sources']), [target.id])
         self.assertIn('target evidence', context['text'])
+
+    def test_graph_query_predicates_do_not_treat_unrelated_questions_as_relational(self):
+        self.assertEqual(graph_predicates('What milestone did Alice complete?'), set())
+        self.assertEqual(graph_predicates('Where is the company Alice works for based?'),
+                         {'works_at', 'based_in'})
+        self.assertEqual(graph_predicates('Who does Alice report to?'), {'reports_to'})
 
 
 if __name__ == '__main__':
