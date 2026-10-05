@@ -17,3 +17,8 @@ argon2-cffi==25.1.0
 prometheus-client==0.25.0
 torch==2.14.1
 onnx==1.23.1
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+PyJWT>=2.9,<3
+argon2-cffi>=23.1,<26
+prometheus-client>=0.20,<1

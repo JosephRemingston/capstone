@@ -1,405 +1,278 @@
-# CogniMem Capstone
+# CogniMem
 
-CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LLM agents.
+**A local-first, temporal memory system for personalized AI assistants.** CogniMem turns conversations into inspectable memories, keeps track of changes, and retrieves cited evidence for later answers. It combines rule-based retention, task and conflict management, a temporal knowledge graph, vector search, local reranking, and retrieval-augmented generation (RAG).
 
-This repository implements the **Memory Core**, local semantic/hybrid retrieval, cited RAG, and a temporal knowledge graph. The Memory Core defines how raw conversation content is converted into a structured memory object. It classifies the memory, extracts scoring signals, estimates importance, assigns a memory tier, and returns a serializable record that can later be stored in a database or used by retrieval systems.
+> **Research question:** How much does temporal and relational graph retrieval improve vector-based conversational memory retrieval and RAG? The controlled experiment compares vector-only, vector + reranker, vector + graph, and vector + graph + reranker while holding the dataset, prompt, answer policy, context size, and evaluation procedure fixed.
 
-JSONL stores authoritative memory history; SQLite stores rebuildable vector and temporal graph indexes. Hosted answers use **LangChain with Gemini 2.5 Flash**, configured through `.env`. See [setup, examples, and limits](docs/retrieval_graph.md). The HTTP API, authenticated demo, privacy endpoints, observability, and scalable ANN retrieval are implemented in `api/` and the retrieval/storage layers.
+## Why build it?
 
-See [the repository architecture](docs/architecture.md) for package ownership and entry points.
-For the complete product, usage, architecture, feature, and operational reference, see
-[DOCUMENTATION.md](DOCUMENTATION.md).
+An ordinary chat model has no reliable, structured account of everything a person said before. Saving every message verbatim is insufficient: greetings and obsolete reminders compete with useful facts; repeated statements waste space; newer facts may contradict older ones; and semantic similarity alone may miss time and relationships. “Where did I live before Bengaluru?” requires history, while “Where is the company I work for based?” may require a two-edge evidence path. A personalized answer should also show which memories support it.
 
-## Current Implementation Status
+CogniMem separates those responsibilities. It decides what to retain, preserves corrections and provenance, represents relationships with valid and recorded time, searches several evidence channels, and constrains answers to cited context. A personal assistant could remember communication preferences; a project copilot could track decisions, collaborators, and changing facts; a task assistant could retain deadlines and recurring work. The integrating application still owns the chat interface, consent, and any calendar or reminder delivery.
 
-Implemented:
+## What works today
 
-- Memory input structure
-- Memory record structure
-- Memory categories
-- Memory lifecycle tiers
-- Rule-based memory classification
-- Feature extraction for importance scoring
-- Heuristic importance scoring
-- Optional trained XGBoost and neural retention-proxy scorers, evaluated on conversational facts
-- Reproducible importance-model training, held-out metrics, and native model artifacts
-- Lifecycle tier assignment
-- Deadline-aware task expiry, inactivity archive views, and expiry-aware retrieval
-- Task completion, cancellation, rescheduling, and recurring occurrences with revision history
-- Supported fact/preference conflict detection and resolution
-- Durable memory consolidation with summaries and source evidence
-- History inspection, explicit conflict selection, and bulk reconciliation
-- Optional multi-memory segmentation
-- Conversational developer evaluation and a human-review template
-- Serialization and deserialization
-- Local JSONL memory store
-- Advanced ranked keyword retrieval using relevance, category, tier, recency, and importance
-- CLI interface
-- Local neural embeddings, persistent vector storage, and hybrid retrieval
-- Bounded RAG context, Gemini prompt integration, and checked citations
-- Typed temporal graph, aliases, relationship history, and multi-hop evidence paths
-- External LoCoMo/LongMemEval evaluation and baseline reports
-- Unit tests for the Memory Core behavior
-
-Not implemented yet:
-
-- Production database storage
-- Neo4j integration
-- Broader forgetting policies beyond conservative expiry cleanup
-- Evaluation dashboard, independent human conflict/personalization labels, and live Gemini quality evaluation
-
-## What This Layer Does
-
-The Memory Core takes an incoming user or assistant message and converts it into a normalized memory record.
-
-For example, this input:
-
-```text
-I prefer concise technical summaries.
-```
-
-can become a structured memory like:
-
-```text
-category: preference
-tier: long_term
-importance_score: calculated by heuristic scoring
-expires_at: none
-archive_after: future timestamp
-```
-
-The goal is to build the internal memory representation first. Later layers can decide where to store it and how to retrieve it.
-
-## Data Flow
-
-The current processing flow is:
-
-```text
-Raw message
-  -> MemoryInput
-  -> MemoryClassifier
-  -> MemoryRecord
-  -> FeatureExtractor
-  -> ImportanceScorer
-  -> LifecycleManager
-  -> Final MemoryRecord
-```
-
-Step by step:
-
-
-
-1. `MemoryInput` receives the raw content and metadata.
-2. `MemoryClassifier` assigns one memory category.
-3. `MemoryRecord.from_input()` creates the normalized memory object.
-4. `FeatureExtractor` generates numeric features from the content and metadata.
-5. `ImportanceScorer` calculates an importance score from `0.0` to `1.0`.
-6. `LifecycleManager` assigns the memory to a lifecycle tier.
-7. The final `MemoryRecord` is returned and can be serialized with `to_dict()`.
-
-## Main Interfaces
-
-The public interfaces are exposed from the `main` package.
-
-```python
-from main import MemoryCore, MemoryInput
-
-core = MemoryCore()
-
-record = core.process(
-    MemoryInput(
-        content="I prefer concise technical summaries.",
-        user_id="user_001",
-        session_id="session_001",
-        metadata={"interaction_score": 0.5},
-    )
-)
-
-print(record.to_dict())
-```
-
-## MemoryInput
-
-`MemoryInput` represents raw incoming interaction data.
-
-Fields:
-
-- `content`: raw message text
-- `user_id`: user identifier
-- `session_id`: conversation/session identifier
-- `role`: message role, default is `user`
-- `timestamp`: timestamp for the message
-- `metadata`: optional caller-provided metadata
-
-Example:
-
-```python
-MemoryInput(
-    content="Remind me to submit the capstone report tomorrow.",
-    user_id="user_001",
-    session_id="session_001",
-    role="user",
-    metadata={"interaction_score": 0.7},
-)
-```
-
-## MemoryRecord
-
-`MemoryRecord` is the normalized memory object created by the Memory Core.
-
-Fields:
-
-- `id`: generated memory ID
-- `content`: cleaned memory content
-- `user_id`: user identifier
-- `session_id`: session identifier
-- `role`: source role
-- `category`: memory category
-- `tier`: lifecycle tier
-- `created_at`: creation timestamp
-- `updated_at`: latest update timestamp
-- `confidence`: caller-provided assertion confidence (0–1), default `1.0`
-- `importance_score`: score from the baseline importance scorer
-- `access_count`: number of times the memory has been touched/accessed
-- `source_metadata`: metadata copied from the input
-- `features`: extracted numeric scoring features
-- `expires_at`: expiry hint for working or short-term memory
-- `archive_after`: archive hint for long-term memory
-- `due_at`: parsed/explicit task deadline
-- `task_status`: active, completed, or cancelled for tasks
-- `related_task_id`: task changed by this observation
-- `last_accessed_at`: explicit access timestamp used for inactivity
-- `recurrence`: cadence, interval, calendar anchor, and occurrence index
-- `next_due_at`: deadline of the current unresolved recurring occurrence
-- `task_occurrences`: completed/cancelled occurrences with dates and source event IDs
-- `memory_status`: `active`, `superseded`, or `consolidated` (separate from lifecycle tier)
-- `claim`: extracted subject, attribute, value, polarity, and exclusivity
-- `superseded_by`: current replacement for a conflicting assertion
-- `consolidated_into`: canonical record for a repeated observation
-- `conflict_ids` / `conflict_resolution`: detected conflicts and the recorded decision/reason
-- `evidence_ids` / `evidence_session_ids`: supporting observations and their sessions
-- `summary`: faithful summary of a consolidated group
-- `first_observed_at` / `last_observed_at`: observation range; explicit selection also reaffirms the last observation time
-- `last_confirmed_at`: explicit selection timestamp used to order later assertions
-
-Records can be converted to plain dictionaries:
-
-```python
-payload = record.to_dict()
-restored = MemoryRecord.from_dict(payload)
-```
-
-This is useful for future JSON, JSONL, SQLite, API, or database storage.
-
-## Memory Categories
-
-The system currently supports six memory categories.
-
-| Category | Meaning | Example |
-| --- | --- | --- |
-| `semantic` | Durable factual knowledge | `My project guide is Prof. Karnam Balaji.` |
-| `episodic` | Time-bound events or experiences | `Yesterday I submitted the proposal.` |
-| `procedural` | Steps, workflows, or repeated process knowledge | `First run tests, then build Docker.` |
-| `preference` | User likes, dislikes, style, or personal choices | `I prefer short technical explanations.` |
-| `task` | Future action, reminder, todo, or deadline | `Remind me to submit the report tomorrow.` |
-| `temporary` | Low-value transient chat | `Thanks`, `ok`, `hello` |
-
-Classification is currently rule-based. It uses keyword and pattern matching, not a trained model.
-
-## Memory Tiers
-
-The system currently supports four lifecycle tiers.
-
-| Tier | Meaning |
+| Capability | Implementation |
 | --- | --- |
-| `working` | Very short-lived memory for immediate context |
-| `short_term` | Useful recent memory, but not necessarily permanent |
-| `long_term` | Durable user facts, preferences, tasks, or procedures |
-| `archive` | Old but historically useful memory |
+| Intake | Sensitive-pattern redaction, optional statement splitting, six rule-based categories, feature extraction, claims, and typed relation metadata. |
+| Retention | Heuristic scorer by default; optional XGBoost and neural retention-proxy scorers; working, short-term, long-term, and archive tiers. |
+| Updates | Task completion/cancellation/rescheduling and recurrence; supported fact/preference conflict resolution; evidence-preserving consolidation and history. |
+| Storage | Local JSONL revision log with SQLite vector/graph indexes, cross-process locks, cleanup preview, guarded physical deletion, and compaction. |
+| Retrieval | Ranked keyword, semantic/vector, graph, recency, and hybrid search; rank fusion and local cross-encoder reranking. |
+| Answers | Diverse bounded context, extractive answers, optional LangChain/Gemini 2.5 Flash, citation checks, and abstention. |
+| Interfaces | Python API, CLI, and FastAPI with authentication, user isolation, export/deletion, health, logs, and Prometheus metrics. |
 
-Current lifecycle behavior:
+The implementation targets local research and small deployments. [Limits and next steps](#limits-and-next-steps) distinguish working features from broader research claims.
 
-- Temporary messages usually become `working` memory.
-- Low-score memories become `working` memory.
-- Durable high-score semantic, procedural, and preference memories become `long_term`.
-- One-off tasks become `short_term`; explicitly recurring tasks can qualify as `long_term`.
-- Other useful memories become `short_term`.
-- Stale but useful memories can become `archive`.
+## System architecture
 
-## Conversational Heuristic Improvements
-
-The default pipeline now uses whole-word keyword matching, recognizes explicit
-preferences/constraints, indirect preferences, and selected event updates, and keeps short one-off tasks
-in short-term memory. Mentions of today/tomorrow count as deadline signals only
-in task context. Fresh episodic memories receive a category weight of 0.20.
-Dated tasks expire 24 hours after their deadline; undated tasks use 14 days.
-List/search enforce expiry visibility without deleting records.
-
-See [the 15-sentence before/after experiment](docs/reports/heuristic_improvements.md).
-These are developer-authored regression examples, not human-labeled validation or
-training data. No statistical threshold calibration occurred in that experiment.
-The optional XGBoost retention-proxy model retains the legacy classification/feature inputs;
-new lifecycle rules apply to both pipelines. Existing records are unchanged.
-
-## Extracted Features
-
-The feature extractor currently produces simple numeric signals:
-
-- `access_frequency`
-- category flags such as `category_preference`, `category_task`, etc.
-- `entity_density`
-- `has_deadline`
-- `interaction_signal`
-- `preference_signal`
-- `recency`
-- `sentiment_strength`
-- `task_signal`
-- `word_count_norm`
-
-These features are used by the heuristic importance scorer. They are also designed to become the input features for a future LightGBM/XGBoost model.
-
-## Importance Scoring
-
-The current importance scorer is heuristic. It applies configured weights to extracted features and returns a score between `0.0` and `1.0`.
-
-Optional XGBoost and frozen-encoder neural scorers are trained on human-labeled conversational fact validity and retention duration. The heuristic remains the default because the dataset does not contain human-rated numeric importance or a representative sample of raw requests and greetings. See **ML Importance Model** below.
-
-The scorer is intentionally designed behind this simple interface:
-
-```python
-score = ImportanceScorer().score(features)
+```mermaid
+flowchart TB
+    U[Conversation or event] --> I[Python / CLI / HTTP API]
+    I --> M[Memory Core: redact, split, classify, extract]
+    M --> L[Score and lifecycle policy]
+    L --> C[Task updates, conflicts, consolidation]
+    C --> J[(JSONL authoritative revision log)]
+    J --> X[Rebuildable indexes]
+    X --> V[(SQLite vectors)]
+    X --> G[(SQLite temporal graph)]
+    Q[Question] --> F[User, status, time, history filters]
+    J --> F
+    F --> K[Keyword channel]
+    F --> V
+    F --> G
+    K --> R[Weighted rank fusion]
+    V --> R
+    G --> R
+    R --> P[Candidate pool]
+    P --> E[Local cross-encoder]
+    E --> T[Top-K evidence]
+    T --> B[Diverse context within character budget]
+    B --> A[Extractive or Gemini answer]
+    A --> Z[Checked citations or abstention]
 ```
 
-Later, the implementation can be replaced with a trained model without changing the rest of the Memory Core pipeline.
+JSONL is the source of truth; vector and graph data are rebuildable indexes. Hybrid channels contribute candidates independently before fusion. The reranker runs locally and falls back to fusion order if it fails. Memory text is sent to Gemini only when a hosted answer is requested; intake, embeddings, graph search, and reranking run locally.
 
-## How Data Is Stored Right Now
+The three main flows are:
 
-There is no database server yet.
+1. **Save:** accept a user statement → redact and classify it → compute features, score, and tier → reconcile supported claims/tasks → append a revision to JSONL → synchronize rebuildable indexes on search or explicit indexing.
+2. **Update:** accept a new statement or task operation → find the relevant user-owned memory → revise task/conflict/consolidation state → append the new state without losing earlier revisions → refresh index views.
+3. **Retrieve and answer:** filter visible memories by user and requested time → collect independent keyword/vector/graph candidates → fuse and optionally rerank → select diverse Top-K evidence → assemble bounded context → return cited extractive or Gemini statements.
 
-The system now supports a local JSONL-backed store. By default, CLI commands write to:
+### Layer 1: Understand and structure incoming information
 
-```text
-memory_store/memories.jsonl
+`MemoryCore` receives `MemoryInput` with text, user/session IDs, a role, timestamp, and optional metadata. It redacts supported sensitive patterns before scoring or storage. It classifies each statement as `semantic` (durable fact), `episodic` (event), `procedural` (workflow), `preference`, `task`, or `temporary` (transient chat). Optional segmentation creates separate records for clearly independent clauses. It extracts numeric cues such as deadlines, preferences, recency, and category. Supported factual statements become claims; callers can also provide explicit typed entities and relations for graph indexing.
+
+The default `ImportanceScorer` combines deterministic features into a 0–1 score. `LifecycleManager` uses that score and category-specific rules to assign `working`, `short_term`, `long_term`, or `archive`. Temporary messages normally remain working memory, one-off tasks remain short-term even when important, and durable facts or preferences can become long-term. Working memory normally expires after one hour, short-term after fourteen days, and dated tasks after their deadline plus 24 hours. Long-term records can appear as archive views after inactivity. These are policy decisions, not human-labeled truths.
+
+| Category | Typical input | Why it matters later |
+| --- | --- | --- |
+| Semantic | “My supervisor is Priya.” | Stable facts and relationships. |
+| Episodic | “I submitted the proposal yesterday.” | Event history and temporal questions. |
+| Procedural | “First run tests, then deploy.” | Reusable instructions. |
+| Preference | “I prefer brief explanations.” | Personalization and constraints. |
+| Task | “Remind me to submit the report Friday.” | Action state, deadlines, recurrence. |
+| Temporary | “Thanks!” | Immediate context without durable retention. |
+
+The optional XGBoost and neural scorers estimate `P(long_term) + 0.5 × P(short_term)` from extracted conversational facts. They predict a **retention-policy proxy**, not human-rated importance, and never replace the heuristic automatically. The neural path freezes the local 384-dimensional BGE encoder, combines text embeddings with 13 numeric features in a two-branch head, and serves its trained head through ONNX.
+
+### Layer 2: Manage change, tasks, and retention
+
+When a supported fact conflicts with an older one, CogniMem identifies a current assertion while preserving the older record and its revision history. “I live in Chennai” followed by “I moved to Bengaluru” can therefore support both current and historical questions. Repeated equivalent memories may be consolidated into a canonical summary with supporting memory IDs, sessions, and observation dates. Ambiguous task references are recorded rather than silently changing an unrelated task; callers can provide an exact task ID.
+
+Tasks support due dates, completion, cancellation, rescheduling, and recurring occurrences. Task state and lifecycle tier are separate fields. Normal retrieval hides expired and resolved items; history controls expose them for inspection. Cleanup previews by default. Its balanced policy protects useful expired items, legal holds, referenced evidence, and unresolved tasks. Applied cleanup removes eligible expired data, compacts only exact duplicate revisions, and rebuilds indexes.
+
+### Layer 3: Persist memories and temporal relationships
+
+`LocalMemoryStore` writes serialized `MemoryRecord` revisions to `memory_store/memories.jsonl` by default. A record contains its category, tier, score, timestamps, task state, claim and conflict status, evidence IDs, and source metadata. Local operations use cross-process locks. SQLite holds chunks and embeddings, graph nodes and edges, aliases, and index state. An LSH vector path supports larger local collections; smaller collections use exact scans.
+
+The graph stores typed relations such as `lives_in`, `works_at`, `based_in`, `likes`, and `has_task`, each linked to its source memory. **Valid time** says when an assertion was true; **recorded time** says when the system learned or revised it. `--as-of` and `--known-at` queries distinguish past truth from past knowledge. Multi-hop retrieval carries the evidence path. Mere graph connectivity is not treated as proof of an unstated fact. Natural-language extraction covers supported patterns and explicit metadata, not arbitrary prose.
+
+### Layer 4: Retrieve and rank evidence
+
+The lightweight `LocalMemoryStore.search()` requires lexical overlap. Its default score weights are keyword relevance **0.65**, category **0.10**, tier **0.05**, recency **0.10**, and importance **0.10**. `MemoryRAG.search()` adds independent vector and graph channels after filtering by user, session, history, task state, expiry, and time.
+
+Hybrid search applies weighted reciprocal-rank fusion to memory IDs, then keeps `max(20, 4 × Top-K)` candidates by default (up to 200). Up to three representative chunks per candidate go to the local `Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Each memory takes its best chunk score and keeps that chunk for context; fusion score and ID resolve ties. `--no-rerank` exposes the fusion baseline. Model failure returns fused results with fallback metadata instead of failing retrieval.
+
+### Layer 5: Build context and answer
+
+The context selector rewards query coverage, removes near-duplicate snippets, and respects a character budget. Graph paths are included only when all supporting memories fit. `ask --generator extractive` produces local, deterministic evidence text. The default `ask` path uses LangChain/Gemini 2.5 Flash after a key is configured. Hosted output must contain source IDs and exact supporting quotes found in the supplied context; invalid citations are rejected, and insufficient evidence should lead to abstention. Quote checking verifies provenance, but it cannot by itself prove every semantic inference in a generated statement.
+
+### Layer 6: Expose and operate the system
+
+The CLI supports ingestion, inspection, search, graph queries, answers, history, reconciliation, and cleanup. FastAPI adds signup/login, bearer-token authentication, role checks, per-user memory endpoints, search, JSON/CSV export, account deletion, `/health/live`, `/health/ready`, `/metrics`, structured request logs, and `/docs`. The web demo is mounted at `/demo` when static assets are present. The CLI caller supplies a user ID; API calls derive it from the authenticated user.
+
+## Setup
+
+Run commands from the repository root. Python 3.13 and [uv](https://docs.astral.sh/uv/) are the development path used here; a standard virtual environment and `pip install -r requirements.txt` can also be used if the pinned packages support your platform.
+
+```bash
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m main --help
 ```
 
-This path is ignored by Git because it is local runtime data.
+Local embedding and reranker models download on first use into the ignored cache under `data/rag/models/`. Store and index files are local runtime data. Optional trained retention scorers need their artifacts present or locally trained; see [reproduction](#reproduce-the-experiments).
 
-Each line is one serialized `MemoryRecord` dictionary. Records can still be used in memory:
+For a hosted answer, copy the example environment file and set your key locally. The extractive generator needs no key.
 
-```python
-record = core.process(memory_input)
-payload = record.to_dict()
+```bash
+cp .env.example .env
+# Edit .env and set GOOGLE_API_KEY; GEMINI_API_KEY is also accepted.
+.venv/bin/python -m main ask "What style of answer do I prefer?" \
+  --user-id user_001 --generator gemini
 ```
 
-The local store can save and load records:
+The CLI `ask` command loads `.env` by default. The API reads its process environment and also requires a JWT secret of at least 32 bytes:
+
+```bash
+export COGNIMEM_JWT_SECRET="$(.venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+.venv/bin/python -m api
+# Visit http://localhost:8000/docs for the endpoint schemas.
+```
+
+`COGNIMEM_STORE`, `COGNIMEM_AUTH_DB`, and `COGNIMEM_INDEX` override local paths. `COGNIMEM_ANN_ENABLED` and `COGNIMEM_ANN_EXACT_THRESHOLD` configure vector indexing. Keep `.env`, tokens, and generated runtime data out of version control.
+
+## First local workflow
+
+These commands save a preference and a location change, then retrieve the current evidence for the same user. First semantic use may download and initialize local models.
+
+```bash
+.venv/bin/python -m main process "I prefer concise technical explanations." \
+  --user-id user_001 --session-id session_001 --pretty
+.venv/bin/python -m main process "I live in Chennai." \
+  --user-id user_001 --session-id session_001
+.venv/bin/python -m main process "I moved to Bengaluru." \
+  --user-id user_001 --session-id session_002
+
+.venv/bin/python -m main list --user-id user_001 --pretty
+.venv/bin/python -m main search "Where do I live now?" \
+  --user-id user_001 --mode hybrid --limit 5 --pretty
+.venv/bin/python -m main ask "Where do I live now?" \
+  --user-id user_001 --generator extractive --pretty
+```
+
+`index --user-id user_001` builds indexes explicitly; `graph --user-id user_001 --query Bengaluru` inspects relations; `history RECORD_ID --user-id user_001` shows revisions. Keyword search avoids model downloads. `ask --preview` shows context and prompt without calling Gemini. `--no-rerank` and `--candidate-limit 20` support retrieval comparisons. `cleanup --user-id user_001` previews cleanup; `--apply` executes it. Use `.venv/bin/python -m main COMMAND --help` for flags.
+
+Python applications use the same core and store:
 
 ```python
-from main import LocalMemoryStore
+from main import LocalMemoryStore, MemoryCore, MemoryInput
+from main.retrieval.rag import MemoryRAG
 
 store = LocalMemoryStore()
+record = MemoryCore().process(MemoryInput(
+    content="I prefer concise technical explanations.",
+    user_id="user_001",
+    session_id="session_001",
+))
 store.save(record)
-records = store.list(user_id="user_001")
-matches = store.search("technical summaries", user_id="user_001")
+hits = MemoryRAG(store).search("How should you answer me?", user_id="user_001")
+print([(hit["memory_id"], hit["text"]) for hit in hits])
 ```
 
-The JSONL source store is intentionally local. Cooperating store/RAG/cleanup operations use cross-process locks on macOS/Linux; direct file edits and server-side queries are outside that contract. The optional retrieval layer adds SQLite vector/graph indexes; see [retrieval design](docs/retrieval_graph.md).
+For optional trained retention scoring, select `MemoryCore.with_ml()` (XGBoost) or `MemoryCore.with_neural()`, or pass `--scorer xgboost` / `--scorer neural` to `process`. These options change retention scoring, not the retrieval model.
 
-## Ranked Retrieval
+An HTTP integration can call the running API instead. Signup returns a bearer token; use its `data.access_token` value in subsequent requests. The authenticated identity determines which memories the caller can access.
 
-`LocalMemoryStore.search()` and the CLI `search` command rank matching records
-using `MemoryRanker`. The return format remains a list of memory records.
-User, session, category, and tier filters are applied before ranking; consolidated groups match their supporting sessions; the limit
-is applied afterward. A zero limit returns no results; negative limits are rejected.
+```bash
+curl -sS http://localhost:8000/api/v1/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"a-long-demo-password"}'
 
-Queries, original content, and consolidated summaries are split into case-insensitive whole-word tokens. Punctuation
-separates tokens. At least one query token must match; unrelated records are never
-included merely because they are important. Duplicate query terms and repeated
-content words do not boost relevance. There is no stemming, synonym expansion,
-or semantic matching: `python` does not match `pythonic`.
-
-| Signal | Default weight | Calculation |
-| --- | --- | --- |
-| Keyword relevance | 0.65 | Fraction of unique query tokens present in the content. |
-| Category | 0.10 | Semantic/preference: 1.0; procedural/task: 0.9; episodic: 0.6; temporary: 0.1. |
-| Tier | 0.05 | Long-term: 1.0; short-term: 0.7; working: 0.4; archive: 0.2. |
-| Recency | 0.10 | Exponential decay from the latest supporting observation (creation time if absent), with a 30-day half-life. Future timestamps receive 1.0. |
-| Importance | 0.10 | Stored importance score clamped to 0–1; nonfinite values contribute 0. |
-
-The final score is the weighted sum divided by the total weight. Category and tier
-values are fixed usefulness preferences, not predictions of query intent. Ties
-are resolved by newest creation time, then ascending memory ID. Search does not
-modify records or increment access counts. Expired records and resolved tasks are
-omitted by default, and inactive long-term memories are returned as archive views.
-Use `--include-expired`, `--include-resolved`, and `--include-history` to include the corresponding hidden records. Superseded facts and consolidated duplicates are omitted by default.
-
-Weights and recency half-life can be configured through the Python API:
-
-```python
-from main import LocalMemoryStore, MemoryRanker
-
-store = LocalMemoryStore(
-    ranker=MemoryRanker(
-        weights={
-            "keyword_relevance": 0.65,
-            "category": 0.10,
-            "tier": 0.05,
-            "recency": 0.10,
-            "importance": 0.10,
-        },
-        recency_half_life_days=30.0,
-    )
-)
-matches = store.search("Python tests", user_id="user_001", limit=10)
+# Copy data.access_token from the response into this shell variable.
+export COGNIMEM_DEMO_TOKEN='paste-token-here'
+curl -sS http://localhost:8000/api/v1/memories \
+  -H "Authorization: Bearer $COGNIMEM_DEMO_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"I prefer concise answers.","session_id":"demo-session"}'
+curl -sS http://localhost:8000/api/v1/memories/search \
+  -H "Authorization: Bearer $COGNIMEM_DEMO_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"How should you answer me?","mode":"keyword","limit":5}'
 ```
 
-All five weights must be finite and nonnegative with a positive finite total.
-The half-life must be finite and positive. Keyword ranking remains an in-process
-heuristic. Hybrid retrieval independently gathers keyword, vector, and graph
-candidates, fuses their ranks, and reranks the candidate pool with the local
-`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Use `--no-rerank` for the fusion
-baseline and `--candidate-limit` to bound reranking work.
+The `/docs` page documents the other endpoints. Token, store, and index files are local runtime state; do not commit them.
 
-## What Still Needs To Be Implemented
+## Evaluation and measured results
 
-The remaining work should be implemented in phases. The current system already has memory structuring, lifecycle decisions, local JSONL persistence, and CLI access.
+**The following tables describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection; RAG metrics concern answers; retention-model metrics concern three-class labels. The numbers below come from saved repository reports.
 
-| Priority | Component | Status | Notes |
-| --- | --- | --- | --- |
-| 1 | Cleanup operations | Implemented | Scheduled/preview cleanup and lossless compaction are available. |
-| 2 | REST API | Implemented | FastAPI endpoints cover auth, memory ingestion/list/get/search, health, metrics, and privacy operations. |
-| 3 | Retrieval quality | Existing implementation | Hybrid retrieval, graph evidence, reranking, and evaluation remain available for research work. |
-| 4 | Evaluation quality | Existing pending work | Independent human reviews and live Gemini quality evaluation remain research tasks. |
-| 5 | Scale storage | Partially implemented | Deterministic LSH ANN retrieval is implemented; production database migration remains future work. |
-| 6 | Monitoring/logging | Implemented | JSON logs, Prometheus metrics, request IDs, and readiness/liveness checks are available. |
-| 7 | Privacy/security controls | Implemented | Argon2 authentication, JWT/RBAC, user isolation, export, and deletion are available. |
+### Controlled graph and reranker ablation
 
-## ML Importance Model
+The [240-query development benchmark](evaluation/RESULTS.md) has 20 developer-labeled cases in each of 12 query types. The BGE model, 20-candidate pool, Top-K values, 10,000-character context budget, answer policy, and evaluation procedure are identical in all four arms. Optional importance models are disabled. Retrieval scores cover the **220 answerable queries**; answer scores include all **240**. `Recall@K` measures labeled evidence found in the first K results; `MRR` rewards early first relevant results; `nDCG` rewards graded relevance and ordering.
 
-An XGBoost three-class model has been trained on [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc), a human-annotated conversational-fact dataset. It predicts `invalid`, `short_term`, or `long_term` from fact text using the same deterministic features available at inference. Its optional 0–1 scorer computes `P(long_term) + 0.5 × P(short_term)`. That number is a **retention policy proxy**, not a human-rated importance score.
+| Retrieval system | Recall@5 | Recall@10 | Recall@20 | Hit@5 | Hit@10 | MRR | nDCG@5 | nDCG@10 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Vector | 89.55% | 91.14% | 91.36% | 91.36% | 91.36% | 0.842 | 0.824 | 0.830 |
+| Vector + reranker | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.914 | 0.893 | 0.893 |
+| Vector + graph | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.884 | 0.891 | 0.891 |
+| Vector + graph + reranker | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.914 | 0.893 | 0.893 |
 
-The published 2,223-row training split supplied 2,222 usable rows; one valid row had no duration label and was excluded. Hyperparameters were selected on a stratified validation portion of training data, then the model was fitted on all usable training rows and evaluated once on the published test split. The dataset is single-annotator, consists of extracted facts rather than all raw user turns, and the published split is not conversation-disjoint. Task requests and greetings therefore need further evaluation before changing the default scorer or lifecycle thresholds.
+Adding the graph raises Recall@5 by **1.82 percentage points** over vector-only (paired-bootstrap 95% interval **0.68–3.18 points**; paired randomization **p = 0.0072**). Multi-hop Recall@5 rises from **80% to 100%**. Reranking raises vector-only MRR from **0.842 to 0.914**. After graph fusion, reranking leaves Recall@5 unchanged and raises MRR from **0.884 to 0.914**. These are controlled *development* results, not independent evidence of general-world performance. Procedural questions score only **5% Recall@5** in every arm.
 
-An additional **neural scorer** uses a frozen local BGE-small-en-v1.5 text encoder and a two-branch network: 384-dimensional text embeddings and 13 standardized numeric features feed separate dense layers, followed by a shared three-class head. Backpropagation already trained the original head; a validation-controlled experiment found that adding one layer to each branch and one after fusion improved macro F1. The head is trained in PyTorch and exported to ONNX for local inference. Both trained scorers use the same three labels and score mapping; the heuristic stays the default.
+The same benchmark uses a deterministic **extractive** answer generator, so it does not measure live Gemini quality:
 
-### Held-out test results
+| RAG system | Correctness | Answer relevance | Faithfulness | Context precision | Context recall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Vector | 91.67% | 91.67% | 100% | 21.08% | 82.08% |
+| Vector + reranker | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
+| Vector + graph | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
+| Vector + graph + reranker | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
 
-All four systems below were measured on the same published **556-fact test split**: 85 invalid, 92 short-term, and 379 long-term. The original and deeper neural models were selected using only a stratified validation portion of the published training split. The XGBoost results are the frozen earlier evaluation on that same test split.
+| RAG system | Citation precision | Citation recall | Citation completeness | Unsupported claims | Abstention accuracy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Vector | 17.75% | 82.08% | 80.42% | 0% | 91.67% |
+| Vector + reranker | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
+| Vector + graph | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
+| Vector + graph + reranker | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
 
-| Metric | Deeper neural | Original neural | XGBoost | Always long-term |
+The 100% faithfulness and 0% unsupported-claim values reflect mechanical quote grounding, not human judgment. Overall abstention accuracy hides a specific failure: all four arms fail to abstain on the unanswerable cases when unrelated context is retrieved. Measured end-to-end development-machine latency:
+
+| System | P50 | P95 | P99 |
+| --- | ---: | ---: | ---: |
+| Vector | 16.78 ms | 21.49 ms | 23.03 ms |
+| Vector + reranker | 38.40 ms | 89.45 ms | 94.04 ms |
+| Vector + graph | 25.29 ms | 31.45 ms | 34.13 ms |
+| Vector + graph + reranker | 47.04 ms | 98.39 ms | 102.23 ms |
+
+See the [full ablation report](docs/reports/ablation/results.md) and [machine-readable results](docs/reports/ablation/results.json) for query-type metrics, stage timings, and failure cases. The [blind human-review packet](docs/reports/ablation/human_review_blind.jsonl) contains **blank** ratings; independent reviews remain pending.
+
+### External LoCoMo retrieval
+
+The saved [LoCoMo report](docs/reports/locomo_retrieval.json) scores **1,973** questions over externally supplied conversations. It indexes text turns, speakers, and dates without indexing QA labels or summaries. These are evidence-retrieval metrics at K = 5, not generated-answer scores:
+
+| Retriever | Recall@5 | Hit@5 | MRR@5 | nDCG@5 | Mean latency/query |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Recency | 0.89% | 1.06% | 0.004 | 0.005 | 0.93 ms |
+| Keyword | 37.65% | 41.31% | 0.302 | 0.310 | 6.59 ms |
+| Semantic/vector | 43.26% | 47.85% | 0.328 | 0.341 | 13.96 ms |
+| Graph-only | 0.00% | 0.00% | 0.000 | 0.000 | 7.60 ms |
+| Hybrid fusion | 48.15% | 53.07% | 0.373 | 0.385 | 25.01 ms |
+| Hybrid + local reranker | 55.83% | 61.07% | 0.505 | 0.498 | 122.92 ms |
+
+Graph-only retrieves no LoCoMo evidence in this run: raw-turn graph extraction did not cover those questions. This is a counterexample to the controlled graph gain. The more expensive reranker helps hybrid retrieval here. LoCoMo is a generated-dialogue benchmark, not a collection of real user chats. The [evaluation guide](evaluation/README.md) explains exclusions and the broader retention and cleanup studies.
+
+### Optional retention models
+
+XGBoost, an original shallow neural head, and a deeper neural head were evaluated on the same **556-fact** published test split from [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc): 85 invalid, 92 short-term, and 379 long-term. The always-long-term baseline exposes class imbalance. Proxy MAE compares a constructed target (`invalid=0`, `short_term=0.5`, `long_term=1`), not human importance ratings.
+
+| Test metric | Deeper neural | Original neural | XGBoost | Always long-term |
 | --- | ---: | ---: | ---: | ---: |
 | Accuracy | 78.06% | 78.06% | 69.24% | 68.17% |
 | Balanced accuracy | 67.78% | 65.86% | 65.60% | 33.33% |
-| Macro F1 | 0.6732 | 0.6504 | 0.6114 | 0.2702 |
+| Macro F1 | **0.6732** | 0.6504 | 0.6114 | 0.2702 |
 | Weighted F1 | 0.7768 | 0.7703 | 0.7071 | 0.5526 |
-| Constructed proxy MAE | 0.2160 | 0.1957 | 0.2768 | — |
-| Negative log-likelihood | 0.5547 | 0.5345 | — | — |
-| Expected calibration error (ECE), 10 bins | 0.0163 | 0.0428 | — | — |
-| Warm inference P50 | 4.17 ms | 5.01 ms | — | — |
-| Warm inference P95 | 5.79 ms | 6.74 ms | — | — |
+| Constructed proxy MAE | 0.2160 | **0.1957** | 0.2768 | — |
+| Negative log-likelihood | 0.5547 | **0.5345** | — | — |
+| Expected calibration error, 10 bins | **0.0163** | 0.0428 | — | — |
+| Warm inference P50 | **4.17 ms** | 5.01 ms | — | — |
+| Warm inference P95 | **5.79 ms** | 6.74 ms | — | — |
 
-`—` means the metric was not recorded, rather than zero. The proxy MAE compares predictions with a **constructed** target (`invalid = 0`, `short_term = 0.5`, `long_term = 1`); it does not measure agreement with human importance ratings. Neural latency includes local BGE encoding and ONNX inference for 50 individual test facts on the development machine, after warm-up. XGBoost latency was not measured in this experiment.
+Per-class F1 (invalid / short-term / long-term) is **0.4932 / 0.6570 / 0.8696** for the deeper head, **0.4286 / 0.6455 / 0.8773** for the original, and **0.4574 / 0.5837 / 0.7931** for XGBoost. Invalid-fact recall is **42.35%** for the deeper head, **31.76%** for the original, and **50.59%** for XGBoost; the deeper model does not win every safety-relevant measure. `—` means unrecorded. Neural latency includes local BGE encoding and ONNX inference after warm-up; XGBoost latency was not measured.
 
-Class-level precision, recall, and F1 on the test split:
+Class-level test metrics (support is the number of gold examples):
 
 | Model | Gold class | Support | Precision | Recall | F1 |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -416,7 +289,7 @@ Class-level precision, recall, and F1 on the test split:
 | Always long-term | Short-term | 92 | 0 | 0 | 0 |
 | Always long-term | Long-term | 379 | 0.6817 | 1.0000 | 0.8107 |
 
-Confusion matrices, with rows showing the gold class and columns showing predictions:
+Confusion matrices below have gold classes as rows and predicted classes as columns:
 
 | Model | Gold class | Predicted invalid | Predicted short-term | Predicted long-term |
 | --- | --- | ---: | ---: | ---: |
@@ -433,417 +306,51 @@ Confusion matrices, with rows showing the gold class and columns showing predict
 | Always long-term | Short-term | 0 | 0 | 92 |
 | Always long-term | Long-term | 0 | 0 | 379 |
 
-### Validation and model selection
+The deeper head's mean validation macro F1 over three seeds was **0.7194**, versus **0.7134** for the original; its selected seed reached **0.7291**. The dataset has one annotator, consists of extracted facts, and is not conversation-disjoint. The published test split had already been inspected during XGBoost development. These comparisons are exploratory and do not justify changing the default heuristic or lifecycle thresholds. Detailed class precision/recall, confusion matrices, calibration, and training methods are in the [XGBoost](evaluation/reports/conversational_retention.md), [original neural](evaluation/reports/neural_retention_shallow.md), [deeper neural](evaluation/reports/neural_retention.md), and [depth comparison](evaluation/reports/neural_depth_validation.json) reports.
 
-The XGBoost model was selected from four configurations on a stratified 20% validation portion of its training split. “Best tree” is zero-indexed; the selected model was refitted on all 2,222 usable training facts with 396 trees.
+Model selection used a stratified training/validation split rather than choosing on the test set. XGBoost's four validation trials had macro F1 **0.5934, 0.6022, 0.6002, and 0.6211**; the last configuration (max depth 5, min child weight 8, 396 trees on refit) was selected. The original neural head's three best-checkpoint validation macro F1 values were **0.7175, 0.7057, and 0.7169** for seeds 42–44; the deeper head's were **0.7208, 0.7083, and 0.7291**. The selected original checkpoint used seed 42, epoch 4; the deeper checkpoint used seed 44, epoch 8. Temperature calibration reduced validation negative log-likelihood from **0.5644 to 0.5332** for the original (temperature 1.3946) and from **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
 
-| Max depth | Min child weight | Best tree | Validation accuracy | Balanced accuracy | Macro F1 | Weighted F1 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 3 | 3 | 395 | 0.6697 | 0.6347 | 0.5934 | 0.6876 |
-| 3 | 8 | 398 | 0.6719 | 0.6494 | 0.6022 | 0.6901 |
-| 5 | 3 | 360 | 0.6809 | 0.6359 | 0.6002 | 0.6979 |
-| 5 | 8 | 395 | **0.6921** | **0.6632** | **0.6211** | **0.7069** |
+### Rule and lifecycle checks
 
-The neural heads used 1,777 fit and 445 validation facts, with seeds 42–44. Selection used validation macro F1, breaking ties with lower validation negative log-likelihood. Each value below is the best checkpoint for that seed.
+The saved [48-case conversational report](docs/reports/conversational_evaluation.json) has **48/48** category and tier matches against developer-authored labels, category macro F1 **1.0**, and **48/48** importance-range matches. These cases helped develop the rules, so this is regression coverage rather than an independent accuracy estimate. The controlled lifecycle audit passes **14/14** checks for tiers, expiry, task changes, recurrence, archive views, and history preservation. Independent human labels and reviews remain outstanding.
 
-| Head | Parameters | Seed | Best epoch | Validation macro F1 | Validation NLL |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Original | 60,547 | **42** | 4 | **0.7175** | 0.5644 |
-| Original | 60,547 | 43 | 2 | 0.7057 | 0.5279 |
-| Original | 60,547 | 44 | 11 | 0.7169 | 0.7912 |
-| Deeper | 131,491 | 42 | 12 | 0.7208 | 0.8370 |
-| Deeper | 131,491 | 43 | 3 | 0.7083 | 0.5503 |
-| Deeper | 131,491 | **44** | 8 | **0.7291** | 0.7913 |
+## Reproduce the experiments
 
-Mean validation macro F1 across seeds was **0.7134** for the original head and **0.7194** for the deeper head. Temperature scaling reduced selected-checkpoint validation NLL from **0.5644 to 0.5332** for the original head (temperature 1.3946) and **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
-
-The deeper head improves held-out macro F1 and invalid-fact recall, but its constructed proxy MAE and test NLL are worse than the original head's. XGBoost still has higher invalid-fact recall (**50.59%**) than the deeper neural head (**42.35%**). The deeper head is the default *optional neural* artifact; the original remains available at `artifacts/importance_neural_shallow/`. The heuristic stays CogniMem's default scorer. These are exploratory comparisons: the published test split was already inspected during XGBoost development, and the source dataset has one annotator, extracted facts rather than all raw user turns, no conversation-disjoint split, and no human numeric importance labels. No lifecycle threshold or deletion policy was changed.
-
-See the [XGBoost report](evaluation/reports/conversational_retention.md), [original neural report](evaluation/reports/neural_retention_shallow.md), [deeper neural report](evaluation/reports/neural_retention.md), and [depth validation results](evaluation/reports/neural_depth_validation.json) for the full results and methods.
-
-Install optional dependencies and use the trained model:
+After installation, run from the repository root:
 
 ```bash
-uv venv --python 3.13 .venv
-uv pip install --python .venv/bin/python -r requirements.txt
-.venv/bin/python -m main process "Yesterday I celebrated my graduation." \
-  --user-id user_001 --session-id session_001 --scorer xgboost --no-save --pretty
-```
-
-Python integration:
-
-```python
-from main import MemoryCore, MemoryInput
-
-core = MemoryCore.with_ml()
-record = core.process(MemoryInput(
-    content="Yesterday I celebrated my graduation.",
-    user_id="user_001", session_id="session_001",
-))
-print(record.importance_score)
-```
-
-Train or run the optional neural scorer:
-
-```bash
-uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m evaluation.run                  # Four-arm graph/reranker ablation
+.venv/bin/python -m evaluation.evaluate             # 48 conversational cases
+.venv/bin/python -m evaluation.lifecycle            # Lifecycle audit
+.venv/bin/python -m evaluation.benchmark            # LoCoMo; see evaluation/README.md for data setup
+.venv/bin/python -m training.train_conversational_retention
 .venv/bin/python -m training.train_neural_retention
-.venv/bin/python -m main process "I prefer concise answers." \
-  --user-id user_001 --session-id session_001 --scorer neural --no-save
+.venv/bin/python -m training.compare_neural_depth
 ```
 
-Python callers can use `MemoryCore.with_neural()` or pass an artifact directory
-to `MemoryCore.with_neural(path)`. The neural inference path uses local FastEmbed
-and ONNX Runtime; PyTorch is required only to train or reproduce the artifact.
+Training and external benchmarks can require dataset/model downloads and substantial CPU time. Check each command's `--help` and the [evaluation guide](evaluation/README.md) before rerunning saved reports. The ablation defaults to extractive answers; optional `--generator gemini` makes hosted calls only after a key is configured and uses the same generator across all four arms.
 
-`MLImportanceScorer.score(features)` implements the same scoring contract as the
-heuristic. Use `MLFeatureExtractor` with it; `MemoryCore.with_ml()` configures both.
-`--model-dir PATH` or `MemoryCore.with_ml(PATH)` selects a custom artifact directory.
-The score flows through existing tier assignment, JSONL persistence, and ranking.
-Each ML record includes model provenance in its source metadata.
+To run automated tests, install a test runner with `uv pip install --python .venv/bin/python pytest`, then run `.venv/bin/python -m pytest -q`. The repository's `requirements.txt` contains runtime dependencies, not pytest.
 
-Retrain and reproduce metrics with `.venv/bin/python -m training.train_conversational_retention`.
-It downloads checksum-verified source Parquet files into ignored `data/personal_facts_msc/`.
-See [experiment report](evaluation/reports/conversational_retention.md),
-[full metrics](evaluation/reports/conversational_retention.json), and
-[model metadata](artifacts/importance/metadata.json).
+## Repository map
 
-No learned memory-category classifier, retrieval ranker, consolidation model, or
-conflict detection model is trained. Human-rated numeric importance labels and
-independent lifecycle evaluation remain future work.
-
-## Graph and RAG Status
-
-Implemented: local BGE embeddings, chunked SQLite vector storage, hybrid ranking,
-context budgets, LangChain Gemini 2.5 Flash answers with checked citations, and a
-temporal SQLite graph with typed entities, aliases, provenance, valid/recorded
-time, task relationships, and bounded traversal. The local `.env` has blank key
-configuration; fill `GOOGLE_API_KEY` when ready. No hosted call has been made.
-
-See [full setup and examples](docs/retrieval_graph.md) and
-[external evaluation results](docs/reports/retrieval_graph_report.md). Automatic graph
-extraction is limited to supported assertions; broad paragraph understanding is
-not solved. Citation checks verify source references/quotes, not entailment.
-
-## CLI
-
-The CLI is available through:
-
-```bash
-python3 -m main --help
-```
-
-Process and save one memory:
-
-```bash
-python3 -m main process \
-  --user-id user_001 \
-  --session-id session_001 \
-  --interaction-score 0.5 \
-  --pretty \
-  "I prefer concise technical summaries."
-```
-
-Process without saving:
-
-```bash
-python3 -m main process \
-  --user-id user_001 \
-  --session-id session_001 \
-  --no-save \
-  --pretty \
-  "Remind me to submit the capstone report tomorrow."
-```
-
-List stored memories:
-
-```bash
-python3 -m main list --user-id user_001 --pretty
-```
-
-Search stored memories with ranked keyword retrieval:
-
-```bash
-python3 -m main search "technical summaries" --user-id user_001 --pretty
-```
-
-Get one memory by ID:
-
-```bash
-python3 -m main get MEMORY_ID --pretty
-```
-
-Show local store statistics:
-
-```bash
-python3 -m main stats --pretty
-```
-
-Use a custom store path:
-
-```bash
-python3 -m main --store /tmp/cognimem.jsonl list --pretty
-```
-
-The Memory Core can also be used through Python:
-
-```bash
-python3 - <<'PY'
-from main import LocalMemoryStore, MemoryCore, MemoryInput
-
-core = MemoryCore()
-record = core.process(
-    MemoryInput(
-        content="I prefer concise technical summaries.",
-        user_id="user_001",
-        session_id="session_001",
-    )
-)
-
-LocalMemoryStore().save(record)
-print(record.to_dict())
-PY
-```
-
-## Deadlines, Task Updates, and Multiple Memories
-
-```bash
-# Separate a standing preference and an actionable reminder.
-python3 -m main process "I prefer Python, and remind me to submit the report tomorrow." \
-  --user-id u1 --session-id s1 --split --pretty
-
-# Resolves a unique matching active task for this user, or records ambiguity.
-python3 -m main process "I submitted the report." --user-id u1 --session-id s1 --pretty
-
-# Explicit deadline / explicit task resolution when needed.
-python3 -m main process "Submit the application" --user-id u1 --session-id s1 \
-  --due-at "2026-12-01T17:00:00+05:30"
-python3 -m main process "I completed it." --user-id u1 --session-id s1 --task-id TASK_ID
-
-# Include historical records omitted from normal retrieval.
-python3 -m main list --user-id u1 --include-expired --include-resolved --pretty
-```
-
-Python: call `core.process_many(input)` for segmentation, then `store.ingest(record)`
-for each record to enable task updates. `process()` returns one record and `save()`
-is raw persistence. `--no-save` previews processing without resolving stored tasks.
-
-Deadline parsing supports ISO dates, today/tomorrow/tonight, next week, weekdays,
-and numeric durations, with optional times. Date-only deadlines mean end of day
-in the input timestamp timezone (UTC by default). Unknown phrasing is not guessed.
-Recurring tasks remain standing instructions with a separate occurrence cursor.
-Task updates support rescheduling, changed deadlines, completion, and cancellation.
-Exact object matches take priority; a unique noun subset supports “that report”
-for “budget report.” Numbers must agree. Bare “it” requires exactly one active
-candidate in the same session. Ambiguity returns candidate IDs for `--task-id`.
-Only user messages update tasks, and older observations cannot revise newer state.
-
-```bash
-python3 -m main process "Move the report from Monday to Friday at 5 pm" \
-  --user-id u1 --session-id s1
-python3 -m main process "Postpone the report by 2 days" --user-id u1 --session-id s1
-python3 -m main process "The report is not due Monday but Tuesday" --user-id u1 --session-id s1
-
-# --due-at sets the first occurrence when creating a recurring task.
-python3 -m main process "Remind me to pay rent monthly" \
-  --user-id u1 --session-id s1 --due-at "2026-10-01T09:00:00+05:30"
-python3 -m main process "I paid rent" --user-id u1 --session-id s1 \
-  --task-id TASK_ID --occurrence-at "2026-10-01"
-python3 -m main process "Cancel rent" --user-id u1 --session-id s1 \
-  --task-id TASK_ID --task-scope series
-```
-
-Supported recurrence: daily, weekly, monthly, yearly, every named weekday, and
-“every N days/weeks/months/years” (including “every other week”). A date/time
-anchor preserves month ends and leap days. Without an explicit time, the deadline
-is end of day; “morning/evening” does not invent a particular hour. Recurrence uses
-the anchor's fixed UTC offset; named timezones and daylight-saving rules are not
-implemented. Combined schedules/exclusions return `unsupported_schedule`.
-
-Completing or skipping the current occurrence records its outcome and advances
-`next_due_at`; the series stays active. Plain completion applies automatically
-only when the current occurrence is due on the observation's local date. For an
-early or overdue completion, pass `--occurrence-at` with the current occurrence's
-scheduled or rescheduled date/time. Occurrences are processed in order; reads do
-not skip overdue occurrences. Reusing an event ID is idempotent, and explicitly
-repeating a resolved occurrence returns `already_resolved`.
-
-Rescheduling defaults to the current occurrence and keeps the original cadence.
-Moving it to or past the next occurrence returns `occurrence_overlaps_next`.
-Use `--task-scope series` to re-anchor the series, or to cancel it entirely.
-“Stop reminding me to pay rent” also cancels the series. A new series anchor
-cannot overlap completed occurrence history. Unrecognized replacement dates
-return `missing_deadline` without changing the task. These statuses appear in
-`source_metadata.task_resolution`; applied changes include `task_change`.
-
-Preferences keep their original wording, including negation. The rules recognize
-“I'd rather…”, “not a fan of…”, “I don't dislike…”, and “works better for me.”
-Uncertain or reported completions do not change tasks. `--split` handles explicit
-independent clauses outside quoted spans, while preserving conditional scope,
-procedures, and object lists. Arbitrary paraphrases, sarcasm, and general language
-understanding remain outside these deterministic rules.
-
-Storage is now an append-only revision log: reads use the latest row per ID.
-`get()` and `all()` include historical visibility; list/search hide expired and
-resolved tasks by default. Long-term memories are viewed as archived after 90
-inactive days, using the latest explicit access, supporting observation, or creation time. Scheduled physical cleanup is available; automatic archive migration is not implemented.
-Cooperating local operations are protected by process/file locks.
-
-Run `python3 -m evaluation.evaluate` for the 48-case developer check. Its current
-category/tier agreement is 48/48, not independently reviewed accuracy. The blank
-[review template](evaluation/review_template.jsonl) and [review guidance](evaluation/README.md)
-are ready; no human-reviewed labels have been collected.
-See [implementation and limits](docs/reports/lifecycle_improvements.md).
-
-## Conflicts, Current Memories, and Consolidation
-
-CLI processing and `store.ingest(record)` reconcile durable user assertions.
-`store.save(record)` remains raw persistence. `process()` / `--no-save` extract
-supported claims without consulting or changing stored records.
-
-| Inputs | Result |
+| Path | Responsibility |
 | --- | --- |
-| “I live in Chennai.” → “I live in Bengaluru.” | Bengaluru becomes current by default; Chennai remains in history. |
-| “I like tea.” + “I like coffee.” | Both remain current because the preferences are compatible. |
-| “I like coffee.” → “I don't like coffee.” | The newer opposite preference becomes current. |
-| “I prefer short answers.” → “I prefer detailed answers.” | The explicit response-length preference changes. |
-| “I live in Chennai.” + “I reside in Chennai.” | One retrievable summary, “User lives in Chennai.”, with both source IDs. |
+| [`main/domain/`](main/domain/) | Models, text rules, classification, scoring, lifecycle, tasks, privacy, claims, reconciliation. |
+| [`main/application/`](main/application/) | Memory Core orchestration and maintenance. |
+| [`main/storage/`](main/storage/) | JSONL revisions, locks, SQLite index structures, cleanup. |
+| [`main/graph/`](main/graph/) | Temporal entities/relations, provenance, historical and multi-hop queries. |
+| [`main/retrieval/`](main/retrieval/) | Keyword ranking, BGE embeddings, hybrid search, reranking, context, answers. |
+| [`main/ml.py`](main/ml.py), [`main/neural.py`](main/neural.py), [`training/`](training/) | Optional retention scorers and training. |
+| [`api/`](api/), [`static/`](static/) | Authenticated HTTP API, monitoring, privacy operations, demo. |
+| [`evaluation/`](evaluation/), [`docs/reports/`](docs/reports/) | Datasets, runners, saved metrics, failure cases, review forms. |
+| [`tests/`](tests/) | Automated behavior and integration tests. |
 
-Supported assertions include residence, employer, occupation, name, home city,
-hometown, timezone, a named entity's residence/employer, a pet/entity's name,
-favorites, likes/dislikes, allergies, response length, and explicit “X over Y”
-choices. Subjects and attributes must match. Different positive values conflict
-only for attributes treated as single-valued; opposite polarities conflict only
-for the same value. Multiple likes and multiple allergies can coexist.
+## Limits and next steps
 
-The automatic policy compares **source priority → confidence → observation
-timestamp → importance**, in that order. Priority defaults to 0 and confidence
-to 1, so later assertions normally win. Exact ties keep an existing assertion.
-`metadata.source_priority` / `--source-priority` accepts 0–100;
-`metadata.confidence` / `--confidence` accepts 0–1. These are caller-assigned
-values, not authenticated trust or automatically calibrated probabilities.
-Every decision records its reason and the replacement ID. A consolidated group
-uses its strongest actual supporting observation; repetition alone does not
-increase confidence or importance. Access timestamps do not decide truth. Explicit selection records a confirmation timestamp, so equal-quality late data does not undo that selection.
+- **Generalization:** controlled query labels are developer-authored; external LoCoMo exposes weak graph coverage. Fresh conversation-disjoint data and independent human ratings are needed for a broader claim.
+- **Answer quality:** saved RAG scores use extractive answers. Live Gemini correctness, personalization, citation usefulness, and conflict decisions still need independent review. Exact-quote citation validation alone cannot prove semantic truth.
+- **Extraction and retention:** graph extraction and indirect contradiction handling cover supported language patterns. Optional retention models learn fact validity/duration rather than human importance; the heuristic remains the default.
+- **Operations:** local JSONL and SQLite are not a production database architecture. Deployment needs backups, retention-policy review, stronger authorization/abuse controls, and workload-specific scale and latency measurements.
 
-Consolidation groups equivalent supported claims, or exact normalized duplicates
-of other durable facts, preferences, and procedures. It keeps the original
-content and source observations, adds a summary and evidence IDs, and hides
-redundant observations from normal retrieval. Counts are `len(evidence_ids)`.
-Fresh support renews retention and retrieval recency. Returning to an older value
-after a conflicting change starts a new evidence group. Tasks, transient chat,
-and separate episodic events are not merged as repeated facts.
-
-```bash
-# New assertions automatically reconcile when saved.
-python3 -m main process "I live in Chennai." --user-id u1 --session-id s1
-python3 -m main process "I live in Bengaluru." --user-id u1 --session-id s2
-
-# Include superseded/consolidated records, or inspect every revision of one ID.
-python3 -m main list --user-id u1 --include-history --pretty
-python3 -m main history MEMORY_ID --user-id u1 --pretty
-
-# Explicitly choose a supported original/canonical assertion in an active conflict.
-python3 -m main resolve --keep MEMORY_ID --user-id u1 --pretty
-
-# Apply reconciliation to existing records, including older/raw-saved memories.
-python3 -m main reconcile --user-id u1 --pretty
-```
-
-Python equivalents: `store.history(id, user_id=...)`,
-`store.resolve_conflict(id, user_id=...)`, and
-`store.reconcile_memories(user_id=...)`. Bulk reconciliation appends only changed
-rows and is idempotent. Explicit resolution can restore a superseded root,
-reaffirm it now, and supersede its current contradictions; subsequent ingestion
-still follows the normal policy. All these operations preserve original rows.
-
-These rules do not infer preferences from mere mentions, generalize repeated
-events into new facts, resolve arbitrary prose, or recognize geographical/name
-aliases. Questions, uncertain/reported statements, historical wording, and
-ambiguous compound assertions do not automatically replace supported facts.
-Use `--split` for supported independent clauses. Unrecognized content remains
-stored without an inferred conflict. The JSONL store still needs production
-server-grade concurrency controls. Local cooperative locking and safe physical expiry cleanup are implemented.
-
-See [behavior and verification](docs/reports/memory_reconciliation.md).
-
-## Tests
-
-Run the test suite:
-
-```bash
-python3 -m unittest -v
-```
-
-The tests cover:
-
-- classification for all memory categories
-- importance scoring for durable vs temporary memories
-- lifecycle tier assignment
-- record serialization/deserialization
-- local JSONL storage
-- ranked retrieval signals, whole-word matching, filters, limits, deterministic ordering, and CLI search
-- CLI process/list/get behavior
-- graph database isolation
-- conflict resolution, duplicate summaries, provenance, history visibility, and bulk reconciliation
-
-## Recommended Next Implementation Steps
-
-Recommended order:
-
-1. Configure the implemented cleanup worker for your store after reviewing its preview.
-2. Add REST API endpoints and production storage.
-3. Improve free-form entity/relation extraction and measure hosted answer quality.
-4. Extend external retrieval/retention evaluation with independent human conflict and personalization judgments.
-5. Add monitoring, deletion/export, and privacy controls.
-6. Scale vector/graph storage beyond local workloads as needed.
-
-ML research is tracked separately in **ML Importance Model** above.
-
-## Current Milestone
-
-The current milestone is:
-
-```text
-Structured Memory Core, ranked keyword retrieval, optional trained XGBoost and neural scoring, local JSONL store, and CLI implemented.
-```
-
-In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. Semantic/hybrid retrieval, cited RAG, temporal graph storage, and external evaluation are now implemented. Production concurrent storage, APIs, deployment, broader extraction quality, and independent human answer/conflict/personalization validation remain. ML research is separate.
-
-## Independent evaluation and scheduled cleanup
-
-Run `.venv/bin/python -m evaluation.suite` for the unified external benchmark,
-500-case retention/cleanup replay, synthetic conflict baselines, and personalized
-answer-context baselines. Default generation is extractive and makes no hosted
-API calls. `--generator gemini` explicitly enables hosted generation.
-
-See [the generated report](docs/reports/independent_evaluation.md),
-[evaluation and blind-review instructions](evaluation/README.md), and
-[cleanup policy and scheduling](docs/cleanup.md). Independent human personalization
-and conflict-policy ratings remain pending until actual reviews are provided.
-Cleanup was tested on temporary stores; no real-user cleanup job was activated.
-
-## HTTP API, security, observability, and ANN
-
-The production-facing HTTP layer is under `api/` and deliberately leaves the
-remaining capstone TODO items (production database migration, deployment,
-background reminders, broader extraction, and human feedback) untouched.
-
-Install the API dependencies with `python -m pip install -r requirements-api.txt`,
-set `COGNIMEM_JWT_SECRET` to a random secret of at least 32 bytes, and start with:
-
-```bash
-python -m api
-```
-
-The demo UI is available at `/demo/`. API responses use the envelope
-`success/data/error/request_id`. Authentication uses Argon2 password hashes and
-short-lived HS256 access tokens; memory ownership is always derived from the
-authenticated subject rather than request input. `/metrics` exposes Prometheus
-metrics and `/health/live` and `/health/ready` provide liveness/readiness probes.
-
-Semantic retrieval automatically switches to a deterministic random-hyperplane
-LSH approximate-nearest-neighbor index after the configured corpus threshold.
-The existing exact SQLite vector index remains available for smaller corpora and
-as the authoritative vector store. Configure the threshold with
-`COGNIMEM_ANN_EXACT_THRESHOLD`.
+For more implementation detail and day-to-day workflows, see [DOCUMENTATION.md](DOCUMENTATION.md). For evaluation protocols, see [evaluation/README.md](evaluation/README.md) and the saved reports linked above.
