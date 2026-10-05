@@ -1,0 +1,317 @@
+{
+  "dataset": "https://huggingface.co/datasets/adugeen/personal-facts-msc",
+  "target": "human-annotated fact validity and expected duration; numeric score is a policy proxy",
+  "class_order": [
+    "invalid",
+    "short_term",
+    "long_term"
+  ],
+  "score_values": [
+    0.0,
+    0.5,
+    1.0
+  ],
+  "dataset_size": {
+    "train": 2223,
+    "test": 556,
+    "train_used": 2222,
+    "test_used": 556,
+    "train_omitted": 1,
+    "test_omitted": 0
+  },
+  "train_class_counts": {
+    "invalid": 339,
+    "short_term": 378,
+    "long_term": 1505
+  },
+  "test_class_counts": {
+    "invalid": 85,
+    "short_term": 92,
+    "long_term": 379
+  },
+  "selection": "20% stratified validation from published train split; maximize macro F1",
+  "validation_trials": [
+    {
+      "max_depth": 3,
+      "min_child_weight": 3,
+      "best_iteration": 395,
+      "accuracy": 0.6696629213483146,
+      "balanced_accuracy": 0.6346697797846189,
+      "macro_f1": 0.5934026404539933,
+      "weighted_f1": 0.687631448473703,
+      "confusion_matrix": [
+        [
+          44,
+          12,
+          12
+        ],
+        [
+          14,
+          42,
+          20
+        ],
+        [
+          36,
+          53,
+          212
+        ]
+      ],
+      "per_class": {
+        "invalid": {
+          "precision": 0.46808510638297873,
+          "recall": 0.6470588235294118,
+          "f1": 0.5432098765432098,
+          "support": 68
+        },
+        "short_term": {
+          "precision": 0.3925233644859813,
+          "recall": 0.5526315789473685,
+          "f1": 0.45901639344262296,
+          "support": 76
+        },
+        "long_term": {
+          "precision": 0.8688524590163934,
+          "recall": 0.7043189368770764,
+          "f1": 0.7779816513761468,
+          "support": 301
+        }
+      }
+    },
+    {
+      "max_depth": 3,
+      "min_child_weight": 8,
+      "best_iteration": 398,
+      "accuracy": 0.6719101123595506,
+      "balanced_accuracy": 0.649407376169562,
+      "macro_f1": 0.6022418432069626,
+      "weighted_f1": 0.6900844112705957,
+      "confusion_matrix": [
+        [
+          45,
+          11,
+          12
+        ],
+        [
+          13,
+          45,
+          18
+        ],
+        [
+          38,
+          54,
+          209
+        ]
+      ],
+      "per_class": {
+        "invalid": {
+          "precision": 0.46875,
+          "recall": 0.6617647058823529,
+          "f1": 0.5487804878048781,
+          "support": 68
+        },
+        "short_term": {
+          "precision": 0.4090909090909091,
+          "recall": 0.5921052631578947,
+          "f1": 0.4838709677419355,
+          "support": 76
+        },
+        "long_term": {
+          "precision": 0.8744769874476988,
+          "recall": 0.6943521594684385,
+          "f1": 0.774074074074074,
+          "support": 301
+        }
+      }
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 3,
+      "best_iteration": 360,
+      "accuracy": 0.6808988764044944,
+      "balanced_accuracy": 0.6358963414006974,
+      "macro_f1": 0.6002051181539961,
+      "weighted_f1": 0.6978678887030608,
+      "confusion_matrix": [
+        [
+          42,
+          13,
+          13
+        ],
+        [
+          14,
+          43,
+          19
+        ],
+        [
+          31,
+          52,
+          218
+        ]
+      ],
+      "per_class": {
+        "invalid": {
+          "precision": 0.4827586206896552,
+          "recall": 0.6176470588235294,
+          "f1": 0.5419354838709678,
+          "support": 68
+        },
+        "short_term": {
+          "precision": 0.39814814814814814,
+          "recall": 0.5657894736842105,
+          "f1": 0.4673913043478261,
+          "support": 76
+        },
+        "long_term": {
+          "precision": 0.872,
+          "recall": 0.7242524916943521,
+          "f1": 0.7912885662431942,
+          "support": 301
+        }
+      }
+    },
+    {
+      "max_depth": 5,
+      "min_child_weight": 8,
+      "best_iteration": 395,
+      "accuracy": 0.6921348314606741,
+      "balanced_accuracy": 0.6631686946504428,
+      "macro_f1": 0.621104258869622,
+      "weighted_f1": 0.7069343752725838,
+      "confusion_matrix": [
+        [
+          46,
+          9,
+          13
+        ],
+        [
+          12,
+          45,
+          19
+        ],
+        [
+          35,
+          49,
+          217
+        ]
+      ],
+      "per_class": {
+        "invalid": {
+          "precision": 0.4946236559139785,
+          "recall": 0.6764705882352942,
+          "f1": 0.5714285714285714,
+          "support": 68
+        },
+        "short_term": {
+          "precision": 0.4368932038834951,
+          "recall": 0.5921052631578947,
+          "f1": 0.5027932960893855,
+          "support": 76
+        },
+        "long_term": {
+          "precision": 0.8714859437751004,
+          "recall": 0.7209302325581395,
+          "f1": 0.7890909090909091,
+          "support": 301
+        }
+      }
+    }
+  ],
+  "selected_hyperparameters": {
+    "max_depth": 5,
+    "min_child_weight": 8,
+    "n_estimators": 396
+  },
+  "test": {
+    "accuracy": 0.6924460431654677,
+    "balanced_accuracy": 0.6559893109475062,
+    "macro_f1": 0.611397113740403,
+    "weighted_f1": 0.7071040347409883,
+    "confusion_matrix": [
+      [
+        43,
+        17,
+        25
+      ],
+      [
+        11,
+        68,
+        13
+      ],
+      [
+        49,
+        56,
+        274
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.4174757281553398,
+        "recall": 0.5058823529411764,
+        "f1": 0.4574468085106383,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.48226950354609927,
+        "recall": 0.7391304347826086,
+        "f1": 0.5836909871244635,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.8782051282051282,
+        "recall": 0.7229551451187335,
+        "f1": 0.7930535455861071,
+        "support": 379
+      }
+    },
+    "proxy_mae": 0.2768482926855259
+  },
+  "majority_baseline": {
+    "accuracy": 0.6816546762589928,
+    "balanced_accuracy": 0.3333333333333333,
+    "macro_f1": 0.27023172905525844,
+    "weighted_f1": 0.5526141653522102,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        85
+      ],
+      [
+        0,
+        0,
+        92
+      ],
+      [
+        0,
+        0,
+        379
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.6816546762589928,
+        "recall": 1.0,
+        "f1": 0.8106951871657754,
+        "support": 379
+      }
+    }
+  },
+  "limitations": [
+    "No human numeric importance scores",
+    "Single annotator",
+    "English extracted fact candidates; task requests and greetings are underrepresented",
+    "Published split is stratified by category, not by speaker or conversation"
+  ]
+}

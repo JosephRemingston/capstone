@@ -21,7 +21,7 @@ Implemented:
 - Rule-based memory classification
 - Feature extraction for importance scoring
 - Heuristic importance scoring
-- Optional trained XGBoost importance scorer, evaluated on Hippocorpus
+- Optional trained XGBoost and neural retention-proxy scorers, evaluated on conversational facts
 - Reproducible importance-model training, held-out metrics, and native model artifacts
 - Lifecycle tier assignment
 - Deadline-aware task expiry, inactivity archive views, and expiry-aware retrieval
@@ -237,8 +237,8 @@ List/search enforce expiry visibility without deleting records.
 
 See [the 15-sentence before/after experiment](docs/reports/heuristic_improvements.md).
 These are developer-authored regression examples, not human-labeled validation or
-training data. No statistical threshold calibration or model retraining occurred.
-The optional Hippocorpus model retains its legacy classification/feature inputs;
+training data. No statistical threshold calibration occurred in that experiment.
+The optional XGBoost retention-proxy model retains the legacy classification/feature inputs;
 new lifecycle rules apply to both pipelines. Existing records are unchanged.
 
 ## Extracted Features
@@ -262,7 +262,7 @@ These features are used by the heuristic importance scorer. They are also design
 
 The current importance scorer is heuristic. It applies configured weights to extracted features and returns a score between `0.0` and `1.0`.
 
-An optional XGBoost scorer is now trained and integrated. The heuristic remains the default because the Hippocorpus personal-event target has not been validated for conversational retention. See **ML Importance Model** below.
+Optional XGBoost and frozen-encoder neural scorers are trained on human-labeled conversational fact validity and retention duration. The heuristic remains the default because the dataset does not contain human-rated numeric importance or a representative sample of raw requests and greetings. See **ML Importance Model** below.
 
 The scorer is intentionally designed behind this simple interface:
 
@@ -375,28 +375,97 @@ The remaining work should be implemented in phases. The current system already h
 
 ## ML Importance Model
 
-An XGBoost regression model has been trained on the existing **Hippocorpus**
-importance ratings, normalized from 1–5 to 0–1. It uses text-derived features and
-hashed word counts, with author/story-family-disjoint train, validation, and test
-sets. No synthetic labels were generated.
+An XGBoost three-class model has been trained on [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc), a human-annotated conversational-fact dataset. It predicts `invalid`, `short_term`, or `long_term` from fact text using the same deterministic features available at inference. Its optional 0–1 scorer computes `P(long_term) + 0.5 × P(short_term)`. That number is a **retention policy proxy**, not a human-rated importance score.
 
-| Held-out test metric | XGBoost | Mean baseline |
-| --- | ---: | ---: |
-| MAE | 0.2291 | 0.2424 |
-| RMSE | 0.2847 | 0.2947 |
-| R² | 0.0311 | -0.0381 |
-| Spearman | 0.2367 | Undefined (constant) |
+The published 2,223-row training split supplied 2,222 usable rows; one valid row had no duration label and was excluded. Hyperparameters were selected on a stratified validation portion of training data, then the model was fitted on all usable training rows and evaluated once on the published test split. The dataset is single-annotator, consists of extracted facts rather than all raw user turns, and the published split is not conversation-disjoint. Task requests and greetings therefore need further evaluation before changing the default scorer or lifecycle thresholds.
 
-Training used 4,697 stories, validation 1,006, and test 1,007. The improvement is
-modest. This model predicts personal-event significance; conversational retention
-quality and lifecycle thresholds remain unvalidated. ML therefore replaces the
-heuristic only when explicitly selected.
+An additional **neural scorer** uses a frozen local BGE-small-en-v1.5 text encoder and a two-branch network: 384-dimensional text embeddings and 13 standardized numeric features feed separate dense layers, followed by a shared three-class head. Backpropagation already trained the original head; a validation-controlled experiment found that adding one layer to each branch and one after fusion improved macro F1. The head is trained in PyTorch and exported to ONNX for local inference. Both trained scorers use the same three labels and score mapping; the heuristic stays the default.
+
+### Held-out test results
+
+All four systems below were measured on the same published **556-fact test split**: 85 invalid, 92 short-term, and 379 long-term. The original and deeper neural models were selected using only a stratified validation portion of the published training split. The XGBoost results are the frozen earlier evaluation on that same test split.
+
+| Metric | Deeper neural | Original neural | XGBoost | Always long-term |
+| --- | ---: | ---: | ---: | ---: |
+| Accuracy | 78.06% | 78.06% | 69.24% | 68.17% |
+| Balanced accuracy | 67.78% | 65.86% | 65.60% | 33.33% |
+| Macro F1 | 0.6732 | 0.6504 | 0.6114 | 0.2702 |
+| Weighted F1 | 0.7768 | 0.7703 | 0.7071 | 0.5526 |
+| Constructed proxy MAE | 0.2160 | 0.1957 | 0.2768 | — |
+| Negative log-likelihood | 0.5547 | 0.5345 | — | — |
+| Expected calibration error (ECE), 10 bins | 0.0163 | 0.0428 | — | — |
+| Warm inference P50 | 4.17 ms | 5.01 ms | — | — |
+| Warm inference P95 | 5.79 ms | 6.74 ms | — | — |
+
+`—` means the metric was not recorded, rather than zero. The proxy MAE compares predictions with a **constructed** target (`invalid = 0`, `short_term = 0.5`, `long_term = 1`); it does not measure agreement with human importance ratings. Neural latency includes local BGE encoding and ONNX inference for 50 individual test facts on the development machine, after warm-up. XGBoost latency was not measured in this experiment.
+
+Class-level precision, recall, and F1 on the test split:
+
+| Model | Gold class | Support | Precision | Recall | F1 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Deeper neural | Invalid | 85 | 0.5902 | 0.4235 | 0.4932 |
+| Deeper neural | Short-term | 92 | 0.5913 | 0.7391 | 0.6570 |
+| Deeper neural | Long-term | 379 | 0.8684 | 0.8707 | 0.8696 |
+| Original neural | Invalid | 85 | 0.6585 | 0.3176 | 0.4286 |
+| Original neural | Short-term | 92 | 0.5547 | 0.7717 | 0.6455 |
+| Original neural | Long-term | 379 | 0.8682 | 0.8865 | 0.8773 |
+| XGBoost | Invalid | 85 | 0.4175 | 0.5059 | 0.4574 |
+| XGBoost | Short-term | 92 | 0.4823 | 0.7391 | 0.5837 |
+| XGBoost | Long-term | 379 | 0.8782 | 0.7230 | 0.7931 |
+| Always long-term | Invalid | 85 | 0 | 0 | 0 |
+| Always long-term | Short-term | 92 | 0 | 0 | 0 |
+| Always long-term | Long-term | 379 | 0.6817 | 1.0000 | 0.8107 |
+
+Confusion matrices, with rows showing the gold class and columns showing predictions:
+
+| Model | Gold class | Predicted invalid | Predicted short-term | Predicted long-term |
+| --- | --- | ---: | ---: | ---: |
+| Deeper neural | Invalid | 36 | 18 | 31 |
+| Deeper neural | Short-term | 5 | 68 | 19 |
+| Deeper neural | Long-term | 20 | 29 | 330 |
+| Original neural | Invalid | 27 | 26 | 32 |
+| Original neural | Short-term | 2 | 71 | 19 |
+| Original neural | Long-term | 12 | 31 | 336 |
+| XGBoost | Invalid | 43 | 17 | 25 |
+| XGBoost | Short-term | 11 | 68 | 13 |
+| XGBoost | Long-term | 49 | 56 | 274 |
+| Always long-term | Invalid | 0 | 0 | 85 |
+| Always long-term | Short-term | 0 | 0 | 92 |
+| Always long-term | Long-term | 0 | 0 | 379 |
+
+### Validation and model selection
+
+The XGBoost model was selected from four configurations on a stratified 20% validation portion of its training split. “Best tree” is zero-indexed; the selected model was refitted on all 2,222 usable training facts with 396 trees.
+
+| Max depth | Min child weight | Best tree | Validation accuracy | Balanced accuracy | Macro F1 | Weighted F1 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 3 | 395 | 0.6697 | 0.6347 | 0.5934 | 0.6876 |
+| 3 | 8 | 398 | 0.6719 | 0.6494 | 0.6022 | 0.6901 |
+| 5 | 3 | 360 | 0.6809 | 0.6359 | 0.6002 | 0.6979 |
+| 5 | 8 | 395 | **0.6921** | **0.6632** | **0.6211** | **0.7069** |
+
+The neural heads used 1,777 fit and 445 validation facts, with seeds 42–44. Selection used validation macro F1, breaking ties with lower validation negative log-likelihood. Each value below is the best checkpoint for that seed.
+
+| Head | Parameters | Seed | Best epoch | Validation macro F1 | Validation NLL |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original | 60,547 | **42** | 4 | **0.7175** | 0.5644 |
+| Original | 60,547 | 43 | 2 | 0.7057 | 0.5279 |
+| Original | 60,547 | 44 | 11 | 0.7169 | 0.7912 |
+| Deeper | 131,491 | 42 | 12 | 0.7208 | 0.8370 |
+| Deeper | 131,491 | 43 | 3 | 0.7083 | 0.5503 |
+| Deeper | 131,491 | **44** | 8 | **0.7291** | 0.7913 |
+
+Mean validation macro F1 across seeds was **0.7134** for the original head and **0.7194** for the deeper head. Temperature scaling reduced selected-checkpoint validation NLL from **0.5644 to 0.5332** for the original head (temperature 1.3946) and **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
+
+The deeper head improves held-out macro F1 and invalid-fact recall, but its constructed proxy MAE and test NLL are worse than the original head's. XGBoost still has higher invalid-fact recall (**50.59%**) than the deeper neural head (**42.35%**). The deeper head is the default *optional neural* artifact; the original remains available at `artifacts/importance_neural_shallow/`. The heuristic stays CogniMem's default scorer. These are exploratory comparisons: the published test split was already inspected during XGBoost development, and the source dataset has one annotator, extracted facts rather than all raw user turns, no conversation-disjoint split, and no human numeric importance labels. No lifecycle threshold or deletion policy was changed.
+
+See the [XGBoost report](evaluation/reports/conversational_retention.md), [original neural report](evaluation/reports/neural_retention_shallow.md), [deeper neural report](evaluation/reports/neural_retention.md), and [depth validation results](evaluation/reports/neural_depth_validation.json) for the full results and methods.
 
 Install optional dependencies and use the trained model:
 
 ```bash
 uv venv --python 3.13 .venv
-uv pip install --python .venv/bin/python -r requirements-ml.txt
+uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m main process "Yesterday I celebrated my graduation." \
   --user-id user_001 --session-id session_001 --scorer xgboost --no-save --pretty
 ```
@@ -414,21 +483,34 @@ record = core.process(MemoryInput(
 print(record.importance_score)
 ```
 
+Train or run the optional neural scorer:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m training.train_neural_retention
+.venv/bin/python -m main process "I prefer concise answers." \
+  --user-id user_001 --session-id session_001 --scorer neural --no-save
+```
+
+Python callers can use `MemoryCore.with_neural()` or pass an artifact directory
+to `MemoryCore.with_neural(path)`. The neural inference path uses local FastEmbed
+and ONNX Runtime; PyTorch is required only to train or reproduce the artifact.
+
 `MLImportanceScorer.score(features)` implements the same scoring contract as the
 heuristic. Use `MLFeatureExtractor` with it; `MemoryCore.with_ml()` configures both.
 `--model-dir PATH` or `MemoryCore.with_ml(PATH)` selects a custom artifact directory.
 The score flows through existing tier assignment, JSONL persistence, and ranking.
 Each ML record includes model provenance in its source metadata.
 
-Retrain and reproduce metrics with `.venv/bin/python -m training.train_importance`.
-It downloads the official Microsoft archive into ignored `data/hippocorpus/`.
-See [experiment report](docs/reports/importance_report.md),
-[full metrics](docs/reports/importance_metrics.json), and
+Retrain and reproduce metrics with `.venv/bin/python -m training.train_conversational_retention`.
+It downloads checksum-verified source Parquet files into ignored `data/personal_facts_msc/`.
+See [experiment report](evaluation/reports/conversational_retention.md),
+[full metrics](evaluation/reports/conversational_retention.json), and
 [model metadata](artifacts/importance/metadata.json).
 
-No learned classifier, retrieval ranker, consolidation model, or conflict detection
-model is trained. In-domain conversational importance labels and evaluation remain
-future work.
+No learned memory-category classifier, retrieval ranker, consolidation model, or
+conflict detection model is trained. Human-rated numeric importance labels and
+independent lifecycle evaluation remain future work.
 
 ## Graph and RAG Status
 
@@ -723,7 +805,7 @@ ML research is tracked separately in **ML Importance Model** above.
 The current milestone is:
 
 ```text
-Structured Memory Core, ranked keyword retrieval, optional trained XGBoost scoring, local JSONL store, and CLI implemented.
+Structured Memory Core, ranked keyword retrieval, optional trained XGBoost and neural scoring, local JSONL store, and CLI implemented.
 ```
 
 In other words, we have implemented the memory representation, decision pipeline, local JSONL storage, and CLI access. Semantic/hybrid retrieval, cited RAG, temporal graph storage, and external evaluation are now implemented. Production concurrent storage, APIs, deployment, broader extraction quality, and independent human answer/conflict/personalization validation remain. ML research is separate.

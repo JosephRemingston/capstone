@@ -1,0 +1,172 @@
+{
+  "dataset": "https://huggingface.co/datasets/adugeen/personal-facts-msc",
+  "target": "human-labeled validity/duration; score is a constructed retention proxy",
+  "train_used": 2222,
+  "fit_size": 1777,
+  "validation_size": 445,
+  "test_size": 556,
+  "seeds": [
+    {
+      "seed": 42,
+      "best_epoch": 4,
+      "validation_macro_f1": 0.7175170662729938,
+      "validation_nll": 0.5644495487213135
+    },
+    {
+      "seed": 43,
+      "best_epoch": 2,
+      "validation_macro_f1": 0.7057253381115589,
+      "validation_nll": 0.5278871059417725
+    },
+    {
+      "seed": 44,
+      "best_epoch": 11,
+      "validation_macro_f1": 0.7168513192003125,
+      "validation_nll": 0.7911771535873413
+    }
+  ],
+  "selected_seed": 42,
+  "temperature": 1.3945790644227478,
+  "validation_nll_before_calibration": 0.5644495487213135,
+  "validation_nll_after_calibration": 0.5331734418869019,
+  "neural_test": {
+    "accuracy": 0.7805755395683454,
+    "balanced_accuracy": 0.6586432416261215,
+    "macro_f1": 0.6504368564420785,
+    "weighted_f1": 0.7703259914194039,
+    "confusion_matrix": [
+      [
+        27,
+        26,
+        32
+      ],
+      [
+        2,
+        71,
+        19
+      ],
+      [
+        12,
+        31,
+        336
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.6585365853658537,
+        "recall": 0.3176470588235294,
+        "f1": 0.42857142857142855,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.5546875,
+        "recall": 0.7717391304347826,
+        "f1": 0.6454545454545455,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.8682170542635659,
+        "recall": 0.8865435356200527,
+        "f1": 0.8772845953002611,
+        "support": 379
+      }
+    },
+    "proxy_mae": 0.19567324221134186,
+    "nll": 0.5344521403312683,
+    "ece_10_bins": 0.04284322058125368
+  },
+  "xgboost_test": {
+    "accuracy": 0.6924460431654677,
+    "balanced_accuracy": 0.6559893109475062,
+    "macro_f1": 0.611397113740403,
+    "weighted_f1": 0.7071040347409883,
+    "confusion_matrix": [
+      [
+        43,
+        17,
+        25
+      ],
+      [
+        11,
+        68,
+        13
+      ],
+      [
+        49,
+        56,
+        274
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.4174757281553398,
+        "recall": 0.5058823529411764,
+        "f1": 0.4574468085106383,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.48226950354609927,
+        "recall": 0.7391304347826086,
+        "f1": 0.5836909871244635,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.8782051282051282,
+        "recall": 0.7229551451187335,
+        "f1": 0.7930535455861071,
+        "support": 379
+      }
+    },
+    "proxy_mae": 0.2768482926855259
+  },
+  "majority_test": {
+    "accuracy": 0.6816546762589928,
+    "balanced_accuracy": 0.3333333333333333,
+    "macro_f1": 0.27023172905525844,
+    "weighted_f1": 0.5526141653522102,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        85
+      ],
+      [
+        0,
+        0,
+        92
+      ],
+      [
+        0,
+        0,
+        379
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.6816546762589928,
+        "recall": 1.0,
+        "f1": 0.8106951871657754,
+        "support": 379
+      }
+    }
+  },
+  "latency_ms": {
+    "p50": 5.009916494600475,
+    "p95": 6.740595801966265,
+    "sample_count": 50,
+    "scope": "warm local encoder plus neural scorer, single fact"
+  },
+  "caveat": "Exploratory comparison: published test split was previously inspected for XGBoost; no human numeric importance labels."
+}

@@ -1,0 +1,173 @@
+{
+  "dataset": "https://huggingface.co/datasets/adugeen/personal-facts-msc",
+  "architecture": "frozen-bge-deep-head-v1",
+  "target": "human-labeled validity/duration; score is a constructed retention proxy",
+  "train_used": 2222,
+  "fit_size": 1777,
+  "validation_size": 445,
+  "test_size": 556,
+  "seeds": [
+    {
+      "seed": 42,
+      "best_epoch": 12,
+      "validation_macro_f1": 0.7208285334946023,
+      "validation_nll": 0.8370378017425537
+    },
+    {
+      "seed": 43,
+      "best_epoch": 3,
+      "validation_macro_f1": 0.7083285630025614,
+      "validation_nll": 0.5502716302871704
+    },
+    {
+      "seed": 44,
+      "best_epoch": 8,
+      "validation_macro_f1": 0.7291014034076134,
+      "validation_nll": 0.7912840247154236
+    }
+  ],
+  "selected_seed": 44,
+  "temperature": 2.4057092752700506,
+  "validation_nll_before_calibration": 0.7912840247154236,
+  "validation_nll_after_calibration": 0.538455069065094,
+  "neural_test": {
+    "accuracy": 0.7805755395683454,
+    "balanced_accuracy": 0.6777907492009079,
+    "macro_f1": 0.6732402444135618,
+    "weighted_f1": 0.7768479677246886,
+    "confusion_matrix": [
+      [
+        36,
+        18,
+        31
+      ],
+      [
+        5,
+        68,
+        19
+      ],
+      [
+        20,
+        29,
+        330
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.5901639344262295,
+        "recall": 0.4235294117647059,
+        "f1": 0.4931506849315068,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.591304347826087,
+        "recall": 0.7391304347826086,
+        "f1": 0.6570048309178744,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.868421052631579,
+        "recall": 0.8707124010554089,
+        "f1": 0.8695652173913043,
+        "support": 379
+      }
+    },
+    "proxy_mae": 0.21597832441329956,
+    "nll": 0.5547066330909729,
+    "ece_10_bins": 0.016321375966072086
+  },
+  "xgboost_test": {
+    "accuracy": 0.6924460431654677,
+    "balanced_accuracy": 0.6559893109475062,
+    "macro_f1": 0.611397113740403,
+    "weighted_f1": 0.7071040347409883,
+    "confusion_matrix": [
+      [
+        43,
+        17,
+        25
+      ],
+      [
+        11,
+        68,
+        13
+      ],
+      [
+        49,
+        56,
+        274
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.4174757281553398,
+        "recall": 0.5058823529411764,
+        "f1": 0.4574468085106383,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.48226950354609927,
+        "recall": 0.7391304347826086,
+        "f1": 0.5836909871244635,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.8782051282051282,
+        "recall": 0.7229551451187335,
+        "f1": 0.7930535455861071,
+        "support": 379
+      }
+    },
+    "proxy_mae": 0.2768482926855259
+  },
+  "majority_test": {
+    "accuracy": 0.6816546762589928,
+    "balanced_accuracy": 0.3333333333333333,
+    "macro_f1": 0.27023172905525844,
+    "weighted_f1": 0.5526141653522102,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        85
+      ],
+      [
+        0,
+        0,
+        92
+      ],
+      [
+        0,
+        0,
+        379
+      ]
+    ],
+    "per_class": {
+      "invalid": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 85
+      },
+      "short_term": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 92
+      },
+      "long_term": {
+        "precision": 0.6816546762589928,
+        "recall": 1.0,
+        "f1": 0.8106951871657754,
+        "support": 379
+      }
+    }
+  },
+  "latency_ms": {
+    "p50": 4.173500026809052,
+    "p95": 5.79039840667974,
+    "sample_count": 50,
+    "scope": "warm local encoder plus neural scorer, single fact"
+  },
+  "caveat": "Exploratory comparison: published test split was previously inspected for XGBoost; no human numeric importance labels."
+}

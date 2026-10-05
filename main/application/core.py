@@ -32,10 +32,18 @@ class MemoryCore:
 
     @classmethod
     def with_ml(cls, model_dir: str | Path | None = None) -> "MemoryCore":
-        """Replace heuristic scoring with the experimental Hippocorpus model."""
+        """Use the optional XGBoost scorer identified by its artifact metadata."""
         from ..ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
         return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
                    importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
+
+    @classmethod
+    def with_neural(cls, model_dir: str | Path | None = None) -> "MemoryCore":
+        """Use the local frozen-encoder retention scorer when explicitly selected."""
+        from ..ml import MLFeatureExtractor
+        from ..neural import DEFAULT_NEURAL_DIR, NeuralImportanceScorer
+        return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
+                   importance_scorer=NeuralImportanceScorer(model_dir or DEFAULT_NEURAL_DIR))
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         sanitized, sensitive_types = redact_sensitive(memory_input.content)
@@ -79,7 +87,9 @@ class MemoryCore:
                 record.due_at = parse_deadline(record.content, memory_input.timestamp,
                                                memory_input.metadata.get("due_at"))
         features = self.feature_extractor.extract(memory_input, record)
-        score = self.importance_scorer.score(features)
+        text_scorer = getattr(self.importance_scorer, "score_text", None)
+        score = (text_scorer(memory_input.content, features) if callable(text_scorer)
+                 else self.importance_scorer.score(features))
         tier = self.lifecycle_manager.assign_tier(record, score)
 
         record.features = features
@@ -92,6 +102,12 @@ class MemoryCore:
             record.source_metadata["importance_model"] = {
                 "type": "xgboost", "target": self.importance_scorer.metadata["target"],
                 "sha256": self.importance_scorer.metadata["model_sha256"],
+            }
+        elif getattr(self.importance_scorer, "model_kind", None) == "neural":
+            record.source_metadata["importance_model"] = {
+                "type": "neural", "target": self.importance_scorer.metadata["target"],
+                "sha256": self.importance_scorer.metadata["model_sha256"],
+                "encoder": self.importance_scorer.metadata["encoder_id"],
             }
         return record
 

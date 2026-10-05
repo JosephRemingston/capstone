@@ -14,3 +14,4 @@ memory_store/
 !/docs/architecture.md
 memory_store/*.indexes.json
 memory_store/*.cleanup-schedule.json
+/artifacts

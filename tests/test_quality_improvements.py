@@ -10,7 +10,7 @@ from main.storage.indexes import IndexDatabase
 from main.storage.cleanup import plan
 
 
-NOW = datetime(2026, 9, 29, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 class QualityImprovementTests(unittest.TestCase):

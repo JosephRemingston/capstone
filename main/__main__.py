@@ -37,9 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--interaction-score", type=float, help="Shortcut for metadata.interaction_score.")
     process.add_argument("--no-save", action="store_true", help="Process and print the record without saving it.")
     process.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
-    process.add_argument("--scorer", choices=["heuristic", "xgboost"], default="heuristic",
-                         help="Importance scorer; xgboost uses the experimental Hippocorpus model.")
-    process.add_argument("--model-dir", type=Path, help="Custom XGBoost artifact directory (requires --scorer xgboost).")
+    process.add_argument("--scorer", choices=["heuristic", "xgboost", "neural"], default="heuristic",
+                         help="Importance scorer; trained options use experimental retention proxy models.")
+    process.add_argument("--model-dir", type=Path, help="Custom model artifact directory (requires --scorer xgboost or neural).")
     process.add_argument("--split", action="store_true", help="Split independent clauses; return an array of memories.")
     process.add_argument("--due-at", help="Explicit ISO deadline in the input timezone (UTC by default).")
     process.add_argument("--task-id", help="Explicit task to complete, cancel, or reschedule.")
@@ -274,9 +274,11 @@ def process_command(args: argparse.Namespace, store: LocalMemoryStore) -> int:
         role=args.role,
         metadata=metadata,
     )
-    if args.model_dir is not None and args.scorer != "xgboost":
-        raise ValueError("--model-dir requires --scorer xgboost")
-    core = MemoryCore.with_ml(args.model_dir) if args.scorer == "xgboost" else MemoryCore()
+    if args.model_dir is not None and args.scorer == "heuristic":
+        raise ValueError("--model-dir requires --scorer xgboost or neural")
+    core = (MemoryCore.with_ml(args.model_dir) if args.scorer == "xgboost"
+            else MemoryCore.with_neural(args.model_dir) if args.scorer == "neural"
+            else MemoryCore())
     records = core.process_many(memory_input) if args.split else [core.process(memory_input)]
     if not args.no_save:
         records = [store.ingest(record) for record in records]

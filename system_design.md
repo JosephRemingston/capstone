@@ -38,7 +38,7 @@ The current repository contains:
 | Production database layer | Not implemented | SQLite indexes exist; authoritative concurrent server storage is still planned. |
 | RAG/vector layer | Implemented locally | BGE embeddings, SQLite vectors, hybrid retrieval, bounded context, and LangChain Gemini with checked citations. |
 | Graph layer | Implemented locally | Typed SQLite graph with provenance, valid/recorded time, aliases, task edges, and traversal. |
-| ML training | Experimental implementation | XGBoost trained on Hippocorpus importance ratings; reproducible training and held-out metrics in `reports/importance_report.md`. |
+| ML training | Experimental implementation | XGBoost and frozen-encoder neural scorers trained on human-labeled conversational fact validity/duration; held-out metrics in `evaluation/reports/`. |
 | REST API | Implemented | FastAPI authentication, memory, search, health, metrics, and privacy endpoints. |
 
 ## 3. Implemented, Partial, Planned, and Out of Scope
@@ -71,7 +71,7 @@ Partially implemented:
 Planned:
 
 - In-domain validation and calibration of XGBoost importance prediction.
-- In-domain conversational training labels beyond Hippocorpus.
+- Human-rated numeric importance and more representative task/greeting labels.
 - Production storage backend.
 - Broader graph entity/relation extraction from paragraphs.
 - Controlled forgetting.
@@ -136,7 +136,7 @@ Current architecture properties:
 - Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
-Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional Hippocorpus model retains its legacy preprocessing. See [rule experiment](docs/reports/heuristic_improvements.md) for results and limitations.
+Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional retention-proxy model retains the legacy ML feature preprocessing. See [rule experiment](docs/reports/heuristic_improvements.md) for results and limitations.
 
 ## 6. Current Component Design
 
@@ -230,7 +230,7 @@ Output format:
 
 ## 9. Current Model Design
 
-An optional XGBoost regression model is trained on Hippocorpus personal-event importance ratings. `MemoryCore.with_ml()` enables it; the heuristic remains the default. See [experiment report](docs/reports/importance_report.md) for measured results and limitations.
+Optional XGBoost and frozen-encoder neural three-class models are trained on human-labeled conversational fact validity and duration. `MemoryCore.with_ml()` and `MemoryCore.with_neural()` enable their retention-proxy scores; the heuristic remains the default. See [XGBoost metrics](evaluation/reports/conversational_retention.json) and [neural metrics](evaluation/reports/neural_retention.json) for measured results and limitations.
 
 Current classifier:
 
@@ -241,10 +241,10 @@ Current classifier:
 
 Current importance model:
 
-- Type: default heuristic scorer or optional XGBoost regression model.
-- Inputs: extracted feature dictionary; ML adds deterministic hashed word counts.
+- Type: default heuristic scorer or optional XGBoost/neural three-class models.
+- Inputs: extracted feature dictionary for XGBoost; redacted text plus 13 numeric features for neural.
 - Output: float score from `0.0` to `1.0`.
-- Method: heuristic weighted sum, or trained XGBoost prediction clamped to 0–1.
+- Method: heuristic weighted sum, or `P(long_term) + 0.5 × P(short_term)` from trained class probabilities.
 
 Current lifecycle model:
 
@@ -264,11 +264,11 @@ Current storage has two levels:
 
 | Data type | Current storage |
 | --- | --- |
-| Raw datasets | Research documents plus downloaded Hippocorpus under ignored `data/hippocorpus/`. |
-| Processed datasets | Features computed in memory during training; split IDs saved under `reports/`. |
+| Raw datasets | Research documents plus downloaded Personal Facts (MSC) under ignored `data/personal_facts_msc/`. |
+| Processed datasets | Features computed in memory during training; published split files are checksum-verified. |
 | Features | Stored inside returned `MemoryRecord.features` and persisted in JSONL when saved. |
 | Trained models | Native XGBoost model and metadata under `artifacts/importance/`. |
-| Experiment results | Importance regression metrics, split IDs, and test predictions under `reports/`. |
+| Experiment results | Retention classification metrics under `evaluation/reports/`. |
 | Logs | Not implemented. |
 | Configuration files | Not implemented. |
 | Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
@@ -277,7 +277,7 @@ JSONL remains the local source log with cooperative cross-process locking on mac
 
 ## 11. Current Evaluation
 
-Current evaluation includes automated tests, the Hippocorpus regression experiment, and a 48-case developer-authored conversational check. Human review remains pending; see `evaluation/README.md`.
+Current evaluation includes automated tests, the Personal Facts (MSC) retention-proxy experiment, and a 48-case developer-authored conversational check. Human review remains pending; see `evaluation/README.md`.
 
 The tests verify:
 
@@ -388,7 +388,7 @@ Planned complete architecture responsibilities:
 
 ## 16. Complete Training Pipeline
 
-The current training pipeline uses existing Hippocorpus story text and importance ratings. Author/story-family-disjoint splits protect evaluation. The broader planned dataset would also include conversational category and lifecycle tier labels.
+The current training pipeline uses human-annotated Personal Facts (MSC) candidates with validity and short-/long-term duration labels. The published train/test split is stratified by category, not by speaker or conversation. It does not provide human numeric importance ratings or lifecycle tier labels.
 
 ```mermaid
 flowchart LR
@@ -412,7 +412,7 @@ Planned training data fields:
 - `interaction_signal`
 - `retrieval_success`
 
-Hippocorpus supplies the current importance target; the broader conversational category/tier dataset does not yet exist.
+Personal Facts (MSC) supplies the current retention-proxy target. Human-rated numeric importance, task, greeting, and lifecycle tier labels are still needed.
 
 ## 17. Complete Retrieval Pipeline
 
@@ -537,7 +537,7 @@ Future operational signals:
 ## 22. Open Questions
 
 - Should the next production storage backend be SQLite, Postgres, or a document database?
-- Which conversational dataset can validate transfer of Hippocorpus-trained importance scoring?
+- Which independent, conversation-disjoint dataset can validate the retention proxy and lifecycle decisions?
 - How should the local LSH ANN configuration be tuned against workload size and recall?
 - How should paragraph-level extraction extend the implemented typed bitemporal graph?
 - Which independent human judgments and full-system baselines should extend LoCoMo/LongMemEval?

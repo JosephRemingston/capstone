@@ -21,7 +21,7 @@ def _contains_any(text: str, terms: tuple[str, ...], *, legacy: bool = False) ->
 class MemoryClassifier:
     """Deterministic classifier with an easy replacement point for ML/LLM models."""
 
-    legacy: bool = False  # Frozen preprocessing for the existing Hippocorpus artifact.
+    legacy: bool = False  # Frozen preprocessing for optional ML artifacts.
 
     temporary_terms: tuple[str, ...] = (
         "hi",

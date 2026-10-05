@@ -301,10 +301,25 @@ These are product-policy thresholds, not statistically calibrated probabilities.
 ### Optional ML scorer
 
 `MemoryCore.with_ml()` can explicitly load the experimental XGBoost scorer.
-It was trained on Hippocorpus personal-event ratings, not short conversational
-facts, tasks, preferences, or greetings. Reported held-out metrics are MAE
-0.2291, RMSE 0.2847, R² 0.0311, and Spearman 0.2367. It is not the default
-because of this domain mismatch and uncalibrated lifecycle thresholds.
+It was trained on 2,222 usable human-labeled conversational fact candidates from
+[Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc).
+It predicts invalid, short-term, or long-term. Its 0–1 score is a policy proxy:
+`P(long_term) + 0.5 × P(short_term)`, not a human importance rating. On the
+published 556-fact test split, accuracy is 69.24% and macro F1 is 0.6114;
+the always-long-term baseline has 68.17% accuracy and 0.2702 macro F1.
+It is not the default because task requests and greetings are underrepresented,
+the split is not conversation-disjoint, and lifecycle thresholds remain uncalibrated.
+
+`MemoryCore.with_neural()` enables a separate local neural scorer. A frozen
+384-dimensional BGE encoder processes redacted fact text; a 13-feature numeric
+branch joins a small three-class dense head. PyTorch trains the head, while
+ONNX Runtime handles inference. On the same published test split, it reaches
+78.06% accuracy and 0.6732 macro F1 with the deeper head selected on validation.
+The original neural head reached 0.6504 macro F1. Deeper-head invalid-fact
+recall is 42.35%, still below XGBoost's 50.59%, and its constructed proxy MAE
+is worse than the original neural head's. Both models remain optional. See the
+[neural report](evaluation/reports/neural_retention.md) for architecture,
+calibration, latency, and the exploratory-comparison limitation.
 
 ## Task management
 

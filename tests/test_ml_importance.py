@@ -25,8 +25,12 @@ class MLIntegrationTests(unittest.TestCase):
         for text in ("hello", "I prefer concise Python explanations.", "Yesterday my child was born and it changed my life."):
             with self.subTest(text=text):
                 record = core.process(MemoryInput(content=text, user_id="u1", session_id="s1"))
-                direct = float(core.importance_scorer.model.inplace_predict(
-                    np.asarray([[record.features[name] for name in FEATURE_NAMES]], dtype=np.float32))[0])
+                raw = core.importance_scorer.model.inplace_predict(
+                    np.asarray([[record.features[name] for name in FEATURE_NAMES]], dtype=np.float32))[0]
+                if core.importance_scorer.metadata.get("output_type") == "multiclass_probability":
+                    direct = float(np.dot(raw, core.importance_scorer.metadata["score_values"]))
+                else:
+                    direct = float(raw)
                 self.assertAlmostEqual(record.importance_score, max(0, min(direct, 1)), places=4)
                 self.assertTrue(math.isfinite(record.importance_score))
                 self.assertEqual(record.source_metadata["importance_model"]["type"], "xgboost")
@@ -66,16 +70,12 @@ class MLIntegrationTests(unittest.TestCase):
                                    "--model-dir", directory, "--no-save"])
             self.assertEqual(status, 2)
 
-    def test_training_groups_and_constant_baseline(self):
-        from training.train_importance import groups_for, metrics
-        import numpy as np
-        def row(id, worker, pair="", text=""):
-            return dict(AssignmentId=id, WorkerId=worker, recAgnPairId=pair,
-                        recImgPairId="", story=text or id, summary="")
-        groups = groups_for([row("a", "w1"), row("b", "w2", "a"), row("c", "w2"), row("d", "w3")])
-        self.assertEqual(groups[0], groups[2])
-        self.assertNotEqual(groups[0], groups[3])
-        self.assertIsNone(metrics(np.array([0, 1]), np.array([0.72, 0.72]))["spearman"])
+    def test_training_target_mapping(self):
+        from training.train_conversational_retention import target
+        self.assertEqual(target({"broken": "Yes", "duration": "None"}), 0)
+        self.assertEqual(target({"broken": "No", "duration": "Short-term"}), 1)
+        self.assertEqual(target({"broken": "No", "duration": "Long-term"}), 2)
+        self.assertIsNone(target({"broken": "No", "duration": "None"}))
 
 
 if __name__ == "__main__":

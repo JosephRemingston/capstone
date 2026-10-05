@@ -1,4 +1,4 @@
-"""Optional XGBoost importance scoring for the Hippocorpus proxy target."""
+"""Optional XGBoost scoring for an explicitly named proxy target."""
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +13,7 @@ from .domain.features import FeatureExtractor
 from .domain.models import MemoryInput, MemoryRecord
 
 DEFAULT_MODEL_DIR = Path(__file__).resolve().parent.parent / "artifacts" / "importance"
+# Preserve the established feature schema identifier for artifact compatibility.
 FEATURE_VERSION = "hippocorpus-text-v1"
 TEXT_FEATURES = (
     "category_episodic", "category_preference", "category_procedural",
@@ -41,15 +42,15 @@ class MLFeatureExtractor(FeatureExtractor):
 class MLImportanceScorer:
     """Load a native XGBoost artifact and implement the existing score interface.
 
-    This predicts personal-event significance, not validated conversational
-    retention utility. Dependencies are imported only when this scorer is used.
+    The artifact metadata identifies the target; a retention proxy is not a
+    human-rated importance score. Dependencies load only when this scorer is used.
     """
 
     def __init__(self, model_dir: str | Path = DEFAULT_MODEL_DIR) -> None:
         try:
             import xgboost as xgb
         except ImportError as exc:
-            raise ValueError("Install requirements-ml.txt to use the ML scorer") from exc
+            raise ValueError("Install requirements.txt to use the ML scorer") from exc
         directory = Path(model_dir)
         try:
             self.metadata = json.loads((directory / "metadata.json").read_text())
@@ -72,7 +73,19 @@ class MLImportanceScorer:
         values = [float(features[name]) for name in FEATURE_NAMES]
         if not all(math.isfinite(value) for value in values):
             raise ValueError("ML features must be finite")
-        prediction = float(self.model.inplace_predict(np.asarray([values], dtype=np.float32))[0])
+        raw = self.model.inplace_predict(np.asarray([values], dtype=np.float32))[0]
+        if self.metadata.get("output_type") == "multiclass_probability":
+            probabilities = np.asarray(raw, dtype=np.float64)
+            score_values = np.asarray(self.metadata["score_values"], dtype=np.float64)
+            if (probabilities.shape != score_values.shape or
+                    not np.all(np.isfinite(probabilities)) or
+                    not np.all(np.isfinite(score_values)) or
+                    np.any(probabilities < 0) or
+                    not np.isclose(probabilities.sum(), 1.0, atol=1e-4)):
+                raise ValueError("ML model returned invalid class probabilities")
+            prediction = float(np.dot(probabilities, score_values))
+        else:
+            prediction = float(raw)
         if not math.isfinite(prediction):
             raise ValueError("ML model returned a nonfinite prediction")
         return round(max(0.0, min(prediction, 1.0)), 4)
