@@ -1,2 +1,0 @@
-"""Named ablation experiment configurations."""
-

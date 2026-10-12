@@ -2,6 +2,8 @@
 
 **A local-first, temporal memory system for personalized AI assistants.** CogniMem turns conversations into inspectable memories, keeps track of changes, and retrieves cited evidence for later answers. It combines rule-based retention, task and conflict management, a temporal knowledge graph, vector search, local reranking, and retrieval-augmented generation (RAG).
 
+For the project objective, practical uses, implementation layers, data flows, and remaining goals, read [What we are building and why](PROJECT_VISION.md).
+
 > **Research question:** How much does temporal and relational graph retrieval improve vector-based conversational memory retrieval and RAG? The controlled experiment compares vector-only, vector + reranker, vector + graph, and vector + graph + reranker while holding the dataset, prompt, answer policy, context size, and evaluation procedure fixed.
 
 ## Why build it?
@@ -93,11 +95,11 @@ The graph stores typed relations such as `lives_in`, `works_at`, `based_in`, `li
 
 The lightweight `LocalMemoryStore.search()` requires lexical overlap. Its default score weights are keyword relevance **0.65**, category **0.10**, tier **0.05**, recency **0.10**, and importance **0.10**. `MemoryRAG.search()` adds independent vector and graph channels after filtering by user, session, history, task state, expiry, and time.
 
-Hybrid search applies weighted reciprocal-rank fusion to memory IDs, then keeps `max(20, 4 × Top-K)` candidates by default (up to 200). Up to three representative chunks per candidate go to the local `Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Each memory takes its best chunk score and keeps that chunk for context; fusion score and ID resolve ties. `--no-rerank` exposes the fusion baseline. Model failure returns fused results with fallback metadata instead of failing retrieval.
+Hybrid search applies weighted reciprocal-rank fusion to memory IDs, then keeps `min(200, max(100, 4 × Top-K))` candidates by default (`COGNIMEM_CANDIDATE_POOL` overrides; a pool of 20 held LoCoMo gold evidence only 69.6% of the time). Fusion order is computed at the old depth (`max(20, 4 × Top-K)` per channel) and deeper candidates are appended, so the wider pool never reorders results when reranking is off or fails. Up to three representative chunks per candidate go to the local `Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder. Each memory takes its best chunk score and keeps that chunk for context; fusion score and ID resolve ties. In hybrid mode a structural step then reorders the reranked list: candidates with a cued, currently valid graph path move up; the other memories of that path follow them; and a statement whose relation has closed yields to its successor when the question asks about that relation. `--no-rerank` exposes the fusion baseline. Model failure returns fused results with fallback metadata instead of failing retrieval. Vector search is exact by default; approximate LSH search is opt-in (`--ann`) and experimental.
 
 ### Layer 5: Build context and answer
 
-The context selector rewards query coverage, removes near-duplicate snippets, and respects a character budget. Graph paths are included only when all supporting memories fit. `ask --generator extractive` produces local, deterministic evidence text. The default `ask` path uses LangChain/Gemini 2.5 Flash after a key is configured. Hosted output must contain source IDs and exact supporting quotes found in the supplied context; invalid citations are rejected, and insufficient evidence should lead to abstention. Quote checking verifies provenance, but it cannot by itself prove every semantic inference in a generated statement.
+The context selector keeps the reranked order (fusion-only results still prefer query coverage), removes near-duplicate snippets, and respects a character budget; per-source scores are returned in `context['scores']`, outside the prompt text. Graph paths are included only when all supporting memories fit. `ask --generator extractive` produces local, deterministic evidence text; adding the experimental `--abstain` flag refuses typed questions (name, place, amount, duration, …) that no confidently reranked memory answers. The default `ask` path uses LangChain/Gemini 2.5 Flash after a key is configured. Hosted output must contain source IDs and exact supporting quotes found in the supplied context; invalid citations are rejected, and insufficient evidence should lead to abstention. Quote checking verifies provenance, but it cannot by itself prove every semantic inference in a generated statement.
 
 ### Layer 6: Expose and operate the system
 
@@ -132,7 +134,7 @@ export COGNIMEM_JWT_SECRET="$(.venv/bin/python -c 'import secrets; print(secrets
 # Visit http://localhost:8000/docs for the endpoint schemas.
 ```
 
-`COGNIMEM_STORE`, `COGNIMEM_AUTH_DB`, and `COGNIMEM_INDEX` override local paths. `COGNIMEM_ANN_ENABLED` and `COGNIMEM_ANN_EXACT_THRESHOLD` configure vector indexing. Keep `.env`, tokens, and generated runtime data out of version control.
+`COGNIMEM_STORE`, `COGNIMEM_AUTH_DB`, and `COGNIMEM_INDEX` override local paths. Vector search is exact by default; `COGNIMEM_ANN_ENABLED=true` (CLI: `--ann`) enables LSH for users with at least `COGNIMEM_ANN_EXACT_THRESHOLD` memories (default 5000, must be >= 1). `COGNIMEM_CANDIDATE_POOL` (1-200) and `COGNIMEM_MODEL_THREADS` (default: onnxruntime decides) tune reranking. Keep `.env`, tokens, and generated runtime data out of version control.
 
 ## First local workflow
 
@@ -197,64 +199,104 @@ The `/docs` page documents the other endpoints. Token, store, and index files ar
 
 ## Evaluation and measured results
 
-**The following tables describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection; RAG metrics concern answers; retention-model metrics concern three-class labels. The numbers below come from saved repository reports.
+**The tables below describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection, answer metrics concern the extractive answer, and retention metrics concern what the lifecycle keeps. Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`). The tags are `baseline` (12 Oct 2026, before the fixes), `e2r` (search fixes only), `final` (all fixes, shipped defaults) and `final_abstain` (`final` plus the opt-in abstention rule). The [evaluation guide](evaluation/README.md) describes the protocol.
 
-### Controlled graph and reranker ablation
+### Before and after
 
-The [240-query development benchmark](evaluation/RESULTS.md) has 20 developer-labeled cases in each of 12 query types. The BGE model, 20-candidate pool, Top-K values, 10,000-character context budget, answer policy, and evaluation procedure are identical in all four arms. Optional importance models are disabled. Retrieval scores cover the **220 answerable queries**; answer scores include all **240**. `Recall@K` measures labeled evidence found in the first K results; `MRR` rewards early first relevant results; `nDCG` rewards graded relevance and ordering.
+#### What was there before
 
-| Retrieval system | Recall@5 | Recall@10 | Recall@20 | Hit@5 | Hit@10 | MRR | nDCG@5 | nDCG@10 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Vector | 89.55% | 91.14% | 91.36% | 91.36% | 91.36% | 0.842 | 0.824 | 0.830 |
-| Vector + reranker | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.914 | 0.893 | 0.893 |
-| Vector + graph | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.884 | 0.891 | 0.891 |
-| Vector + graph + reranker | 91.36% | 91.36% | 91.36% | 91.36% | 91.36% | 0.914 | 0.893 | 0.893 |
+The metrics saved on 29 Sep 2026 looked strong but did not hold up:
 
-Adding the graph raises Recall@5 by **1.82 percentage points** over vector-only (paired-bootstrap 95% interval **0.68–3.18 points**; paired randomization **p = 0.0072**). Multi-hop Recall@5 rises from **80% to 100%**. Reranking raises vector-only MRR from **0.842 to 0.914**. After graph fusion, reranking leaves Recall@5 unchanged and raises MRR from **0.884 to 0.914**. These are controlled *development* results, not independent evidence of general-world performance. Procedural questions score only **5% Recall@5** in every arm.
+| Saved claim (29 Sep 2026) | Value | Problem found on re-measurement |
+| --- | ---: | --- |
+| Controlled benchmark Recall@5, vector + graph + reranker | 91.36% | 240 template questions written alongside the rules. Procedural questions scored 5%, because `ingest()` merged 19 of their 20 memories. |
+| Abstention accuracy | 91.67% | The extractive answerer refused **0** of the unanswerable questions; the figure counted answerable questions as "correct". |
+| LoCoMo hybrid + reranker Recall@5 | 55.83% | Measured with exact search. Approximate (LSH) search, added on 1 Oct, was on by default from 256 memories, so the shipped path was never measured. |
+| 48/48 classification cases | 100% | The cases had been used to develop the rules. |
 
-The same benchmark uses a deterministic **extractive** answer generator, so it does not measure live Gemini quality:
+So on 12 Oct 2026 every cache, model and report was deleted and rebuilt from scratch:
+- a new harness;
+- a new AI-authored benchmark (12 personas, 456 memories, 360 questions, dev 90 / test 270; not human-validated);
+- 60 new classification cases;
+- retrained retention models, whose metrics reproduced exactly;
+- a fresh baseline.
 
-| RAG system | Correctness | Answer relevance | Faithfulness | Context precision | Context recall |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Vector | 91.67% | 91.67% | 100% | 21.08% | 82.08% |
-| Vector + reranker | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
-| Vector + graph | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
-| Vector + graph + reranker | 91.67% | 91.67% | 100% | 21.75% | 83.75% |
+The baseline exposed these problems:
 
-| RAG system | Citation precision | Citation recall | Citation completeness | Unsupported claims | Abstention accuracy |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Vector | 17.75% | 82.08% | 80.42% | 0% | 91.67% |
-| Vector + reranker | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
-| Vector + graph | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
-| Vector + graph + reranker | 18.42% | 83.75% | 83.75% | 0% | 91.67% |
+| Problem | Baseline evidence |
+| --- | --- |
+| Approximate search shipped by default and dropped most candidates | Benchmark Recall@5 93.0% exact vs **57.5%** with LSH; LoCoMo 55.8% vs **26.8%** |
+| The reranker saw too few candidates | LoCoMo gold evidence reached the 20-item reranker pool only **69.6%** of the time |
+| The reranker ignored time and graph links | Correct memory ranked first: temporal **27.3%**, historical **52.2%**; multi-hop Recall@5 **68.2%** (90.9% before reranking) |
+| Users' own statements expired after one hour | LongMemEval user-fact retention **21.0%** (86% of answer turns labelled temporary) |
+| No abstention | Unanswerable questions refused **0%** (balanced answerability 50%) |
+| `search(mode='recency')` always raised | Crash on every call |
 
-The 100% faithfulness and 0% unsupported-claim values reflect mechanical quote grounding, not human judgment. Overall abstention accuracy hides a specific failure: all four arms fail to abstain on the unanswerable cases when unrelated context is retrieved. Measured end-to-end development-machine latency:
+#### What was changed
 
-| System | P50 | P95 | P99 |
-| --- | ---: | ---: | ---: |
-| Vector | 16.78 ms | 21.49 ms | 23.03 ms |
-| Vector + reranker | 38.40 ms | 89.45 ms | 94.04 ms |
-| Vector + graph | 25.29 ms | 31.45 ms | 34.13 ms |
-| Vector + graph + reranker | 47.04 ms | 98.39 ms | 102.23 ms |
+Each change was designed on dev data, then checked by an independent adversarial review that re-ran the numbers and probed for over-fitting before it was merged. The final code review found 14 further defects, all of them fixed. Changes are listed in the order they were measured, and intervals are paired-bootstrap 95% CIs.
 
-See the [full ablation report](docs/reports/ablation/results.md) and [machine-readable results](docs/reports/ablation/results.json) for query-type metrics, stage timings, and failure cases. The [blind human-review packet](docs/reports/ablation/human_review_blind.jsonl) contains **blank** ratings; independent reviews remain pending.
+| Change | Files | Mechanism | Measured change |
+| --- | --- | --- | --- |
+| Keep what users say about themselves | [`main/domain/text_rules.py`](main/domain/text_rules.py), [`classification.py`](main/domain/classification.py), [`lifecycle.py`](main/domain/lifecycle.py) | Questions and hedges that contain first-person facts become episodic, not temporary. Small talk, and questions asking to recall a stored fact, stay temporary. User self-disclosures are kept 90 days instead of 14. | LongMemEval user-fact retention **21.0% → 90.6%**; memories still visible 18.2% → 55.2%. Category accuracy on the 60 cases 50.0% → 53.3%; tier accuracy 55.0% → 53.3%. |
+| Exact search by default; corrected approximate search | [`main/storage/indexes.py`](main/storage/indexes.py), [`main/retrieval/rag.py`](main/retrieval/rag.py), [`api/config.py`](api/config.py) | Exact numpy scan by default; LSH is opt-in (`--ann`) and experimental. LSH now probes radii 0–2 until it has enough candidates, falls back to exact search, and rebuilds when its settings change. | Shipped path is exact. With LSH forced on: benchmark Recall@5 **57.5% → 97.5%**; LoCoMo Recall@5 **26.8% → 66.5%** and pool hit 33.3% → 90.6%. |
+| Bigger reranker pool | [`main/retrieval/rag.py`](main/retrieval/rag.py), [`reranker.py`](main/retrieval/reranker.py) | The reranker sees 100 fused candidates instead of 20 (`COGNIMEM_CANDIDATE_POOL` overrides). Fusion order without the reranker is unchanged, the 600-character cap is gone, and limits 51–100 no longer crash. | LoCoMo Recall@5 **55.8% → 66.8%** (+11.0 [+9.5, +12.5]); Hit@5 61.1% → 72.3%; pool hit 69.6% → 91.9%; multi-hop 34.7% → 41.8%. On the 7 conversations not used to choose the pool: 55.7% → 66.8%. Benchmark: +0.6 points (not significant). |
+| Keep the reranker's order in the answer context | [`main/retrieval/rag.py`](main/retrieval/rag.py) | Context follows the reranked order and exposes per-source scores (`context['scores']`) outside the prompt text. | The first statement of the extractive answer is now the top-ranked memory: 84.2% correct in `final`. |
+| Time- and link-aware reordering after the reranker | [`main/retrieval/rag.py`](main/retrieval/rag.py) | Graph-supported candidates and their chain partners move up. A statement whose relation has closed yields to its successor when the question asks about that relation. The "newer of two statements" step is opt-in, because its gains did not survive paraphrase. | Benchmark Recall@5 **93.7% → 97.5%** (+3.8 [+2.2, +5.7]); correct first **77.3% → 84.2%** (+6.9 [+3.6, +10.5]); MRR 0.904 → 0.939; multi-hop Recall@5 65.9% → **100%**. Correct first: temporal 27.3% → 59.1%, historical 52.2% → 91.3%, preference 82.6% → 91.3%. LoCoMo unchanged (it has no stored relations). |
+| Opt-in extractive abstention | [`main/retrieval/generation.py`](main/retrieval/generation.py), [`main/__main__.py`](main/__main__.py) | `ask --generator extractive --abstain` refuses when the question asks for a typed answer (name, place, occupation, amount, duration…) that no confidently reranked memory contains. Off by default. | Benchmark test: unanswerable refused **0% → 17.4%**, balanced 50.0% → 58.5%, answerable kept 99.6%. External sets show no useful gain (LongMemEval balanced 52.5%, LoCoMo 50.0%; [details](evaluation/reports/abstention_external.json)). |
+| Recency search fix | [`main/retrieval/rag.py`](main/retrieval/rag.py) | The custom-channel check no longer rejects the built-in recency mode. | `search(mode='recency')` works. |
 
-### External LoCoMo retrieval
+#### Overall: baseline → final
 
-The saved [LoCoMo report](docs/reports/locomo_retrieval.json) scores **1,973** questions over externally supplied conversations. It indexes text turns, speakers, and dates without indexing QA labels or summaries. These are evidence-retrieval metrics at K = 5, not generated-answer scores:
+| Metric | Baseline | Final | Change |
+| --- | ---: | ---: | --- |
+| Benchmark Recall@5 (test, 247 answerable) | 93.0% | **97.5%** | +4.5 [+2.6, +6.5], p = 0.0002 |
+| Benchmark correct memory first | 77.3% | **84.2%** | +6.9 [+3.6, +10.5], p = 0.0002 |
+| Benchmark MRR / nDCG@10 | 0.904 / 0.879 | **0.939 / 0.933** | MRR +3.5 [+1.6, +5.6] |
+| Benchmark grounded correctness (answerable) | 97.6% | 99.2% | +1.6 [+0.4, +3.2], p = 0.13 (not significant) |
+| LoCoMo Recall@5 (1,973 questions) | 55.8% | **66.8%** | +11.0 [+9.5, +12.5], p = 0.0002 |
+| LoCoMo Hit@5 / Recall@10 | 61.1% / 60.0% | **72.3% / 73.4%** | Hit@5 +11.3 [+9.6, +12.9] |
+| LongMemEval user-fact retention | 21.0% | **90.6%** | +69.6 points |
+| Unanswerable refused (opt-in abstention) | 0% | 17.4% | answerable kept 99.6% |
+| Search latency P50, benchmark / LoCoMo | 85 / 119 ms | 246 / 435 ms | about 3–4× slower; mostly the 5× larger reranker pool |
 
-| Retriever | Recall@5 | Hit@5 | MRR@5 | nDCG@5 | Mean latency/query |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Recency | 0.89% | 1.06% | 0.004 | 0.005 | 0.93 ms |
-| Keyword | 37.65% | 41.31% | 0.302 | 0.310 | 6.59 ms |
-| Semantic/vector | 43.26% | 47.85% | 0.328 | 0.341 | 13.96 ms |
-| Graph-only | 0.00% | 0.00% | 0.000 | 0.000 | 7.60 ms |
-| Hybrid fusion | 48.15% | 53.07% | 0.373 | 0.385 | 25.01 ms |
-| Hybrid + local reranker | 55.83% | 61.07% | 0.505 | 0.498 | 122.92 ms |
+What did not improve: correction questions ("scratch that…") stay at 54.5% correct first, and latest-update questions moved 43.5% → 39.1% (one question). Abstention barely helps on real conversations. Latency rose: `COGNIMEM_CANDIDATE_POOL=50` keeps most of the LoCoMo gain at about half the reranker cost.
 
-Graph-only retrieves no LoCoMo evidence in this run: raw-turn graph extraction did not cover those questions. This is a counterexample to the controlled graph gain. The more expensive reranker helps hybrid retrieval here. LoCoMo is a generated-dialogue benchmark, not a collection of real user chats. The [evaluation guide](evaluation/README.md) explains exclusions and the broader retention and cleanup studies.
+### Current results (shipped defaults, snapshot `final`)
 
-### Optional retention models
+#### Controlled benchmark, test split
+
+There are 270 questions: 247 answerable and 23 unanswerable, the latter rewritten to cover 26 attribute types. The run uses exact search, the default pool (100 for reranked arms, 20 for fusion-only arms), top-5 context and the extractive answerer.
+
+| Arm | Recall@5 | Recall@10 | MRR | nDCG@10 | Correct first | Grounded correct (all) | P50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Hybrid (keyword + vector + graph) + reranker, shipped | 97.5% | 99.5% | 0.939 | 0.933 | 84.2% | 90.7% | 246 ms |
+
+The [full report](docs/reports/final/ablation/results.md) breaks results down by arm (vector, vector + reranker, vector + graph, vector + graph + reranker), by query type and by number of gold memories, and lists failure cases. It is regenerated locally under the git-ignored `docs/`.
+
+#### External LoCoMo evidence retrieval
+
+These are evidence-retrieval metrics on 1,973 questions over 10 generated conversations, not answer scores. Conversations 1–3 were used to choose the pool size.
+
+| Mode | Recall@5 | Hit@5 | MRR@5 | Pool hit | Multi-hop R@5 | P50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Hybrid fusion (no reranker) | 48.2% | 53.1% | 0.374 | 69.6% | 22.3% | 22 ms |
+| Hybrid + reranker, shipped | **66.8%** | **72.3%** | 0.589 | 91.9% | 41.8% | 435 ms |
+| Hybrid + reranker, held-out 7 conversations | 66.8% | 72.8% | 0.586 | 92.4% | — | — |
+| Hybrid + reranker, approximate search (opt-in) | 66.5% | 72.0% | 0.587 | 90.6% | 40.9% | 428 ms |
+
+The graph channel alone still finds almost no LoCoMo evidence (Recall@5 1.2%), because raw dialogue turns carry no explicit relations.
+
+#### Retention and lifecycle
+
+| Check | Result |
+| --- | --- |
+| LongMemEval oracle (457 examples): answer turns still retrievable when the question is asked | 90.6% (keep-everything: 100%) |
+| Mean share of a conversation still visible | 55.2% |
+| 60 classification cases (AI-authored): category / tier accuracy | 53.3% / 53.3% (macro F1 0.544) |
+| Lifecycle, task and supersession checks | 16/16 |
+
+### Optional retention models (unchanged)
 
 XGBoost, an original shallow neural head, and a deeper neural head were evaluated on the same **556-fact** published test split from [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc): 85 invalid, 92 short-term, and 379 long-term. The always-long-term baseline exposes class imbalance. Proxy MAE compares a constructed target (`invalid=0`, `short_term=0.5`, `long_term=1`), not human importance ratings.
 
@@ -310,27 +352,21 @@ The deeper head's mean validation macro F1 over three seeds was **0.7194**, vers
 
 Model selection used a stratified training/validation split rather than choosing on the test set. XGBoost's four validation trials had macro F1 **0.5934, 0.6022, 0.6002, and 0.6211**; the last configuration (max depth 5, min child weight 8, 396 trees on refit) was selected. The original neural head's three best-checkpoint validation macro F1 values were **0.7175, 0.7057, and 0.7169** for seeds 42–44; the deeper head's were **0.7208, 0.7083, and 0.7291**. The selected original checkpoint used seed 42, epoch 4; the deeper checkpoint used seed 44, epoch 8. Temperature calibration reduced validation negative log-likelihood from **0.5644 to 0.5332** for the original (temperature 1.3946) and from **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
 
-### Rule and lifecycle checks
-
-The saved [48-case conversational report](docs/reports/conversational_evaluation.json) has **48/48** category and tier matches against developer-authored labels, category macro F1 **1.0**, and **48/48** importance-range matches. These cases helped develop the rules, so this is regression coverage rather than an independent accuracy estimate. The controlled lifecycle audit passes **14/14** checks for tiers, expiry, task changes, recurrence, archive views, and history preservation. Independent human labels and reviews remain outstanding.
-
 ## Reproduce the experiments
 
 After installation, run from the repository root:
 
 ```bash
-.venv/bin/python -m evaluation.run                  # Four-arm graph/reranker ablation
-.venv/bin/python -m evaluation.evaluate             # 48 conversational cases
-.venv/bin/python -m evaluation.lifecycle            # Lifecycle audit
-.venv/bin/python -m evaluation.benchmark            # LoCoMo; see evaluation/README.md for data setup
-.venv/bin/python -m training.train_conversational_retention
+.venv/bin/python -m training.train_conversational_retention          # retention models (separate processes)
 .venv/bin/python -m training.train_neural_retention
 .venv/bin/python -m training.compare_neural_depth
+.venv/bin/python scripts/measure_all.py --tag final --candidate-limit default --ann-arms   # every measurement
+.venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch
 ```
 
-Training and external benchmarks can require dataset/model downloads and substantial CPU time. Check each command's `--help` and the [evaluation guide](evaluation/README.md) before rerunning saved reports. The ablation defaults to extractive answers; optional `--generator gemini` makes hosted calls only after a key is configured and uses the same generator across all four arms.
+`measure_all.py` runs the benchmark ablation (test and dev), LoCoMo, LongMemEval retention, classification and lifecycle checks, and snapshots the reports under the tag. The first run downloads the models and datasets, and a full run takes about an hour on a laptop. `--abstain-threshold 0.0` measures the opt-in abstention rule, and `--structure none` disables the time- and link-aware reordering. The [evaluation guide](evaluation/README.md) lists every flag and module.
 
-To run automated tests, install a test runner with `uv pip install --python .venv/bin/python pytest`, then run `.venv/bin/python -m pytest -q`. The repository's `requirements.txt` contains runtime dependencies, not pytest.
+To run the automated tests, install the test runner (`uv pip install --python .venv/bin/python -r requirements-dev.txt`), then run `.venv/bin/python -m pytest -q`.
 
 ## Repository map
 
@@ -348,7 +384,8 @@ To run automated tests, install a test runner with `uv pip install --python .ven
 
 ## Limits and next steps
 
-- **Generalization:** controlled query labels are developer-authored; external LoCoMo exposes weak graph coverage. Fresh conversation-disjoint data and independent human ratings are needed for a broader claim.
+- **Generalization:** the controlled benchmark and classification cases were authored by an AI and are not human-validated, and its dev and test personas share templates. LoCoMo is generated dialogue, and its first three conversations were used to choose the reranker pool. Fresh conversation-disjoint data and independent human ratings are needed for a broader claim.
+- **Known gaps:** correction and latest-update questions are still often answered with an older statement; abstention is opt-in and catches only "attribute never stated" questions; category classification is 53% on the 60 cases; the larger reranker pool costs about 3–4× search latency; approximate search remains experimental. One lifecycle check and one task test fail rarely because of a wall-clock race in task updates.
 - **Answer quality:** saved RAG scores use extractive answers. Live Gemini correctness, personalization, citation usefulness, and conflict decisions still need independent review. Exact-quote citation validation alone cannot prove semantic truth.
 - **Extraction and retention:** graph extraction and indirect contradiction handling cover supported language patterns. Optional retention models learn fact validity/duration rather than human importance; the heuristic remains the default.
 - **Operations:** local JSONL and SQLite are not a production database architecture. Deployment needs backups, retention-policy review, stronger authorization/abuse controls, and workload-specific scale and latency measurements.

@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("COGNIMEM_STORE", str(DEFAULT_STORE_PATH)),
         help="Path to the local JSONL memory store. Defaults to memory_store/memories.jsonl.",
     )
+    parser.add_argument(
+        "--ann", action="store_true", default=None,
+        help="Use approximate (LSH) vector search for corpora of at least COGNIMEM_ANN_EXACT_THRESHOLD "
+             "(default 5000) memories. Default: exact search, or COGNIMEM_ANN_ENABLED.",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -84,7 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument('--no-rerank', action='store_false', dest='rerank', default=None,
                         help='Disable the local cross-encoder for hybrid search.')
     search.add_argument('--candidate-limit', type=int,
-                        help='Fused candidates considered before Top-K reranking (default: max(20, 4×limit)).')
+                        help='Fused candidates considered before Top-K reranking (default for reranked hybrid '
+                             'search: COGNIMEM_CANDIDATE_POOL or min(200, max(100, 4×limit)); without reranking: '
+                             'min(200, max(20, 4×limit))).')
     for name in ('ask', 'index', 'graph'):
         command = subparsers.add_parser(name, help={'ask': 'Answer using retrieved memory evidence.',
                                                    'index': 'Build or update vector and temporal graph indexes.',
@@ -109,6 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
                 command.add_argument('--budget', type=int, default=10000, help='Evidence context character budget.')
                 command.add_argument('--preview', action='store_true', help='Show context and prompt without an API call.')
                 command.add_argument('--env-file', default='.env')
+                command.add_argument('--abstain', action='store_true',
+                                     help='Experimental, off by default; requires --generator extractive and the '
+                                          'reranker: abstain when the question asks for a typed answer (name, place, '
+                                          'job, frequency, amount, duration, distance) that no confident source contains.')
             else:
                 command.add_argument('--query', help='Entity names to seed traversal; omitted lists relationships.')
                 command.add_argument('--predicate')
@@ -214,11 +225,25 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def warn_abstain(reason):
+    print(f'warning: {reason}; the answer is not checked for abstention.', file=sys.stderr)
+
+
 def rag_command(args, store):
-    from .retrieval.rag import MemoryRAG
+    from .retrieval.rag import MemoryRAG, options_from_env
     from .graph import parse_time
-    from .retrieval.generation import answer, prompt
-    rag = MemoryRAG(store)
+    from .retrieval.generation import ABSTAIN_THRESHOLD, answer, prompt
+    abstain = args.command == 'ask' and getattr(args, 'abstain', False)
+    if abstain and args.generator != 'extractive':
+        raise ValueError('--abstain is experimental and works only with --generator extractive')
+    if abstain and args.rerank is False:
+        warn_abstain('--no-rerank disables the reranker, so --abstain has no effect')
+    elif abstain and args.preview:
+        warn_abstain('--preview shows the prompt without answering, so --abstain has no effect')
+    options = options_from_env()
+    if args.ann:
+        options['ann_enabled'] = True
+    rag = MemoryRAG(store, **options)
     if args.command == 'index':
         payload = rag.sync(user_id=args.user_id, semantic=not args.graph_only)
     elif args.command == 'search':
@@ -244,8 +269,12 @@ def rag_command(args, store):
             context = rag.context(args.query, user_id=args.user_id, mode=args.mode, limit=args.limit,
                                   budget=args.budget, as_of=as_of, known_at=known_at, max_hops=args.hops,
                                   rerank=args.rerank, candidate_limit=args.candidate_limit)
+            status = (context.get('reranker') or {}).get('status')
+            if abstain and args.rerank is not False and not args.preview and status != 'applied':
+                warn_abstain(f"the reranker was not applied (status: {status}), so --abstain has no effect")
             payload = {'context': context, 'prompt': prompt(context)} if args.preview else answer(
-                context, generator=args.generator, env_file=args.env_file)
+                context, generator=args.generator, env_file=args.env_file,
+                abstain_threshold=ABSTAIN_THRESHOLD if abstain else None)
     print_json(payload, pretty=args.pretty)
     return 0
 

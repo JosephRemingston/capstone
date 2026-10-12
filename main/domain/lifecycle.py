@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from .models import MemoryCategory, MemoryRecord, MemoryTier, utc_now
-from .text_rules import recurring
+from .text_rules import recurring, self_disclosure
 
 
 @dataclass(slots=True)
@@ -52,7 +52,14 @@ class LifecycleManager:
         if record.tier is MemoryTier.WORKING:
             return (record.last_observed_at or record.created_at) + timedelta(hours=1)
         if record.tier is MemoryTier.SHORT_TERM:
-            return (record.last_observed_at or record.created_at) + timedelta(days=14)
+            # Events users report about their own lives are asked about months later; keep
+            # them until they would count as stale rather than for the two-week window.
+            # Keyed on disclosure, not on the category alone: "Explain quantum computing today" is
+            # EPISODIC through the date-word fallback but says nothing about the user.
+            user_event = (record.role == 'user' and record.category is MemoryCategory.EPISODIC
+                          and self_disclosure(record.content))
+            days = self.archive_age_days if user_event else 14
+            return (record.last_observed_at or record.created_at) + timedelta(days=days)
         return None
 
     def archive_after_for(self, record: MemoryRecord) -> datetime | None:

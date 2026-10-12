@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+from unittest import mock
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -90,3 +92,52 @@ class APITests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(len(result.json()["data"]), 1)
         self.assertEqual(result.json()["data"][0]["content"], "Project Atlas")
+
+
+class SettingsFromEnvTests(unittest.TestCase):
+    SECRET = {"COGNIMEM_JWT_SECRET": "x" * 40}
+
+    def settings(self, **env):
+        with mock.patch.dict(os.environ, {**self.SECRET, **env}, clear=True):
+            return Settings.from_env()
+
+    def test_retrieval_defaults_are_exact_search_and_runtime_threads(self):
+        settings = self.settings()
+        self.assertFalse(settings.ann_enabled)
+        self.assertEqual(settings.ann_exact_threshold, 5000)
+        self.assertIsNone(settings.candidate_pool)
+        self.assertIsNone(settings.model_threads)
+
+    def test_retrieval_overrides_are_parsed(self):
+        settings = self.settings(COGNIMEM_ANN_ENABLED="on", COGNIMEM_ANN_EXACT_THRESHOLD="1000",
+                                 COGNIMEM_CANDIDATE_POOL="50", COGNIMEM_MODEL_THREADS="4")
+        self.assertEqual((settings.ann_enabled, settings.ann_exact_threshold, settings.candidate_pool,
+                          settings.model_threads), (True, 1000, 50, 4))
+
+    def test_invalid_retrieval_settings_fail_at_config_time(self):
+        # Threshold 0 used to pass config and then make the module-level `app` silently None.
+        for env in ({"COGNIMEM_ANN_EXACT_THRESHOLD": "0"}, {"COGNIMEM_ANN_EXACT_THRESHOLD": "-5"},
+                    {"COGNIMEM_ANN_ENABLED": "maybe"}, {"COGNIMEM_CANDIDATE_POOL": "201"},
+                    {"COGNIMEM_MODEL_THREADS": "0"}, {"COGNIMEM_MODEL_THREADS": "two"}):
+            with self.subTest(env=env), self.assertRaises(ValueError):
+                self.settings(**env)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ModuleImportTests(unittest.TestCase):
+    def test_configured_service_with_bad_setting_fails_loudly(self):
+        import os
+        import subprocess
+        import sys
+        env = {**os.environ, 'COGNIMEM_JWT_SECRET': 'x' * 48, 'COGNIMEM_ANN_EXACT_THRESHOLD': '0'}
+        result = subprocess.run([sys.executable, '-c', 'import api.app'], env=env, capture_output=True, text=True,
+                                cwd=Path(__file__).resolve().parent.parent)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('COGNIMEM_ANN_EXACT_THRESHOLD', result.stderr)
+        unconfigured = {key: value for key, value in env.items() if key != 'COGNIMEM_JWT_SECRET'}
+        result = subprocess.run([sys.executable, '-c', 'import api.app; assert api.app.app is None'],
+                                env=unconfigured, capture_output=True, text=True, cwd=Path(__file__).resolve().parent.parent)
+        self.assertEqual(result.returncode, 0, result.stderr)

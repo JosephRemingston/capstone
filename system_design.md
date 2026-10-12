@@ -21,7 +21,7 @@ CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LL
 
 The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
-The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, external evaluation, an authenticated FastAPI/demo surface, privacy endpoints, operational probes/metrics, and deterministic LSH ANN retrieval. Production database migration and deployment remain separate planned work. ML research remains separate. See [the current retrieval/graph design](docs/retrieval_graph.md).
+The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, external evaluation, an authenticated FastAPI/demo surface, privacy endpoints, operational probes/metrics, and deterministic LSH ANN retrieval (opt-in, experimental; exact search is the default). Production database migration and deployment remain separate planned work. ML research remains separate. See [the retrieval and graph sections of DOCUMENTATION.md](DOCUMENTATION.md).
 
 ## 2. Repository Analysis
 
@@ -136,7 +136,7 @@ Current architecture properties:
 - Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
 - Produces serializable Python objects and JSON CLI output.
 
-Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional retention-proxy model retains the legacy ML feature preprocessing. See [rule experiment](docs/reports/heuristic_improvements.md) for results and limitations.
+Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional retention-proxy model retains the legacy ML feature preprocessing. See rule experiment for results and limitations.
 
 ## 6. Current Component Design
 
@@ -155,7 +155,7 @@ Default conversational rules use whole-word matching, indirect preferences, expl
 | Graph contract | `main/graph/interfaces.py` | Defines the graph adapter protocol. | `MemoryRecord`. | Graph integration contract. |
 | Tests | `tests/test_memory_core.py`, `tests/test_memory_store_cli.py` | Verifies current behavior. | Unit test examples. | Passing tests. |
 
-Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: [lifecycle changes](docs/reports/lifecycle_improvements.md).
+Task completion/cancellation and multi-memory processing are implemented conservatively via `LocalMemoryStore.ingest()` and `MemoryCore.process_many()`. The JSONL store retains revisions, with the latest row per ID used for reads. Detailed policies and limitations: lifecycle changes.
 
 ## 7. Current Data Contracts
 
@@ -376,12 +376,12 @@ Planned complete architecture responsibilities:
 | Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Deadlines, inactivity archival, and expiry visibility implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
-| Vector store | Store embeddings for retrieval. | SQLite normalized vectors with exact cosine retrieval for small corpora and random-hyperplane LSH ANN retrieval above the configured threshold. |
+| Vector store | Store embeddings for retrieval. | SQLite normalized vectors with exact cosine retrieval (one numpy matrix product) by default; random-hyperplane LSH ANN retrieval is opt-in (`COGNIMEM_ANN_ENABLED`, threshold 5,000 memories) and experimental. |
 | Temporal knowledge graph | Store entities, relationships, and timestamps. | SQLite graph with bitemporal edges, aliases, evidence, and bounded traversal implemented. |
 | Conflict resolver | Detect contradictory memories and pick retained fact. | Implemented for supported assertions, with automatic policy, explicit selection, and history. |
 | Consolidation engine | Merge repeated observations into useful summaries. | Equivalent claims and exact durable duplicates consolidate with source evidence. Generalized knowledge inference is not implemented. |
 | Forgetting engine | Expire/archive memories based on value and age. | Read visibility, archive views, physical expiry cleanup, and lossless compaction implemented. |
-| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion builds a candidate pool; a local cross-encoder reranks Top-K. Importance/category/tier/recency enter the keyword channel. |
+| Hybrid retriever | Combine vector, graph, temporal, importance, and context signals. | Weighted rank fusion builds a 100-candidate pool (`COGNIMEM_CANDIDATE_POOL`); a local cross-encoder reranks it, then graph paths and relation validity reorder the reranked list. Importance/category/tier/recency enter the keyword channel. |
 | CLI | Developer access surface for process/list/search/get/stats. | Implemented. |
 | REST API | HTTP access surface for backend/UI/agent integration. | FastAPI implementation with JWT/RBAC, privacy endpoints, validation, and standardized responses. |
 | Evaluation pipeline | Compare retrieval accuracy, personalization, efficiency, coherence. | External retrieval/retention reports implemented; human judgment and generated-answer quality pending. |
@@ -442,7 +442,7 @@ The final retrieval strategy should combine:
 
 The local implementation uses keyword/dense/graph rank fusion, local cross-encoder
 reranking, a character-budgeted context, and cited Gemini responses. See
-[implementation details](docs/retrieval_graph.md); production scale and broader
+implementation details; production scale and broader
 extraction remain future work.
 
 ## 18. APIs and Interfaces
@@ -599,7 +599,7 @@ date/time. Already resolved occurrences are recognized. Occurrence rescheduling
 keeps the cadence and cannot cross the next occurrence. `task_scope=series` resets
 the anchor or closes the series; re-anchoring cannot overlap resolved history.
 
-See [current behavior and verification](docs/reports/lifecycle_improvements.md) and
+See current behavior and verification and
 [CLI examples](README.md#deadlines-task-updates-and-multiple-memories).
 
 ## 26. Assertion Reconciliation and Consolidation
@@ -643,18 +643,18 @@ replays current durable roots in memory and appends only changed records, making
 bulk processing idempotent. It does not rewrite prior JSONL rows or lock writers.
 
 See [README usage](README.md#conflicts-current-memories-and-consolidation) and
-[verification](docs/reports/memory_reconciliation.md).
+verification.
 
 ## 28. Retrieval and temporal graph implementation
 
 The implementation contract, SQLite schema behavior, query examples, hosted
 configuration, time semantics, extraction bounds, and citation checks are in
-[docs/retrieval_graph.md](docs/retrieval_graph.md). External benchmark results and
-limits are in [reports/retrieval_graph_report.md](docs/reports/retrieval_graph_report.md).
+docs/retrieval_graph.md. External benchmark results and
+limits are in reports/retrieval_graph_report.md.
 
 ## Scheduled cleanup and evaluation operations
 
-See [cleanup policy, locking, failure recovery, and scheduling](docs/cleanup.md),
-[unified external evaluation](docs/reports/independent_evaluation.md), and
+See cleanup policy, locking, failure recovery, and scheduling,
+unified external evaluation, and
 [blind independent review instructions](evaluation/README.md). Human
 personalization and conflict-policy scores remain pending actual reviews.

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from main import LocalMemoryStore, MemoryCore, MemoryInput
-from main.__main__ import main as cli_main
+from main.__main__ import build_parser, main as cli_main
 
 
 class LocalMemoryStoreTests(unittest.TestCase):
@@ -99,6 +100,38 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(status, 1)
             self.assertEqual(payload["error"], "record_not_found")
+
+
+class CliRetrievalOptionTests(unittest.TestCase):
+    def test_global_ann_flag_defaults_to_environment(self) -> None:
+        parser = build_parser()
+        self.assertIsNone(parser.parse_args(["search", "q", "--mode", "hybrid"]).ann)
+        self.assertTrue(parser.parse_args(["--ann", "search", "q", "--mode", "hybrid"]).ann)
+
+    def test_rag_commands_honour_global_ann_flag(self) -> None:
+        from unittest import mock
+        from main.retrieval import rag as rag_module
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = Path(temp_dir) / "memories.jsonl"
+            captured = {}
+
+            class StubRAG:
+                def __init__(self, store, **options):
+                    captured.update(options)
+
+                def search(self, query, **kwargs):
+                    captured["limit"] = kwargs["limit"]
+                    return []
+
+            clean_env = {k: v for k, v in os.environ.items() if not k.startswith("COGNIMEM_")}
+            with mock.patch.object(rag_module, "MemoryRAG", StubRAG), \
+                    mock.patch.dict(os.environ, clean_env, clear=True), redirect_stdout(io.StringIO()):
+                code = cli_main(["--store", str(store), "--ann", "search", "q", "--mode", "hybrid",
+                                 "--user-id", "u", "--limit", "80"])
+            self.assertEqual(code, 0)
+            self.assertTrue(captured["ann_enabled"])
+            self.assertEqual(captured["ann_exact_threshold"], 5000)
+            self.assertEqual(captured["limit"], 80)
 
 
 if __name__ == "__main__":

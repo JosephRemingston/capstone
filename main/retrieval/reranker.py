@@ -16,7 +16,10 @@ class FastEmbedCrossEncoderReranker:
 
     model_id = 'Xenova/ms-marco-MiniLM-L-6-v2'
 
-    def __init__(self, cache_dir='data/rag/models', threads=2):
+    def __init__(self, cache_dir='data/rag/models', threads=None):
+        # None lets onnxruntime size its intra-op pool to the machine.
+        if threads is not None and (isinstance(threads, bool) or not isinstance(threads, int) or threads < 1):
+            raise ValueError('Reranker threads must be a positive integer or None')
         self.cache_dir = str(cache_dir)
         self.threads = threads
         self._model = None

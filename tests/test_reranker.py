@@ -6,7 +6,8 @@ import unittest
 
 from main.application.core import MemoryCore
 from main.domain.models import MemoryInput, MemoryTier
-from main.retrieval.rag import MemoryRAG, graph_predicates
+from main.retrieval.rag import MemoryRAG, default_pool, graph_predicates
+from main.retrieval.reranker import FastEmbedCrossEncoderReranker
 from main.storage.store import LocalMemoryStore
 
 
@@ -51,6 +52,17 @@ class EqualReranker:
 
     def rerank(self, query, documents):
         return [1.0 for _ in documents]
+
+
+class RecordingReranker:
+    model_id = 'recording-reranker'
+
+    def __init__(self):
+        self.documents = []
+
+    def rerank(self, query, documents):
+        self.documents.extend(documents)
+        return [float(len(text)) for text in documents]
 
 
 class RerankerPipelineTests(unittest.TestCase):
@@ -140,6 +152,70 @@ class RerankerPipelineTests(unittest.TestCase):
         self.assertEqual(hit['memory_id'], own.id)
         self.assertEqual(hit['reranker']['status'], 'disabled')
 
+    def test_default_pool_formula_covers_every_valid_limit(self):
+        self.assertEqual([default_pool(n) for n in (1, 5, 25, 30, 50, 51, 100)], [100, 100, 100, 120, 200, 200, 200])
+        self.assertEqual(default_pool(5, override=20), 20)
+        # Fusion-only search keeps the old pool: wider channel lists only add deep RRF votes.
+        self.assertEqual([default_pool(n, rerank=False) for n in (5, 10, 30, 60)], [20, 40, 120, 200])
+        self.assertEqual(default_pool(5, override=150, rerank=False), 20)
+        self.assertEqual(default_pool(40, override=20), 40)   # never below limit
+        for limit in range(0, 101):
+            self.assertTrue(limit <= default_pool(limit) <= 200)
+        for index in range(3):
+            self.add(f'alpha evidence {index}')
+        rag = self.rag(FakeReranker())
+        for limit in (51, 75, 100):   # previously ValueError: 4*limit exceeded the 200 cap
+            with self.subTest(limit=limit):
+                self.assertEqual(len(rag.search('alpha', user_id='u', mode='hybrid', limit=limit)), 3)
+
+    def test_candidate_pool_override_bounds_the_default_pool(self):
+        for index in range(30):
+            self.add(f'alpha evidence number {index}')
+        default = self.rag(FakeReranker()).search('alpha', user_id='u', mode='hybrid', limit=5)
+        self.assertEqual(default[0]['candidate_pool_size'], 30)
+        narrow = MemoryRAG(self.store, embedder=Embedder(), reranker=FakeReranker(), candidate_pool=10)
+        hits = narrow.search('alpha', user_id='u', mode='hybrid', limit=5)
+        self.assertEqual(hits[0]['candidate_pool_size'], 10)
+        explicit = narrow.search('alpha', user_id='u', mode='hybrid', limit=5, candidate_limit=25)
+        self.assertEqual(explicit[0]['candidate_pool_size'], 25)
+
+    def test_wider_pool_keeps_the_fusion_order_when_reranking_is_off_or_fails(self):
+        for index in range(40):
+            self.add(f'alpha note {index} ' + ('target ' if index % 7 == 0 else '') + 'beta ' * (index % 5))
+        rag = self.rag(BrokenReranker())
+        for options in ({'rerank': False}, {}):
+            narrow = rag.search('alpha beta target', user_id='u', mode='hybrid', limit=5, candidate_limit=20, **options)
+            wide = rag.search('alpha beta target', user_id='u', mode='hybrid', limit=5, candidate_limit=100, **options)
+            self.assertEqual([hit['memory_id'] for hit in wide], [hit['memory_id'] for hit in narrow])
+
+    def test_fusion_limit_reads_a_deep_list_in_the_product_order(self):
+        for index in range(60):
+            self.add(f'alpha note {index} ' + ('target ' if index % 7 == 0 else '') + 'beta ' * (index % 5))
+        rag = self.rag(BrokenReranker())
+        for options in ({'rerank': False}, {}):
+            product = rag.search('alpha beta target', user_id='u', mode='hybrid', limit=5, candidate_limit=100, **options)
+            deep = rag.search('alpha beta target', user_id='u', mode='hybrid', limit=100, candidate_limit=100,
+                              fusion_limit=5, **options)
+            self.assertEqual([hit['memory_id'] for hit in deep[:5]], [hit['memory_id'] for hit in product])
+        with self.assertRaises(ValueError):
+            rag.search('alpha', user_id='u', fusion_limit=101)
+
+    def test_reranker_scores_the_whole_chunk(self):
+        # Evidence past character 600 of a chunk must still reach the cross-encoder.
+        long_text = 'alpha ' + ' '.join(f'word{index}' for index in range(100)) + ' password tail'
+        self.add(long_text)
+        recorder = RecordingReranker()
+        MemoryRAG(self.store, embedder=Embedder(), reranker=recorder).search('alpha', user_id='u', mode='hybrid', limit=1)
+        self.assertTrue(any(len(text) > 600 and 'password tail' in text for text in recorder.documents))
+
+    def test_reranker_threads_default_to_runtime_choice(self):
+        self.assertIsNone(FastEmbedCrossEncoderReranker().threads)
+        self.assertIsNone(MemoryRAG(self.store, embedder=Embedder()).reranker.threads)
+        self.assertEqual(MemoryRAG(self.store, embedder=Embedder(), model_threads=2).reranker.threads, 2)
+        for value in (0, -1, True, 1.5):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                FastEmbedCrossEncoderReranker(threads=value)
+
     def test_context_uses_reranked_winning_snippet(self):
         self.add('alpha ordinary evidence')
         target = self.add('alpha target evidence')
@@ -147,6 +223,27 @@ class RerankerPipelineTests(unittest.TestCase):
             'alpha', user_id='u', mode='hybrid', limit=1, budget=512)
         self.assertEqual(list(context['sources']), [target.id])
         self.assertIn('target evidence', context['text'])
+
+    def test_context_keeps_reranker_order_and_reports_scores_outside_text(self):
+        covering = self.add('alpha beta gamma ordinary evidence')
+        target = self.add('alpha target evidence')
+        context = self.rag(FakeReranker()).context('alpha beta gamma', user_id='u', mode='hybrid', limit=2, budget=2048)
+        self.assertEqual(list(context['sources']), [target.id, covering.id])
+        self.assertEqual(context['reranker'], {'status': 'applied', 'model': 'test-reranker', 'error_type': None})
+        score = context['scores'][target.id]
+        self.assertEqual((score['rank'], score['reranker']), (1, 10.0))
+        self.assertIsInstance(score['cosine'], float)
+        self.assertIn('semantic', score['channels'])
+        self.assertNotIn('reranker', context['text'])
+
+    def test_fusion_only_context_still_prefers_query_coverage(self):
+        covering = self.add('alpha beta gamma ordinary evidence')
+        self.add('alpha target evidence')
+        context = self.rag(FakeReranker()).context('alpha beta gamma', user_id='u', mode='hybrid', limit=2,
+                                                   budget=2048, rerank=False)
+        self.assertEqual(next(iter(context['sources'])), covering.id)
+        self.assertEqual(context['reranker']['status'], 'disabled')
+        self.assertIsNone(context['scores'][covering.id]['reranker'])
 
     def test_graph_query_predicates_do_not_treat_unrelated_questions_as_relational(self):
         self.assertEqual(graph_predicates('What milestone did Alice complete?'), set())

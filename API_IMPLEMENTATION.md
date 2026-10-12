@@ -43,8 +43,15 @@ use a consistent JSON envelope with a request ID.
 
 ## ANN behavior
 
-Small corpora use the existing exact SQLite cosine search. At or above
-`COGNIMEM_ANN_EXACT_THRESHOLD` (default `256`), semantic retrieval uses the
-`ApproximateVectorIndex`, implemented as deterministic random-hyperplane LSH
-with multi-table and multi-probe candidate generation. The SQLite vector table
+Semantic retrieval uses the exact SQLite cosine scan (one numpy matrix product)
+by default. ANN is opt-in: with `COGNIMEM_ANN_ENABLED=true` and a user corpus at
+or above `COGNIMEM_ANN_EXACT_THRESHOLD` (default `5000`; values below 1 are
+rejected at startup), semantic retrieval uses the `ApproximateVectorIndex`,
+implemented as deterministic random-hyperplane LSH with multi-table,
+query-directed multi-probe candidate generation. It widens the probe radius
+until it has `max(limit, 400)` candidates and otherwise falls back to the exact
+scan; each hit reports the path taken under `vector_index`. The SQLite vector table
 remains authoritative and the LSH tables are rebuildable derived state.
+ANN is experimental: on real conversational BGE vectors at about 5.9k chunks its
+top-20 agreed with exact search only about 41% of the time, so keep it off unless
+exact scans are too slow.

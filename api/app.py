@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -45,6 +46,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         index_path=settings.index_path,
         ann_enabled=settings.ann_enabled,
         ann_exact_threshold=settings.ann_exact_threshold,
+        candidate_pool=settings.candidate_pool,
+        model_threads=settings.model_threads,
     )
     app.state.registry = CollectorRegistry()
     app.state.metrics = Metrics(app.state.registry)
@@ -239,5 +242,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 try:
     app = create_app()
 except ValueError:
-    # Import remains safe for CLI/tests that do not configure the HTTP service.
+    # Import stays safe for CLI/tests that never configured the HTTP service (no JWT secret).
+    # Once it is configured, a bad COGNIMEM_* value must fail loudly instead of leaving app=None.
+    if os.getenv("COGNIMEM_JWT_SECRET"):
+        raise
     app = None

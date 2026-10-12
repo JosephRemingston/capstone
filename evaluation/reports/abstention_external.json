@@ -1,0 +1,68 @@
+{
+  "description": "Extractive abstention (slot rule v2, experimental, off by default): held-out results from the abstention rework. Benchmark test numbers also appear in final_abstain_summary.json.",
+  "provenance": "Abstention rework judge decision and post-merge confirmation, 12 Oct 2026 (workflows wf_c1883e15-aea and wf_9916c4cd-315). Retrieval: hybrid_full, candidate pool 20, top-5. External sets were never used for tuning.",
+  "rows": {
+    "no_abstention": {
+      "benchmark_test": [
+        1.0,
+        0.0,
+        0.5
+      ],
+      "longmemeval": [
+        1.0,
+        0.0,
+        0.5
+      ],
+      "locomo": [
+        1.0,
+        0.0,
+        0.5
+      ]
+    },
+    "slot_rule_v2_shipped_opt_in": {
+      "benchmark_test": [
+        0.996,
+        0.174,
+        0.585
+      ],
+      "longmemeval": [
+        0.983,
+        0.067,
+        0.525
+      ],
+      "locomo": [
+        0.984,
+        0.016,
+        0.5
+      ]
+    },
+    "qnli_answerability_not_shipped": {
+      "benchmark_test": [
+        0.972,
+        0.522,
+        0.747
+      ],
+      "longmemeval": [
+        0.785,
+        0.333,
+        0.559
+      ],
+      "locomo": [
+        0.761,
+        0.363,
+        0.562
+      ]
+    }
+  },
+  "columns": [
+    "answerable_accept_rate",
+    "unanswerable_refusal_rate",
+    "balanced_accuracy"
+  ],
+  "counts": {
+    "benchmark_test": "247 answerable / 23 unanswerable",
+    "longmemeval": "470 / 30",
+    "locomo": "1540 / 446 (category 5)"
+  },
+  "adoption_rule": "default-on only if acceptance >= 95% (benchmark) / >= 90% (externals) and balanced accuracy beats no abstention by >= 3 points on both externals; neither design passed"
+}

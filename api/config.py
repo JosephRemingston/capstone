@@ -6,6 +6,8 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from main.retrieval.rag import options_from_env
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -16,8 +18,10 @@ class Settings:
     access_token_minutes: int = 30
     cors_origins: tuple[str, ...] = ()
     log_level: str = "INFO"
-    ann_enabled: bool = True
-    ann_exact_threshold: int = 256
+    ann_enabled: bool = False
+    ann_exact_threshold: int = 5000
+    candidate_pool: int | None = None
+    model_threads: int | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -31,9 +35,9 @@ class Settings:
         if not 5 <= minutes <= 1440:
             raise ValueError("COGNIMEM_ACCESS_TOKEN_MINUTES must be between 5 and 1440")
         origins = tuple(item.strip() for item in os.getenv("COGNIMEM_CORS_ORIGINS", "").split(",") if item.strip())
-        threshold = int(os.getenv("COGNIMEM_ANN_EXACT_THRESHOLD", "256"))
-        if threshold < 0:
-            raise ValueError("COGNIMEM_ANN_EXACT_THRESHOLD must be nonnegative")
+        # Rejects COGNIMEM_ANN_EXACT_THRESHOLD < 1 here: previously 0 passed config, then
+        # MemoryRAG raised ValueError and the module-level `app` silently became None.
+        retrieval = options_from_env()
         return cls(
             store_path=store,
             auth_db_path=auth,
@@ -42,8 +46,7 @@ class Settings:
             access_token_minutes=minutes,
             cors_origins=origins,
             log_level=os.getenv("COGNIMEM_LOG_LEVEL", "INFO").upper(),
-            ann_enabled=os.getenv("COGNIMEM_ANN_ENABLED", "true").lower() in {"1", "true", "yes", "on"},
-            ann_exact_threshold=threshold,
+            **retrieval,
         )
 
     @classmethod

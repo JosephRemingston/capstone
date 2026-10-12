@@ -111,6 +111,7 @@ def chunks(record: MemoryRecord, *, size=1000, overlap=150) -> list[Chunk]:
 class VectorIndex:
     def __init__(self, database: IndexDatabase, embedder: Embedder):
         self.database, self.embedder = database, embedder
+        self.last_search: dict = {}
 
     def sync(self, records: list[MemoryRecord], *, user_id: str) -> dict:
         if not user_id or any(record.user_id != user_id for record in records):
@@ -136,26 +137,41 @@ class VectorIndex:
                             struct.pack('<' + 'f' * len(vector), *vector)))
         return {'chunks': len(desired), 'embedded': len(changed), 'removed': len(existing.keys() - desired.keys())}
 
-    def search(self, query: str, *, user_id: str, allowed_ids: set[str], limit=20, minimum=0.35) -> list[dict]:
-        if limit < 0 or not -1 <= minimum <= 1 or not user_id:
+    @staticmethod
+    def _validate(query, user_id, limit, minimum) -> None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0 or not -1 <= minimum <= 1 or not user_id:
             raise ValueError('Invalid vector search parameters')
+
+    def _rank(self, vector, rows, *, allowed_ids, limit, minimum) -> list[dict]:
+        """Score rows with one float64 matrix product; order is (-score, chunk_id) as before."""
+        import numpy as np
+        kept = [row for row in rows if row['memory_id'] in allowed_ids]
+        if not kept:
+            return []
+        dimension = self.embedder.dimension
+        if any(row['dimension'] != dimension or len(row['vector']) != 4 * dimension for row in kept):
+            raise ValueError('Vector index dimension mismatch; rebuild the index')
+        matrix = np.frombuffer(b''.join(row['vector'] for row in kept), dtype='<f4').reshape(len(kept), dimension)
+        scores = matrix.astype(np.float64) @ np.asarray(vector, dtype=np.float64)
+        eligible = np.flatnonzero(scores >= minimum).tolist()
+        eligible.sort(key=lambda index: (-scores[index], kept[index]['chunk_id']))
+        return [{'memory_id': kept[i]['memory_id'], 'chunk_id': kept[i]['chunk_id'], 'text': kept[i]['text'],
+                 'score': float(scores[i]), 'start': kept[i]['start_offset'], 'end': kept[i]['end_offset']}
+                for i in eligible[:limit]]
+
+    def search_vector(self, vector, *, user_id: str, allowed_ids: set[str], limit=20, minimum=0.35) -> list[dict]:
+        with self.database.connect() as db:
+            rows = db.execute('SELECT * FROM vectors WHERE user_id=? AND model=?',
+                              (user_id, self.embedder.model_id)).fetchall()
+        self.last_search = {'algorithm': 'exact', 'scanned_chunks': len(rows)}
+        return self._rank(vector, rows, allowed_ids=allowed_ids, limit=limit, minimum=minimum)
+
+    def search(self, query: str, *, user_id: str, allowed_ids: set[str], limit=20, minimum=0.35) -> list[dict]:
+        self._validate(query, user_id, limit, minimum)
         if not query.strip() or not allowed_ids or limit == 0:
             return []
         vector = normalized(self.embedder.query(query), self.embedder.dimension)
-        results = []
-        with self.database.connect() as db:
-            for row in db.execute('SELECT * FROM vectors WHERE user_id=? AND model=?', (user_id, self.embedder.model_id)):
-                if row['memory_id'] not in allowed_ids:
-                    continue
-                if row['dimension'] != self.embedder.dimension:
-                    raise ValueError('Vector index dimension mismatch; rebuild the index')
-                stored = struct.unpack('<' + 'f' * row['dimension'], row['vector'])
-                similarity = sum(a * b for a, b in zip(vector, stored))
-                if similarity >= minimum:
-                    results.append({'memory_id': row['memory_id'], 'chunk_id': row['chunk_id'],
-                                    'text': row['text'], 'score': similarity,
-                                    'start': row['start_offset'], 'end': row['end_offset']})
-        return sorted(results, key=lambda item: (-item['score'], item['chunk_id']))[:limit]
+        return self.search_vector(vector, user_id=user_id, allowed_ids=allowed_ids, limit=limit, minimum=minimum)
 
 
 class ApproximateVectorIndex:
@@ -165,19 +181,31 @@ class ApproximateVectorIndex:
     adds multiple locality-sensitive hash tables, so large searches inspect only
     vectors that share one or more signatures with the query instead of scanning
     the complete corpus. It is deterministic for a given embedding model.
+
+    Multi-probe widens the Hamming radius (0, 1, 2; within a radius, the buckets
+    nearest the query's hyperplane margins first) until at least
+    ``max(limit, min_candidates)`` allowed chunks are candidates; when even radius 2
+    is too sparse, the search falls back to the exact scan. ``last_search`` records
+    which path answered, so recall loss is observable instead of silent.
     """
 
+    VERSION = 2  # bump when bucket assignment changes; it is part of the fingerprint
+
     def __init__(self, database: IndexDatabase, embedder: Embedder, *, tables: int = 8, bits: int = 10,
-                 seed: int = 1729):
+                 seed: int = 1729, min_candidates: int = 400):
         if not 1 <= tables <= 32 or not 1 <= bits <= 20:
             raise ValueError('LSH tables must be 1–32 and bits must be 1–20')
+        if isinstance(min_candidates, bool) or not isinstance(min_candidates, int) or min_candidates < 1:
+            raise ValueError('min_candidates must be a positive integer')
         self.database, self.embedder = database, embedder
-        self.tables, self.bits, self.seed = tables, bits, seed
+        self.tables, self.bits, self.seed, self.min_candidates = tables, bits, seed, min_candidates
         self._planes = self._build_planes()
         self.exact = VectorIndex(database, embedder)
+        self.last_search: dict = {}
 
     def _build_planes(self):
         import random
+        import numpy as np
         planes = []
         for table_id in range(self.tables):
             table = []
@@ -187,30 +215,34 @@ class ApproximateVectorIndex:
                 norm = sum(value * value for value in vector) ** 0.5
                 table.append([value / norm for value in vector])
             planes.append(table)
-        return planes
+        # (tables*bits, dimension); row table_id*bits+bit is the hyperplane for that bit.
+        return np.asarray(planes, dtype=np.float64).reshape(self.tables * self.bits, self.embedder.dimension)
 
-    @staticmethod
-    def _fingerprint(rows) -> str:
-        return sha256(''.join(f"{row['chunk_id']}:{row['digest']}\n" for row in sorted(rows, key=lambda r: r['chunk_id'])).encode()).hexdigest()
+    def _fingerprint(self, rows) -> str:
+        header = f'v{self.VERSION}:tables={self.tables}:bits={self.bits}:seed={self.seed}:dim={self.embedder.dimension}\n'
+        body = ''.join(f"{row['chunk_id']}:{row['digest']}\n" for row in sorted(rows, key=lambda r: r['chunk_id']))
+        return sha256((header + body).encode()).hexdigest()
 
-    def _signature(self, vector, table_id: int) -> int:
-        signature = 0
-        for bit, plane in enumerate(self._planes[table_id]):
-            dot = sum(a * b for a, b in zip(vector, plane))
-            if dot >= 0:
-                signature |= 1 << bit
-        return signature
+    def _signatures(self, matrix) -> list[list[int]]:
+        """One integer bucket per table for every row of ``matrix`` (n, dimension)."""
+        import numpy as np
+        bits = (np.asarray(matrix, dtype=np.float64) @ self._planes.T) >= 0
+        weights = 1 << np.arange(self.bits, dtype=np.int64)
+        buckets = bits.reshape(len(bits), self.tables, self.bits).astype(np.int64) @ weights
+        return buckets.tolist()
 
     def _rebuild_buckets(self, user_id: str, rows) -> None:
+        import numpy as np
+        for row in rows:
+            if row['dimension'] != self.embedder.dimension or len(row['vector']) != 4 * self.embedder.dimension:
+                raise ValueError('Vector index dimension mismatch; rebuild the index')
+        signatures = self._signatures(
+            np.frombuffer(b''.join(row['vector'] for row in rows), dtype='<f4').reshape(len(rows), self.embedder.dimension)
+        ) if rows else []
+        inserts = [(user_id, self.embedder.model_id, table_id, bucket, row['chunk_id'])
+                   for row, buckets in zip(rows, signatures) for table_id, bucket in enumerate(buckets)]
         with self.database.connect() as db:
             db.execute('DELETE FROM lsh_buckets WHERE user_id=? AND model=?', (user_id, self.embedder.model_id))
-            inserts = []
-            for row in rows:
-                if row['dimension'] != self.embedder.dimension:
-                    raise ValueError('Vector index dimension mismatch; rebuild the index')
-                vector = struct.unpack('<' + 'f' * row['dimension'], row['vector'])
-                for table_id in range(self.tables):
-                    inserts.append((user_id, self.embedder.model_id, table_id, self._signature(vector, table_id), row['chunk_id']))
             db.executemany('INSERT INTO lsh_buckets VALUES (?,?,?,?,?)', inserts)
 
     def sync(self, records: list[MemoryRecord], *, user_id: str) -> dict:
@@ -227,56 +259,73 @@ class ApproximateVectorIndex:
                 db.execute('INSERT OR REPLACE INTO lsh_state VALUES (?,?,?)',
                            (user_id, self.embedder.model_id, fingerprint))
         result['ann'] = {'algorithm': 'random_hyperplane_lsh', 'tables': self.tables, 'bits': self.bits,
-                         'indexed_chunks': len(rows)}
+                         'min_candidates': self.min_candidates, 'indexed_chunks': len(rows)}
         return result
 
+    def _probes(self, vector) -> list[tuple[float, int, int, int]]:
+        """(score, radius, table_id, bucket) for every bucket within Hamming radius 2.
+
+        Query-directed multi-probe: flipping a bit whose projection is close to the
+        hyperplane is the likeliest place for a near neighbour to land, so probes are
+        ordered by radius and, within a radius, by the summed |projection| of the
+        flipped bits.
+        """
+        import numpy as np
+        projection = (self._planes @ np.asarray(vector, dtype=np.float64)).reshape(self.tables, self.bits)
+        probes = []
+        for table_id, bucket in enumerate(self._signatures([vector])[0]):
+            margins = np.abs(projection[table_id]).tolist()
+            probes.append((0.0, 0, table_id, bucket))
+            for first in range(self.bits):
+                probes.append((margins[first], 1, table_id, bucket ^ (1 << first)))
+                for second in range(first + 1, self.bits):
+                    probes.append((margins[first] + margins[second], 2, table_id,
+                                   bucket ^ (1 << first) ^ (1 << second)))
+        probes.sort(key=lambda probe: (probe[1], probe[0], probe[2], probe[3]))
+        return probes
+
     def search(self, query: str, *, user_id: str, allowed_ids: set[str], limit=20, minimum=0.35) -> list[dict]:
-        if limit < 0 or not -1 <= minimum <= 1 or not user_id:
-            raise ValueError('Invalid vector search parameters')
+        VectorIndex._validate(query, user_id, limit, minimum)
         if not query.strip() or not allowed_ids or limit == 0:
             return []
         vector = normalized(self.embedder.query(query), self.embedder.dimension)
-        candidate_chunks: set[str] = set()
+        target = max(limit, self.min_candidates)
+        if len(allowed_ids) <= target:
+            # Too few eligible memories for LSH to save work; scan them exactly.
+            self.last_search = {'algorithm': 'exact', 'reason': 'allowed_below_target', 'target': target,
+                                'fallback': False}
+            return self.exact.search_vector(vector, user_id=user_id, allowed_ids=allowed_ids, limit=limit,
+                                            minimum=minimum)
+        probes = self._probes(vector)
+        seen: set[str] = set()
+        rows: list = []
+        allowed, used, batch_size = 0, 0, self.tables
         with self.database.connect() as db:
-            # Multi-probe LSH: inspect the exact bucket first, then Hamming-distance
-            # one and two buckets when necessary. This keeps the search approximate
-            # while reducing false negatives caused by a single random projection.
-            for radius in (0, 1, 2):
-                for table_id in range(self.tables):
-                    bucket = self._signature(vector, table_id)
-                    masks = [0] if radius == 0 else []
-                    if radius >= 1:
-                        masks.extend(1 << bit for bit in range(self.bits))
-                    if radius >= 2:
-                        for first in range(self.bits):
-                            for second in range(first + 1, self.bits):
-                                masks.append((1 << first) | (1 << second))
-                    for mask in masks:
-                        candidate = bucket ^ mask
-                        for row in db.execute(
-                            'SELECT chunk_id FROM lsh_buckets WHERE user_id=? AND model=? AND table_id=? AND bucket=?',
-                            (user_id, self.embedder.model_id, table_id, candidate),
-                        ):
-                            candidate_chunks.add(row['chunk_id'])
-                if candidate_chunks:
-                    break
-            if not candidate_chunks:
-                return []
-            placeholders = ','.join('?' for _ in candidate_chunks)
-            params = [user_id, self.embedder.model_id, *candidate_chunks]
-            rows = db.execute(
-                f'SELECT * FROM vectors WHERE user_id=? AND model=? AND chunk_id IN ({placeholders})', params
-            )
-            results = []
-            for row in rows:
-                if row['memory_id'] not in allowed_ids:
-                    continue
-                if row['dimension'] != self.embedder.dimension:
-                    raise ValueError('Vector index dimension mismatch; rebuild the index')
-                stored = struct.unpack('<' + 'f' * row['dimension'], row['vector'])
-                similarity = sum(a * b for a, b in zip(vector, stored))
-                if similarity >= minimum:
-                    results.append({'memory_id': row['memory_id'], 'chunk_id': row['chunk_id'],
-                                    'text': row['text'], 'score': similarity,
-                                    'start': row['start_offset'], 'end': row['end_offset']})
-        return sorted(results, key=lambda item: (-item['score'], item['chunk_id']))[:limit]
+            while used < len(probes):
+                batch = probes[used:used + batch_size]
+                used += len(batch)
+                batch_size = min(batch_size * 2, 256)
+                pairs = ','.join('(?,?)' for _ in batch)
+                params = [user_id, self.embedder.model_id]
+                for _, _, table_id, bucket in batch:
+                    params += [table_id, bucket]
+                fresh = {row['chunk_id'] for row in db.execute(
+                    f'SELECT chunk_id FROM lsh_buckets WHERE user_id=? AND model=? '
+                    f'AND (table_id,bucket) IN (VALUES {pairs})', params)} - seen
+                seen |= fresh
+                fresh_list = sorted(fresh)
+                for offset in range(0, len(fresh_list), 500):
+                    chunk_ids = fresh_list[offset:offset + 500]
+                    marks = ','.join('?' for _ in chunk_ids)
+                    for row in db.execute(f'SELECT * FROM vectors WHERE user_id=? AND model=? AND chunk_id IN ({marks})',
+                                          (user_id, self.embedder.model_id, *chunk_ids)):
+                        rows.append(row)
+                        allowed += row['memory_id'] in allowed_ids
+                if allowed >= target:
+                    self.last_search = {'algorithm': 'lsh', 'radius': batch[-1][1], 'probes': used,
+                                        'candidates': allowed, 'target': target, 'fallback': False}
+                    return self.exact._rank(vector, rows, allowed_ids=allowed_ids, limit=limit, minimum=minimum)
+        results = self.exact.search_vector(vector, user_id=user_id, allowed_ids=allowed_ids, limit=limit, minimum=minimum)
+        self.last_search = {'algorithm': 'exact_fallback', 'radius': 2, 'probes': used, 'candidates': allowed,
+                            'target': target, 'fallback': True}
+        return results

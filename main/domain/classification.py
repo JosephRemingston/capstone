@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass, field
 
 from .models import MemoryCategory, MemoryInput
-from .text_rules import durable_fact, event_update, matches, preference_constraint, negated_task, uncertain
+from .text_rules import (durable_fact, event_update, matches, preference_constraint, negated_task,
+                         phatic, self_disclosure, uncertain)
 from .tasks import task_action
 from .claims import extract_claim, extract_claims
 
@@ -102,9 +103,13 @@ class MemoryClassifier:
         if not self.legacy:
             if task_action(lowered):
                 return MemoryCategory.EPISODIC
+            if phatic(text):
+                return MemoryCategory.TEMPORARY
             # Polite reminder requests are actionable; speculative statements are not.
             if uncertain(lowered, quoted_objects=True) and not matches(r"^(?:could|can|would) you (?:please )?remind me\b", lowered):
-                return MemoryCategory.TEMPORARY
+                # A question or hedge asserts no fact, but what users say about themselves
+                # inside it (plans, events, possessions) is still an observation worth keeping.
+                return MemoryCategory.EPISODIC if self._discloses(memory_input) else MemoryCategory.TEMPORARY
             claim = extract_claim(text)
             if claim:
                 return MemoryCategory(claim['kind'])
@@ -143,4 +148,14 @@ class MemoryClassifier:
         if any(pattern.search(text) for pattern in self.semantic_patterns):
             return MemoryCategory.SEMANTIC
 
+        if not self.legacy and self._discloses(memory_input):
+            return MemoryCategory.EPISODIC
         return MemoryCategory.TEMPORARY
+
+    @staticmethod
+    def _discloses(memory_input: MemoryInput) -> bool:
+        # First person in an assistant turn describes the assistant, not the user. Inputs that
+        # carry explicit graph relations are structured facts: MemoryCore upgrades them to
+        # SEMANTIC/long-term, which only happens if they are not intercepted here.
+        return (memory_input.role == 'user' and not memory_input.metadata.get('relations')
+                and self_disclosure(memory_input.content))

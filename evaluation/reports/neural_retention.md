@@ -1,89 +1,47 @@
-# Neural retention model: deeper head experiment
+# Neural conversational retention model (frozen-bge-deep-head-v1)
 
-The optional neural scorer predicts invalid, short-term, or long-term from
-[Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc).
-Its output is a constructed retention proxy,
-`P(long_term) + 0.5 × P(short_term)`, not a human-rated importance score.
+Dataset: https://huggingface.co/datasets/adugeen/personal-facts-msc. Fit/validation/test: 1777/445/556. Artifact: `artifacts/importance_neural`.
 
-Backpropagation was already used in the original head: every training batch
-called `loss.backward()` followed by an AdamW optimizer step. This experiment
-tested whether additional trainable layers improved the model.
+## Seeds (validation)
 
-## Architecture
+| Seed | Best epoch | Macro F1 | NLL |
+| ---: | ---: | ---: | ---: |
+| 42 | 12 | 0.7208 | 0.8370 |
+| 43 | 3 | 0.7083 | 0.5503 |
+| 44 | 8 | 0.7291 | 0.7913 |
 
-Both heads use the same frozen local 384-dimensional BGE embedding and 13
-standardized numeric features. The original head had 60,547 parameters:
+Selected seed 44; temperature 2.4057 reduced validation NLL from 0.7913 to 0.5385.
 
-```text
-Text 384 → 128 ─┐
-                ├→ 160 → 64 → 3 class logits
-Numeric 13 → 32 ┘
-```
+## Published test split
 
-The deeper head has 131,491 parameters, adding one dense layer to each branch
-and one to their fused representation:
+| Metric | Neural | XGBoost |
+| --- | ---: | ---: |
+| accuracy | 0.7806 | 0.6924 |
+| balanced_accuracy | 0.6778 | 0.6560 |
+| macro_f1 | 0.6732 | 0.6114 |
+| weighted_f1 | 0.7768 | 0.7071 |
+| proxy_mae | 0.2160 | 0.2768 |
+| nll | 0.5547 | — |
+| ece_10_bins | 0.0163 | — |
+| warm latency p50 / p95 ms | 4.04 / 5.86 | — |
 
-```text
-Text 384 → 192 → 128 ─┐
-                      ├→ 160 → 128 → 64 → 3 class logits
-Numeric 13 → 64 → 32 ┘
-```
-
-LayerNorm, GELU, and 0.2 dropout are retained in the text and fusion paths.
-PyTorch trains the head; the selected head is exported to ONNX for local
-inference. The encoder remains frozen. The source's 2,222 usable training facts
-were split into 1,777 fit and 445 validation examples. No test examples were
-used to choose the architecture or seed.
-
-## Validation selection
-
-Each head was trained with seeds 42, 43, and 44 under the same class-weighted
-cross-entropy, AdamW, early-stopping, and preprocessing settings. Selection
-used validation macro F1, with lower validation loss as a tie-breaker.
-
-| Head | Parameters | Best validation macro F1 | Mean across seeds |
-| --- | ---: | ---: | ---: |
-| Original | 60,547 | 0.7175 | 0.7134 |
-| Deeper | 131,491 | **0.7291** | **0.7194** |
-
-The selected deeper head was seed 44, epoch 8. Temperature calibration on
-validation data reduced its negative log-likelihood from 0.7913 to 0.5385.
-The [validation experiment](neural_depth_validation.json) records every seed.
-
-## Published 556-fact test split
-
-| Metric | Deeper neural | Original neural | Frozen XGBoost | Always long-term |
+| Gold class | Support | Precision | Recall | F1 |
 | --- | ---: | ---: | ---: | ---: |
-| Accuracy | 78.06% | 78.06% | 69.24% | 68.17% |
-| Balanced accuracy | **67.78%** | 65.86% | 65.60% | 33.33% |
-| Macro F1 | **0.6732** | 0.6504 | 0.6114 | 0.2702 |
-| Invalid-fact recall | **42.35%** | 31.76% | 50.59% | 0% |
-| Constructed proxy MAE | 0.2160 | **0.1957** | 0.2768 | — |
+| invalid | 85 | 0.5902 | 0.4235 | 0.4932 |
+| short_term | 92 | 0.5913 | 0.7391 | 0.6570 |
+| long_term | 379 | 0.8684 | 0.8707 | 0.8696 |
 
-The deeper head classified more invalid facts correctly: 36 of 85 versus 27
-for the original neural head. It still recalled fewer invalid facts than
-XGBoost's 43 of 85. Its test negative log-likelihood was 0.5547 versus
-0.5345 for the original head. Its 10-bin expected calibration error was
-0.0163 versus 0.0428. Warm local inference including BGE was P50 4.2 ms and
-P95 5.8 ms across 50 facts on this machine; these are not service latencies.
+| Gold \ predicted | invalid | short_term | long_term |
+| --- | ---: | ---: | ---: |
+| invalid | 36 | 18 | 31 |
+| short_term | 5 | 68 | 19 |
+| long_term | 20 | 29 | 330 |
 
-The deeper head is now the default **optional neural** artifact. The original
-artifact remains available at `artifacts/importance_neural_shallow/`, selectable
-with `--scorer neural --model-dir artifacts/importance_neural_shallow`.
-CogniMem's heuristic remains the default scorer. Neither model is suitable for
-automatic deletion: the dataset lacks human numeric importance ratings,
-underrepresents greetings and task requests, and has no conversation-disjoint
-test split. The published test split was also examined in earlier XGBoost work,
-so these results are exploratory rather than an independent generalization claim.
+## Depth comparison (train split only)
 
-## Reproduce
+| Architecture | Parameters | Mean validation macro F1 |
+| --- | ---: | ---: |
+| frozen-bge-two-branch-v1 | 60547 | 0.7134 |
+| frozen-bge-deep-head-v1 | 131491 | 0.7194 |
 
-```bash
-.venv/bin/python -m training.compare_neural_depth
-.venv/bin/python -m training.train_neural_retention
-.venv/bin/python -m unittest discover -s tests -q
-```
-
-The [machine-readable result](neural_retention.json) and
-[original-head result](neural_retention_shallow.json) preserve the full class
-metrics, confusion matrices, calibration, and measured latency.
+Caveat: Exploratory comparison: published test split was previously inspected for XGBoost; no human numeric importance labels.

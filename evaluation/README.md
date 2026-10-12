@@ -1,251 +1,105 @@
-# Conversational evaluation and review
+# CogniMem evaluation
 
-## Controlled graph and reranker ablation
+This package measures CogniMem end to end: a controlled retrieval and answer ablation on a
+fresh benchmark, external evidence retrieval on LoCoMo, evidence retention on LongMemEval,
+category/tier classification, and lifecycle behaviour. It was rebuilt from scratch on
+12 October 2026 together with a new benchmark, so earlier saved numbers are not comparable.
 
-The capstone experiment is implemented under `evaluation/retrieval/`,
-`evaluation/rag/`, `evaluation/analysis/`, and `evaluation/experiments/`. Its
-frozen dataset contains 240 developer-labeled queries, with 20 examples for each
-of semantic, episodic, temporal, historical, multi-hop, entity-relationship,
-conflict, preference, procedural, recency, negative/absence, and unanswerable
-queries. Run all four controlled systems with:
+## Run everything
 
 ```bash
-.venv/bin/python -m evaluation.run
+.venv/bin/python scripts/measure_all.py --tag baseline --candidate-limit 20 --ann-arms   # saved protocol
+.venv/bin/python scripts/measure_all.py --tag final --candidate-limit default --ann-arms # shipped defaults
+.venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch
 ```
 
-The runner holds the embedding model, candidate limit, Top-K values, context
-budget, answer generator, prompts, labels, and metrics constant while comparing:
+`measure_all.py` runs each step as its own process, logs to `docs/reports/logs/`, snapshots
+`docs/reports/` to `docs/reports/<tag>/` with a `MANIFEST.json`, and copies the flat summary
+to the tracked `evaluation/reports/<tag>_summary.json` (`docs/` is git-ignored).
 
-- vector;
-- vector plus local reranker;
-- vector plus temporal graph;
-- vector plus temporal graph plus local reranker.
+- Only reports written by the run reach its snapshot. Reports of steps skipped with
+  `--skip-locomo` or `--skip-retention` are kept and listed under `reused` in the manifest.
+- The manifest records the command line, the git head, a hash of the uncommitted diff, the
+  dataset hash, and each step's command and exit code.
+- An existing tag is never replaced unless `--overwrite` is given.
+- `report_delta.py` refuses to compare snapshots built from different benchmark files unless
+  `--allow-dataset-mismatch` is passed, and prints every protocol setting that differs.
 
-It writes JSON and Markdown results, an SVG Recall@5 chart, per-query predictions,
-query-type analysis, paired confidence intervals/randomization tests, failure
-cases, P50/P95/P99 stage latency, and a blinded 60-question human-review packet
-under `docs/reports/ablation/`. The default extractive generator makes the run
-local and deterministic. `--generator gemini` uses the same Gemini configuration
-for all four systems after `GOOGLE_API_KEY` is configured.
+Other flags shared by the ablation and LoCoMo runners:
 
-The pinned FastEmbed release does not support `BAAI/bge-reranker-v2-m3`. The
-experiment therefore uses the already integrated Apache-2.0
-`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder for both reranked arms. Changing the
-model requires a new named protocol rather than silently mixing rerankers.
+- `--candidate-limit default` uses the library pool: 100 for reranked arms, `max(20, 4×K)` for fusion-only arms.
+- `--structure default|none|graph,validity,chain,versions` sets the graph/time-aware reordering after the reranker; `none` keeps the plain reranker order.
+- `--abstain-threshold 0.0` turns on the experimental extractive abstention rule (slot rule v2).
 
-The included labels are controlled developer-authored cases, not independent
-human gold. The generated human-review packet deliberately contains blank scores;
-only completed ratings from independent reviewers can satisfy that part of the
-study.
+Deep result lists for Recall@20 and pool metrics are read with `fusion_limit=K`, so their first K
+entries are exactly what a product call with `limit=K` returns.
 
-The unified report also runs a 14-check lifecycle audit covering working,
-short-term, long-term, and archive behavior; deadline expiry; completion;
-cancellation; rescheduling; recurring occurrences; visibility; and history
-preservation. Run that audit alone with `python3 -m evaluation.lifecycle`.
+## Modules
 
-After reviewers fill every score from 0–4, identify themselves, and add a
-timezone-aware review timestamp, validate and summarize the packet with:
+| Command | What it measures | Output |
+| --- | --- | --- |
+| `python -m evaluation.build_dataset [--check] [--lint]` | Compiles and validates the benchmark seeds | `evaluation/datasets/gold_queries.json` |
+| `python -m evaluation.ablation [--split dev\|test] [--candidate-limit N\|default] [--top-k K] [--ann] [--abstain-threshold T]` | Retrieval, pool coverage, grounded answers, answerability, latency for five arms | `docs/reports/ablation/results.{json,md}` |
+| `python -m evaluation.locomo [--download] [--candidate-limit N] [--ann]` | External evidence retrieval on all 10 LoCoMo conversations; `held_out_metrics` covers the 7 conversations not used to choose the pool size | `docs/reports/locomo_retrieval.json` |
+| `python -m evaluation.retention [--download]` | LongMemEval answer-turn retention through the full pipeline, plus cleanup safety | `docs/reports/longmemeval_retention.json` |
+| `python -m evaluation.classification` | 60 category/tier/importance cases | `docs/reports/conversational_evaluation.json` |
+| `python -m evaluation.lifecycle` | 16 deterministic lifecycle, task, and supersession checks | `docs/reports/lifecycle.json` |
+| `python -m evaluation.report [--retention-only]` | Renders `SUMMARY.md` and the retention-model markdown from JSON | `docs/reports/SUMMARY.md`, `evaluation/reports/*.md` |
 
-```bash
-python3 -m evaluation.human completed_reviews.jsonl
-```
+## The benchmark
 
-The scorer rejects blank, malformed, duplicate, future-dated, and out-of-range
-ratings. It cannot verify that a named reviewer is truly independent.
+- **Authorship.** Twelve personas, 456 memories and 360 questions were written by Claude (AI)
+  on 12 October 2026 in `evaluation/datasets/seeds/`. They are not human-validated.
+- **One shared corpus.** Every memory belongs to `gold-user`; the persona is the memory's
+  speaker and every question names the persona. Cross-persona memories act as distractors,
+  so pool size and approximate search have a measurable effect.
+- **Unanswerable questions.** The 30 unanswerable questions were rewritten on 12 October 2026
+  (abstention rework) to cover 26 attribute types instead of two templates; extractive answers
+  without abstention refuse none of them either way.
+- **Twelve query types, 30 each.** Semantic, episodic, temporal (current value after a
+  change), historical (`as_of` inside an old relation's validity), multi-hop (two memories
+  joined by a shared entity), entity relationship, conflict (explicit corrections), preference,
+  procedural, recency (latest of several updates), negative/absence, and unanswerable
+  (distractor-adjacent: the entity exists but the asked attribute was never stated).
+- **Split.** Personas p01–p03 are dev (90 questions) for tuning thresholds; p04–p12 are test
+  (270 questions) for every reported number. The whole corpus is indexed in both runs.
+- **Loading.** Memories are written with raw persistence, not `ingest()`, so reconciliation
+  cannot silently merge or supersede gold evidence across personas. Reconciliation is covered
+  by the lifecycle checks instead.
+- **Validators** (`build_dataset.py`) check that every answer appears in a supporting memory,
+  every historical question has a relation valid at `as_of`, every multi-hop pair shares an
+  entity and uses predicates the query cues, no closed relation is contradicted by an open
+  claim extracted from the same text, and all graph metadata validates.
 
-`conversational_cases.jsonl` contains 48 developer-authored examples with proposed
-category, tier, and importance ranges. It covers greetings, factual statements,
-preferences/constraints, one-off/recurring tasks, negation, events, procedures, and
-indirect paraphrases. These examples were not used to train an ML model. They are
-regression/development checks, not an independent benchmark or human ground truth.
+## Metrics
 
-Run `python3 -m evaluation.evaluate` from the repository root. The report includes
-all predictions, a category confusion matrix, macro F1, tier accuracy, and agreement
-with the proposed importance ranges. Ranges represent a retention policy, not
-human-measured continuous scores. Never report range agreement as regression accuracy.
+- Retrieval: Recall/Hit/nDCG at 5, 10, 20 and MRR over answerable questions.
+- Pool coverage: whether gold evidence reached the candidate pool handed to the reranker, and
+  reranker recovery (Hit@5 divided by pool hit).
+- Grounded correctness (primary answer metric): the answer did not abstain and an accepted
+  answer form appears in a supporting memory that reached the context. A different persona's
+  snippet with the same word does not count. Top-1 correctness is the strict variant.
+- Answerability: answerable questions accepted, unanswerable questions refused, balanced
+  accuracy, and the confusion matrix.
+- Paired bootstrap 95% intervals and sign-flip randomization p-values between arms.
 
-The current run has 48/48 category and tier matches (100%), macro F1 1.0,
-and 48/48 importance-range matches. The four previous failures now pass after
-extending the preference/event rules. The original labels are unchanged.
-These are examples used during development, so the result is regression coverage,
-not an estimate of accuracy on unseen conversations. Stateful task workflows,
-calendar arithmetic, and ambiguity handling are covered by automated tests.
+## Scope cuts in this rebuild
 
-## Human review
+Not rebuilt yet: the bAbI conflict runner, the LongMemEval personalization review packet,
+human-review scoring, and the hosted Gemini answer arm. The answer metrics here use the local
+extractive generator, which can measure grounding and abstention but not fluent answer quality.
 
-`review_template.jsonl` has blank authoritative labels, blank reviewer/date fields,
-and the proposed labels in a separate field. A reviewer should independently
-assess each example, fill `expected_category`, `expected_tier`, `importance_range`,
-`reviewer`, `reviewed_at`, and set `label_source` to `human_reviewed` only after
-actual review. Ambiguous cases should have notes and be adjudicated. Proposed labels
-can anchor judgment; for a blind review remove `proposed_labels` before distribution.
+## Tuning disclosure
 
-Use these definitions:
+- The benchmark's dev split (p01–p03) and a dev-only abstention calibration set were used for
+  tuning; reported benchmark numbers are from the test split.
+- LoCoMo conversations 1–3 were used to choose the reranker pool size; the held-out section
+  covers the other seven.
+- The retention-classifier change was designed against LongMemEval failures (dev examples),
+  then confirmed once on held-out examples.
 
-- semantic: durable factual knowledge about a user or their world;
-- preference: standing choices, communication style, or user constraints;
-- task: an outstanding action or recurring reminder;
-- episodic: something that happened or changed;
-- procedural: a repeatable sequence or workflow;
-- temporary: transient chatter without useful retained content.
+## Limits
 
-Tier judgments must distinguish importance from duration: one-off tasks are
-short-term even when important; standing preferences/facts can be long-term;
-greetings are working. Archive decisions need age/access history and cannot be
-validated from a timeless sentence alone. Scenario tests cover archive mechanics.
-Importance ranges should reflect usefulness for future assistance, not emotional
-intensity alone. Reviewers may disagree with the existing policy and should record
-that disagreement rather than copy predictions.
-
-```bash
-python3 -m evaluation.evaluate --export-review evaluation/review_template.jsonl
-python3 -m evaluation.evaluate --labels reviewed.jsonl --reviewed-only \
-  --output docs/reports/human_reviewed_evaluation.json
-```
-
-The reviewed-only command fails if no eligible reviewed rows exist. No human review
-has been performed in this change. For independent evidence, add a fresh blind
-set from consented conversations, keep conversation/user groups together, freeze
-it before tuning, and report reviewer agreement. Do not tune rules against a test
-set and continue calling it held out. Training/calibration splits are not created
-from these developer examples.
-
-## External retrieval and memory evaluation
-
-```bash
-uv pip install --python .venv/bin/python -r requirements-evaluation.txt
-.venv/bin/python -m evaluation.benchmark --download
-.venv/bin/python -m evaluation.longmemeval --download
-.venv/bin/python -m evaluation.conflicts --download
-```
-
-Downloads pin dataset revisions and verify SHA-256. Data/model caches live under
-ignored `data/`; reports are committed separately. No hosted model is used by
-these three commands. The embedding model downloads once and runs locally.
-
-- **LoCoMo:** all ten external conversations; only text turns, speaker, and dates
-  are indexed. QA, observations, and generated summaries are excluded. Compare
-  recency, ranked keyword, local semantic, graph, and hybrid retrieval at k=5.
-  Report evidence recall/hit rate/MRR/nDCG, per-category results, conversation
-  bootstrap intervals, index size, and evidence characters. The preference-word
-  subset measures evidence retrieval only, not recommendation personalization.
-  Category 5 adversarial questions have reference evidence but are unanswerable;
-  both overall reference retrieval and categories 1–4 metrics are reported.
-  LoCoMo is a published generated-dialogue benchmark with annotations, not a
-  collection of real user chats. No weights/rules were fitted on scored queries.
-- **LongMemEval:** all knowledge-update and single-session-preference examples
-  from the oracle split. Process original turns through the existing core/store,
-  use original timestamps, and measure retention of `has_answer`-labeled turns
-  at question time against a retain-everything baseline. Labels never enter the
-  memory documents. These results test retention, not generated-answer accuracy;
-  oracle sessions omit full-corpus distractors. Six update examples lack labeled
-  answer turns and do not enter the retention denominator.
-- **bAbI QA1:** all published English test stories. A declared deterministic
-  adapter converts movement statements into the core's supported named-person
-  location claim form. Gold answers remain unchanged. Compare current memories
-  and temporal graph location answers with first/latest-assertion baselines.
-  This tests conflict state updates on an external synthetic dataset; it is not
-  a claim of natural-language parsing or independent human policy validation.
-
-See [the consolidated results](../docs/reports/retrieval_graph_report.md). Reports
-include predictions, dataset fingerprints, exclusions, protocols, and limitations.
-LoCoMo raw-turn retrieval bypasses memory lifecycle decisions deliberately to
-isolate retrieval; LongMemEval separately exposes end-to-end retention losses.
-The poor LongMemEval/graph-coverage results are preserved, not hidden by tuning
-on these datasets. A future tuned system needs a fresh held-out split.
-
-Independent human ratings of conflict policy and generated personalization, live
-Gemini answers, and comparisons to deployed Mem0/MemGPT/LangMem systems remain
-unmeasured. The existing human-review workflow is for category/tier/importance
-labels and must not be described as covering those other judgments.
-
-## Unified evaluation, cleanup measurement, and independent answer review
-
-The evaluation package lives under `evaluation/`; reports live under
-`docs/reports`. Run from the repository root:
-
-```bash
-.venv/bin/python -m evaluation.suite
-# If datasets are not downloaded:
-.venv/bin/python -m evaluation.suite --download
-```
-
-The runner executes each stage, records its status and duration, hashes its report,
-and writes `docs/reports/independent_evaluation.json` and a Markdown comparison.
-A failed stage makes the run incomplete; an old report from that stage is not
-silently included as a fresh result. Detailed stdout/stderr stays in stage logs.
-
-The LongMemEval stage audits **all 500 oracle examples**, including 392 outside
-the previously evaluated update/preference subset. It excludes 43 cases with
-sessions dated after their question (40 temporal-reasoning, 3 knowledge-update),
-then scores 457 cases. Exclusions are recorded by question ID. It reports retention by all six
-question types and applies physical cleanup to each **temporary** replay store.
-Metrics include removed memories, JSONL bytes before/after, and exact preservation
-of visible memory state. This measures storage cleanup safety, not the quality of
-the existing expiry policy: gold evidence can already have been hidden before
-cleanup. The retain-everything baseline remains visible alongside the losses.
-
-No rules or weights are fitted during the suite. Previously evaluated external
-cases remain repeated benchmarks, not newly unseen data. Future changes tuned to
-these results require a fresh held-out split before claiming unseen performance.
-No real user data is deleted by any of these evaluation commands.
-
-### Personalization and conflict-policy review
-
-The answer stage audits all **108** externally authored LongMemEval preference/update
-cases and excludes the 3 with future-dated sessions, leaving 105 cases with
-no-memory, keyword, and hybrid baselines (315 answer variants). Only
-conversation text, speaker, and dates enter retrieval; gold answers and evidence
-annotations are added to the review packet **after** generation. The source
-sessions are oracle-selected, so these are not full-corpus retrieval results.
-Default answers are cited extractive snippets and make no hosted API calls.
-The no-memory baseline abstains under the same evidence-only policy; it is not
-an unrestricted standalone Gemini response.
-
-```bash
-# Real Gemini answers after configuring .env; up to 210 hosted answer requests.
-.venv/bin/python -m evaluation.personalization --generator gemini
-```
-
-Artifacts in `data/evaluation/personalization/`:
-
-- `answers.json`: frozen answers, baseline assignments, evidence measurements,
-  generation status, and content bindings.
-- `blind_review.jsonl`: deterministically shuffled cases without baseline names,
-  including question, reference answer, retrieved evidence, answer, and blank ratings.
-- `review_mapping.json`: baseline mapping; keep this away from blinded reviewers.
-
-Distribute review packets to people who did not implement/tune the system.
-Reviewers should read both the reference and evidence, then fill `reviewer`,
-`reviewed_at` (timezone-aware ISO timestamp), `independent: true`, and `scores`:
-
-| Dimension | 0 | 1 | 2 |
-| --- | --- | --- | --- |
-| preference_alignment | Ignores/contradicts relevant preferences | Partly respects preferences | Respects all relevant stated preferences |
-| groundedness | Unsupported or contradictory claims | Mixed/partly supported | Claims supported by supplied evidence |
-| usefulness | Does not answer the question | Partly actionable/relevant | Directly useful answer |
-| conflict_correctness | Uses stale/contradictory information | Partly handles the update | Correctly uses the current information |
-
-Use `preference_alignment` only for preference cases and `conflict_correctness`
-only for knowledge-update cases; leave the nonapplicable dimension `null`.
-Record reasons and ambiguities in `notes`. These are answer-quality judgments,
-separate from the synthetic bAbI state-transition accuracy.
-
-```bash
-python3 -m evaluation.personalization --reviews /path/to/completed_reviews.jsonl
-```
-
-The scorer requires coverage of every successfully generated answer, rejects
-blank/nonindependent/stale/altered packets, duplicate reviewer-answer pairs,
-invalid dates, and out-of-range scores. Failed generations are reported separately
-and excluded from answer-quality means; they cannot silently earn passing scores.
-Multiple reviewers are averaged per answer before baseline means, and their
-ordinal disagreement fraction is reported. The output includes answer-report and
-review-file fingerprints. Independence is an attestation, not something software
-can prove. No human rating is fabricated or inferred from retrieval recall.
-
-**Current limit:** the external evaluation/reporting and blind-review workflow are
-implemented; independent human personalization/conflict-policy validation still
-requires actual completed reviews. Live Gemini answer evaluation requires the key
-the user elected to configure later. Unit-test ratings are test fixtures only and
-are never included in evaluation reports.
+All benchmark labels are AI-authored and unreviewed. LoCoMo is generated dialogue, not real
+user chats. LongMemEval oracle sessions remove retrieval distractors, so its numbers measure
+retention, not question answering. Latency is measured on a single development machine.

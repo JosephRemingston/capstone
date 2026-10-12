@@ -469,25 +469,22 @@ Structured metadata supports explicit relationships outside the narrow grammar:
 
 ## Evaluation, limits, and results
 
-Historical reports under `docs/reports/` show:
+The evaluation package was rebuilt on 12 October 2026 together with a fresh benchmark; the
+[README](README.md#evaluation-and-measured-results) has the before/after tables and the
+[evaluation guide](evaluation/README.md) the protocol. Headline numbers from the `final`
+snapshot (`evaluation/reports/final_summary.json`, shipped defaults):
 
 | Evaluation | Result and interpretation |
 | --- | --- |
-| LoCoMo hybrid fusion | Recall@5 48.15%; hit@5 53.07%; MRR@5 37.30%; nDCG@5 38.54%; personalization evidence recall 36.70%. |
-| LoCoMo hybrid reranked | Recall@5 55.83%; hit@5 61.07%; MRR@5 50.47%; nDCG@5 49.84%; personalization evidence recall 47.59%. The mean 20-candidate reranking latency was 122.9 ms versus 25.0 ms for fusion. |
-| LongMemEval retention | Low evidence retention for knowledge updates (11.81%) and preference cases (8.33%) in the reported subset. |
-| bAbI QA1 | Conflict resolver and graph 100%; first-assertion baseline 39.60%; latest baseline also 100%. |
-| Cleanup replay | 3,169 eligible memories removed; visible state preserved in 457/457 replayed cases. |
+| Controlled benchmark, test split (270 questions, AI-authored) | Hybrid + reranker Recall@5 97.5%, MRR 0.939, correct memory first 84.2% (baseline 93.0%, 0.904, 77.3%). |
+| LoCoMo evidence retrieval (1,973 questions) | Hybrid + reranker Recall@5 66.8%, Hit@5 72.3% (baseline 55.8%, 61.1%); 66.8% on the 7 conversations not used to choose the pool size. |
+| LongMemEval retention (457 examples) | 90.6% of answer turns still retrievable (baseline 21.0%). |
+| Opt-in extractive abstention | Benchmark test: 17.4% of unanswerable questions refused, 99.6% of answerable kept; no useful gain on LongMemEval or LoCoMo. |
+| Lifecycle checks | 16/16. |
 
-The cross-encoder improved LoCoMo recall@5 by 7.69 percentage points over the
-frozen fusion baseline. These are evidence-retrieval results, not generated-answer
-accuracy. Retention policy and broad natural-language graph extraction still need
-improvement. The graph's low coverage on LoCoMo reflects conservative extraction,
-not a broken graph store.
-
-The `evaluation/` package provides the deterministic 48-case rule evaluation and
-the frozen LoCoMo benchmark. Run `python3 -m evaluation.evaluate` for the former
-and `.venv/bin/python -m evaluation.benchmark` for the latter.
+These are evidence-retrieval and retention results with an extractive answerer, not
+generated-answer accuracy. Run every measurement with
+`.venv/bin/python scripts/measure_all.py --tag <name> --candidate-limit default --ann-arms`.
 
 Independent human labels for conversational importance/tier/category, conflict
 decisions, personalization, and live Gemini answer quality are still required.
@@ -589,13 +586,17 @@ index database.
 
 `ApproximateVectorIndex` adds deterministic random-hyperplane locality-sensitive
 hashing (multi-table, multi-probe) on top of the existing normalized cosine
-vectors. Small corpora continue to use the exact SQLite vector scan. Once the
-configured corpus threshold is reached, semantic retrieval uses LSH buckets to
-produce a candidate set and scores only those candidates. The authoritative
+vectors. It is disabled by default: exact search is the shipped path. When
+enabled and the user's corpus reaches the configured threshold (default 5000),
+semantic retrieval uses LSH buckets to produce a candidate set, widening the
+Hamming radius until it has enough candidates and otherwise falling back to the
+exact scan. The authoritative
 vector table is unchanged, so the ANN index is rebuildable and does not replace
 the existing source/index separation. The threshold is configured by
-`COGNIMEM_ANN_EXACT_THRESHOLD` and ANN can be disabled with
-`COGNIMEM_ANN_ENABLED=false`.
+`COGNIMEM_ANN_EXACT_THRESHOLD` and ANN is enabled with
+`COGNIMEM_ANN_ENABLED=true` (CLI: `python -m main --ann ...`). ANN is
+experimental: on real conversational BGE vectors at about 5.9k chunks its top-20
+agreed with exact search only about 41% of the time.
 
 ### Scope boundary
 

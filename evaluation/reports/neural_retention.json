@@ -164,8 +164,8 @@
     }
   },
   "latency_ms": {
-    "p50": 4.173500026809052,
-    "p95": 5.79039840667974,
+    "p50": 4.03866650594864,
+    "p95": 5.8639687442337145,
     "sample_count": 50,
     "scope": "warm local encoder plus neural scorer, single fact"
   },

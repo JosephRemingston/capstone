@@ -24,8 +24,10 @@ class MemoryService:
     rag: MemoryRAG
 
     @classmethod
-    def create(cls, store: LocalMemoryStore, *, index_path: Path, ann_enabled: bool = True, ann_exact_threshold: int = 256):
-        rag = MemoryRAG(store, index_path=index_path, ann_enabled=ann_enabled, ann_exact_threshold=ann_exact_threshold)
+    def create(cls, store: LocalMemoryStore, *, index_path: Path, ann_enabled: bool = False,
+               ann_exact_threshold: int = 5000, candidate_pool: int | None = None, model_threads: int | None = None):
+        rag = MemoryRAG(store, index_path=index_path, ann_enabled=ann_enabled, ann_exact_threshold=ann_exact_threshold,
+                        candidate_pool=candidate_pool, model_threads=model_threads)
         return cls(store=store, core=MemoryCore(), rag=rag)
 
     def ingest(self, *, user_id: str, payload: dict[str, Any]) -> MemoryRecord:

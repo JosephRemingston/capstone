@@ -76,3 +76,67 @@ def durable_fact(text: str) -> bool:
         r"^(?:i am|i'm)\s+(?:responsible for|working on|part of|based in)\s+\S|"
         r"^(?:we|our (?:team|project|company))\s+(?:use|uses|work|works|is|are|has|have)\s+\S|"
         r"^(?:the|this|that)\s+[\w -]{2,50}\s+(?:uses|requires|belongs to|depends on|is owned by)\s+\S", text)
+
+
+_PHATIC = (
+    r"hi|hello|hey|hiya|yo|howdy|good (?:morning|afternoon|evening|night)|"
+    r"thanks?(?: (?:a lot|so much))?|thank you(?: (?:so much|very much))?|thx|ty|cheers|"
+    r"much appreciated|(?:i )?appreciate (?:it|that)|you'?re welcome|"
+    r"ok(?:ay)?|k+|sure|yes|yeah|yep|yup|no|nope|nah|alright|all right|fine|cool|great|nice|perfect|awesome|wow|"
+    r"got it|gotcha|understood|noted|will do|sounds (?:good|great)|(?:that )?makes sense|fair enough|"
+    r"i see|i agree|i understand|i (?:get|got) it|i know|no idea|i have no idea|i (?:don't|do not) know|"
+    r"(?:i'?ll|i will)(?: (?:try|do) (?:that|it|this))?|(?:i )?(?:have|gotta|got) to go|"
+    r"(?:i'?m|i am) (?:good|fine|ok|okay|great|back|done|here|ready|sorry|glad|confused|lost|not sure)|"
+    r"lol|lmao|rofl|ha(?:ha)+|hehe|"
+    r"bye|goodbye|see you(?: later)?|see ya|talk (?:to you )?later|ttyl|"
+    r"never ?mind|nvm|forget (?:it|about it)|no worries|no problem|np|my bad|"
+    r"sorry|pardon(?: me)?|huh|what|come again|excuse me|please|"
+    r"(?:(?:can|could|would) you (?:please )?)?(?:say|repeat) (?:that|it)|"
+    r"that'?s (?:great|good|cool|helpful|perfect|awesome|fine|ok|okay|interesting|it)|"
+    r"now|then|again|anyway|so|really|too|for (?:now|today)"
+)
+# First person that carries no information about the user: interrogative inversion,
+# requests addressed to the assistant, and reactions to what the assistant said.
+_NON_DISCLOSING = (
+    r"\b(?:can|could|would|will|should|shall|may|might|must|do|does|did|am|are|have|has|was|were) (?:i|we)\b|"
+    r"\b(?:tell|show|give|help|let|send|remind) (?:me|us)\b|"
+    r"\b(?:i|we) (?:was|were|am|'m|are|'re) (?:just )?(?:wondering|curious)\b|"
+    r"\b(?:i|we)(?:'d| would) (?:really )?(?:like|love|appreciate)"
+    r"(?: it if| (?:you|your help|some help)| to (?:know|learn|ask|hear|understand|find out))\b|"
+    r"\b(?:i|we) (?:want|wanted|need|needed) to (?:know|ask|learn|understand|find out)\b|"
+    r"\b(?:i|we) (?:really )?(?:love|like) (?:it|that|this|these|those|them|the idea|your)\b|"
+    r"\b(?:i|we) (?:didn't|did not|don't|do not) (?:catch|get|follow|hear|understand)\b|"
+    r"\b(?:i|we) (?:get|got) it\b|"
+    r"\b(?:i|we) (?:see|agree|understand|guess|mean|think|suppose|hope|know|wonder|wondered|believe|appreciate)\b"
+)
+# Asking the assistant to recall a stored fact ("What was my dog's name again?") discloses nothing
+# new. Only short whole questions match, so "What's my best option given I'm moving?" still counts.
+_RECALL_QUESTION = re.compile(
+    r"(?:^|(?<=[.!?;]))\s*(?:\w+,\s*)?(?:what|where|when|who|which)(?:'s|\s+(?:is|was|are|were))\s+(?:my|our)\s+"
+    r"(?:[\w'-]+\s+){0,4}?[\w'-]+(?:\s+(?:again|called|named|now))?\s*\?")
+# An uppercase roman numeral I is not the pronoun: "World War I", "type I diabetes",
+# "Elizabeth I." Only matched after a numbering keyword or a capitalised word that ends
+# the clause, so "Yesterday I went..." keeps its pronoun.
+_ROMAN_I = re.compile(
+    r"\b(?:[Tt]ype|[Pp]art|[Pp]hase|[Cc]hapter|[Ll]evel|[Gg]rade|[Ss]tage|[Cc]lass|[Aa]ct|[Bb]ook|[Vv]olume|[Ww]ar)\s+I\b"
+    r"|\b[A-Z][a-z]+\s+I(?=\s*(?:[.:!?)]|$))"
+)
+
+
+def phatic(text: str) -> bool:
+    """Greetings, thanks, acknowledgements and repair requests with nothing else in them."""
+    words = ' '.join(re.sub(r"[^\w\s']", ' ', normalize(text)).split())
+    return not words or re.fullmatch(rf"(?:(?:{_PHATIC})(?: |$))+", words + ' ') is not None
+
+
+def self_disclosure(text: str) -> bool:
+    """The speaker states something about themselves (circumstances, plans, possessions,
+    events), possibly inside a question or a request. Quoted speech is somebody else's."""
+    text = normalize(_ROMAN_I.sub(' ', text))
+    if phatic(text):
+        return False
+    if not text.startswith(('"', "'")):
+        text = re.sub(r'"[^"\n]*"', ' ', text)
+    text = _RECALL_QUESTION.sub(' ', text)
+    text = re.sub(_NON_DISCLOSING, ' ', text)
+    return matches(r"\b(?:i|we)\b|\b(?:my|our)\s+\w", text)
