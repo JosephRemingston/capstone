@@ -199,7 +199,7 @@ The `/docs` page documents the other endpoints. Token, store, and index files ar
 
 ## Evaluation and measured results
 
-**The tables below describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection, answer metrics concern the extractive answer, and retention metrics concern what the lifecycle keeps. Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`). The tags are `baseline` (12 Oct 2026, before the fixes), `e2r` (search fixes only), `final` (all fixes, shipped defaults) and `final_abstain` (`final` plus the opt-in abstention rule). The [evaluation guide](evaluation/README.md) describes the protocol.
+**The tables below describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection, answer metrics concern the extractive answer, and retention metrics concern what the lifecycle keeps. Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`), except the three-dataset retention experiment, which has its own report in [`evaluation/reports/experiments/`](evaluation/reports/experiments/). The tags are `baseline` (12 Oct 2026, before the fixes), `e2r` (search fixes only), `final` (all fixes, shipped defaults) and `final_abstain` (`final` plus the opt-in abstention rule). The [evaluation guide](evaluation/README.md) describes the protocol.
 
 ### Before and after
 
@@ -352,6 +352,152 @@ The deeper head's mean validation macro F1 over three seeds was **0.7194**, vers
 
 Model selection used a stratified training/validation split rather than choosing on the test set. XGBoost's four validation trials had macro F1 **0.5934, 0.6022, 0.6002, and 0.6211**; the last configuration (max depth 5, min child weight 8, 396 trees on refit) was selected. The original neural head's three best-checkpoint validation macro F1 values were **0.7175, 0.7057, and 0.7169** for seeds 42–44; the deeper head's were **0.7208, 0.7083, and 0.7291**. The selected original checkpoint used seed 42, epoch 4; the deeper checkpoint used seed 44, epoch 8. Temperature calibration reduced validation negative log-likelihood from **0.5644 to 0.5332** for the original (temperature 1.3946) and from **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
 
+### Retention models on three datasets (experiment, not shipped)
+
+On 16 Oct 2026 the XGBoost model and both neural heads were retrained on three datasets, each trained and tested on its own. Three possible improvements were tested alongside them: averaging the neural heads over seeds, an XGBoost + neural ensemble, and per-class decision thresholds. This is a separate experiment. Nothing in `main/`, the shipped models under `artifacts/importance*` or the reports above changed, and the heuristic remains the default. Every number below comes from [`evaluation/reports/experiments/retention_datasets.md`](evaluation/reports/experiments/retention_datasets.md), which also lists validation scores, every seed and every XGBoost trial. The code is in [`training/experiments/`](training/experiments/), and [Reproduce the experiments](#reproduce-the-experiments) has the command.
+
+#### Datasets
+
+- **MSC**: [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc), with the same pinned files and split as the shipped models above. Each extracted fact is labelled invalid, short-term or long-term by the dataset's single annotator.
+- **csv5k**: `cognimem_memory_importance_5000.csv`, 5,000 AI-generated memory sentences, each with a synthetic importance score from 0.20 to 1.00 (mean 0.708). Removing the " (example N)" suffix leaves 443 distinct sentences.
+- **csv10k**: `cognimem_10000_memory_importance.csv`, 10,000 AI-generated sentences with scores from 0.30 to 0.99 (mean 0.644) and 2,410 distinct sentences. One sentence appears 500 times, with scores from 0.30 to 0.78.
+
+The CSV scores are cut into three classes: low (below 0.4), mid (0.4 to below 0.7) and high (0.7 and above). Most CSV sentences appear many times, so every copy of a sentence goes into the same split (a 5-fold split grouped by sentence, seed 42); otherwise the test set would repeat training sentences. A sentence holding at least 5% of the rows stays in training, which affects only csv10k's 500-copy sentence. The CSVs are copied to the git-ignored `data/experiments/`.
+
+| | MSC | csv5k | csv10k |
+| --- | --- | --- | --- |
+| Rows / unique texts | 2,778 / 2,778 | 5,000 / 443 | 10,000 / 2,410 |
+| Labels | invalid / short-term / long-term | low / mid / high | low / mid / high |
+| Train / validation / test rows | 1,777 / 445 / 556 | 3,200 / 792 / 1,008 | 6,578 / 1,521 / 1,901 |
+| Test sentences | 556 | 86 | 476 |
+| Test class counts | 85 / 92 / 379 | 120 / 272 / 616 | 86 / 1,017 / 798 |
+| Repeated texts whose labels disagree | — | 86 of 410 (21%) | 603 of 1,017 (59%) |
+| Best possible macro F1 (oracle) | — (every text unique) | 0.9230 | 0.5264 |
+
+The oracle predicts each test sentence's most common test label. It reads the test labels, so it is a ceiling, not a model. csv10k's ceiling is low because 59% of its repeated sentences carry conflicting labels. The oracle maximises accuracy rather than macro F1, so a model can score slightly above it on macro F1.
+
+#### Architectures
+
+| Name in the tables | What it is |
+| --- | --- |
+| XGBoost, shipped recipe | Gradient-boosted trees on 525 features (13 text features and 512 hashed word features). A grid over max depth {3, 5} × min child weight {3, 8} is searched on validation, then the winner is refit on train + validation. This is the shipped procedure. |
+| XGBoost, no refit | The grid winner trained on the train split only. The ensemble uses it, because the refit model has no unseen validation data left to tune on. |
+| Deep neural head | Frozen BAAI/bge-small-en-v1.5 sentence embedding (384 values) plus the 13 text features. Text branch 384→192→128, feature branch 13→64→32, joint head 160→128→64→3, with LayerNorm, GELU and dropout 0.2. The best of seeds 42, 43 and 44 on validation is kept, then temperature-calibrated. Same design as the shipped deeper head. |
+| Shallow neural head | Same inputs. Text branch 384→128, feature branch 13→32, joint head 160→64→3. Same design as the original shipped head. |
+| 3-seed average | Averages the calibrated probabilities of all three seeds instead of keeping the best one. |
+| Ensemble | w × XGBoost (no refit, calibrated) + (1 − w) × the averaged deep head, with w ∈ {0.25, 0.5, 0.75} chosen on validation. |
+| + per-class thresholds | Multiplies each class probability by a weight (81 combinations) chosen on validation before taking the top class. |
+
+Every choice is made on the validation split, and each model is scored on the test split once.
+
+#### Macro F1 at a glance
+
+| Model | MSC | csv5k | csv10k |
+| --- | ---: | ---: | ---: |
+| Always the most common class | 0.2702 | 0.2529 | 0.2324 |
+| Best possible (oracle) | — | 0.9230 | 0.5264 |
+| XGBoost, shipped recipe | 0.6114 | 0.8846 | 0.5322 |
+| XGBoost, no refit | 0.6012 | 0.8654 | 0.5309 |
+| Deep neural head | 0.6732 | 0.8850 | 0.4999 |
+| Shallow neural head | 0.6504 | 0.8538 | 0.5317 |
+| Deep head, 3-seed average | 0.6992 | 0.8699 | 0.5333 |
+| Shallow head, 3-seed average | 0.6631 | 0.8678 | **0.5441** |
+| Ensemble (XGBoost + averaged deep head) | **0.7132** | 0.8882 | 0.5342 |
+| Ensemble + per-class thresholds | **0.7132** | **0.8912** | 0.5342 |
+
+**Bold** marks the best model on each dataset; the oracle is a ceiling, not a model. Thresholds left the MSC ensemble unchanged, so the two ensemble rows tie there.
+
+#### Full test metrics
+
+Macro F1 weights the three classes equally, so the rare classes count as much as the common one. The 95% intervals come from 1,000 bootstrap resamples. MSC resamples test rows; the CSVs resample whole test sentences, because copies of a sentence are not independent. NLL (negative log-likelihood) and ECE (expected calibration error, 10 bins) measure the probabilities, and lower is better for both. XGBoost's MSC NLL and ECE were not recorded in the shipped report; they were computed here.
+
+**MSC**, 556 test facts:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 [95% row CI] | Weighted F1 | F1 invalid / short-term / long-term | NLL | ECE |
+| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
+| Always the most common class (long-term) | 68.17% | 33.33% | 0.2702 [0.261, 0.279] | 0.5526 | 0.00 / 0.00 / 0.81 | — | — |
+| XGBoost, shipped recipe | 69.24% | 65.60% | 0.6114 [0.562, 0.656] | 0.7071 | 0.46 / 0.58 / 0.79 | 0.7255 | 0.0246 |
+| XGBoost, no refit | 68.71% | 64.18% | 0.6012 [0.553, 0.647] | 0.7013 | 0.45 / 0.56 / 0.79 | 0.7313 | 0.0247 |
+| Deep neural head | 78.06% | 67.78% | 0.6732 [0.621, 0.720] | 0.7768 | 0.49 / 0.66 / 0.87 | 0.5547 | 0.0163 |
+| Shallow neural head | 78.06% | 65.86% | 0.6504 [0.600, 0.700] | 0.7703 | 0.43 / 0.65 / 0.88 | 0.5345 | 0.0428 |
+| Deep head, 3-seed average | 80.76% | 68.33% | 0.6992 [0.648, 0.745] | 0.7993 | 0.53 / 0.68 / 0.89 | 0.4979 | 0.0317 |
+| Shallow head, 3-seed average | 78.78% | 67.10% | 0.6631 [0.611, 0.712] | 0.7789 | 0.45 / 0.66 / 0.88 | 0.5152 | 0.0538 |
+| Ensemble (XGBoost + averaged deep head), w = 0.5 | 80.40% | 71.39% | 0.7132 [0.662, 0.758] | 0.8025 | 0.57 / 0.68 / 0.88 | 0.5399 | 0.1171 |
+
+**csv5k**, 1,008 test rows from 86 sentences:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 [95% sentence CI] | Weighted F1 | F1 low / mid / high | NLL | ECE |
+| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
+| Always the most common class (high) | 61.11% | 33.33% | 0.2529 [0.220, 0.283] | 0.4636 | 0.00 / 0.00 / 0.76 | — | — |
+| Best possible (oracle) | 91.17% | 92.86% | 0.9230 [0.885, 0.957] | 0.9126 | 1.00 / 0.84 / 0.93 | — | — |
+| XGBoost, shipped recipe | 86.71% | 89.05% | 0.8846 [0.824, 0.930] | 0.8687 | 1.00 / 0.76 / 0.89 | 0.2239 | 0.0238 |
+| XGBoost, no refit | 85.22% | 86.12% | 0.8654 [0.792, 0.917] | 0.8505 | 1.00 / 0.72 / 0.88 | 0.2358 | 0.0491 |
+| Deep neural head | 88.00% | 87.16% | 0.8850 [0.810, 0.941] | 0.8750 | 1.00 / 0.75 / 0.91 | 0.2608 | 0.0421 |
+| Shallow neural head | 84.82% | 84.19% | 0.8538 [0.770, 0.926] | 0.8415 | 1.00 / 0.68 / 0.88 | 0.2700 | 0.0584 |
+| Deep head, 3-seed average | 87.60% | 84.68% | 0.8699 [0.778, 0.944] | 0.8632 | 1.00 / 0.70 / 0.91 | 0.2131 | 0.0240 |
+| Shallow head, 3-seed average | 87.20% | 84.67% | 0.8678 [0.778, 0.941] | 0.8603 | 1.00 / 0.70 / 0.90 | 0.2682 | 0.0431 |
+| Ensemble (XGBoost + averaged deep head), w = 0.5 | 88.39% | 87.37% | 0.8882 [0.811, 0.945] | 0.8788 | 1.00 / 0.75 / 0.91 | 0.2193 | 0.0346 |
+| XGBoost on equal-thirds labels¹ | 81.55% | 81.58% | 0.8156 [0.747, 0.867] | 0.8140 | 0.83 / 0.74 / 0.88 | 0.3889 | 0.0435 |
+
+**csv10k**, 1,901 test rows from 476 sentences:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 [95% sentence CI] | Weighted F1 | F1 low / mid / high | NLL | ECE |
+| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
+| Always the most common class (mid) | 53.50% | 33.33% | 0.2324 [0.217, 0.243] | 0.3729 | 0.00 / 0.70 / 0.00 | — | — |
+| Best possible (oracle) | 74.91% | 51.99% | 0.5264 [0.480, 0.609] | 0.7239 | 0.09 / 0.81 / 0.69 | — | — |
+| XGBoost, shipped recipe | 59.76% | 69.89% | 0.5322 [0.482, 0.577] | 0.6212 | 0.33 / 0.66 / 0.61 | 0.7850 | 0.1478 |
+| XGBoost, no refit | 59.60% | 69.78% | 0.5309 [0.480, 0.575] | 0.6198 | 0.33 / 0.65 / 0.61 | 0.7693 | 0.0979 |
+| Deep neural head | 62.39% | 53.59% | 0.4999 [0.453, 0.539] | 0.6320 | 0.21 / 0.70 / 0.59 | 0.7047 | 0.0483 |
+| Shallow neural head | 64.12% | 57.11% | 0.5317 [0.456, 0.581] | 0.6458 | 0.28 / 0.71 / 0.61 | 0.7186 | 0.0360 |
+| Deep head, 3-seed average | 60.28% | 69.94% | 0.5333 [0.483, 0.580] | 0.6231 | 0.34 / 0.67 / 0.59 | 0.7009 | 0.0852 |
+| Shallow head, 3-seed average | 62.02% | 68.89% | 0.5441 [0.492, 0.587] | 0.6346 | 0.35 / 0.69 / 0.59 | 0.6963 | 0.0488 |
+| Ensemble (XGBoost + averaged deep head), w = 0.25 | 60.39% | 70.02% | 0.5342 [0.484, 0.581] | 0.6244 | 0.34 / 0.67 / 0.59 | 0.7124 | 0.0677 |
+| XGBoost on equal-thirds labels¹ | 49.40% | 49.67% | 0.4984 [0.461, 0.527] | 0.4992 | 0.50 / 0.39 / 0.61 | 0.9497 | 0.0335 |
+
+¹ Uses different labels: the scores are cut into equal thirds (at 0.67 and 0.83 for csv5k, 0.56 and 0.73 for csv10k) instead of at 0.4 and 0.7, on the same split. It shows how much the cut-offs matter and is not directly comparable with the other rows.
+
+Per-class thresholds chosen on validation. The weights follow the class order of each dataset, and 1/1/1 means unchanged:
+
+| Dataset | Model | Chosen class weights | Macro F1 before → after | Accuracy before → after |
+| --- | --- | --- | --- | --- |
+| MSC | XGBoost, no refit | 0.5/0.5/1 | 0.6012 → 0.6155 | 68.71% → 73.38% |
+| MSC | Deep neural head | 1/1/1 | 0.6732 → 0.6732 | 78.06% → 78.06% |
+| MSC | Shallow neural head | 1/1/1 | 0.6504 → 0.6504 | 78.06% → 78.06% |
+| MSC | Ensemble (XGBoost + averaged deep head) | 1/1/1 | 0.7132 → 0.7132 | 80.40% → 80.40% |
+| csv5k | XGBoost, no refit | 1/0.5/1 | 0.8654 → 0.8687 | 85.22% → 87.20% |
+| csv5k | Deep neural head | 1/1/1 | 0.8850 → 0.8850 | 88.00% → 88.00% |
+| csv5k | Shallow neural head | 1/1/1 | 0.8538 → 0.8538 | 84.82% → 84.82% |
+| csv5k | Ensemble (XGBoost + averaged deep head) | 1/0.7/1 | 0.8882 → 0.8912 | 88.39% → 89.09% |
+| csv10k | XGBoost, no refit | 0.7/1.4/1 | 0.5309 → 0.5299 | 59.60% → 62.39% |
+| csv10k | Deep neural head | 1.4/1.4/1 | 0.4999 → 0.4986 | 62.39% → 62.49% |
+| csv10k | Shallow neural head | 2/2/1 | 0.5317 → 0.5334 | 64.12% → 65.18% |
+| csv10k | Ensemble (XGBoost + averaged deep head) | 1/1/1 | 0.5342 → 0.5342 | 60.39% → 60.39% |
+
+#### Did the improvements help?
+
+Four comparisons per dataset were fixed before the test run. Each cell gives the change in test macro F1 and the one-sided paired-bootstrap p-value. A change counts as significant when p is below 0.0125 (0.05 split across the four comparisons); for the CSVs it must also hold when whole sentences are resampled.
+
+| Comparison | MSC | csv5k | csv10k |
+| --- | --- | --- | --- |
+| Seed averaging vs single best seed (deep head) | +0.0260 (p 0.070; not significant) | −0.0151 (p 0.983 rows / 0.637 sentences; not significant) | +0.0333 (p 0.001 rows / 0.011 sentences; **significant**) |
+| Ensemble vs averaged deep head | +0.0140 (p 0.241; not significant) | +0.0184 (p 0.008 rows / 0.320 sentences; significant on rows only) | +0.0010 (p 0.145 rows / 0.365 sentences; not significant) |
+| Ensemble vs XGBoost (no refit) | +0.1120 (p 0.001; **significant**) | +0.0228 (p 0.007 rows / 0.199 sentences; significant on rows only) | +0.0034 (p 0.231 rows / 0.296 sentences; not significant) |
+| Per-class thresholds vs ensemble | 0 (no change) | +0.0030 (p 0.293 rows / 0.185 sentences; not significant) | 0 (no change) |
+
+What this shows:
+- **MSC (real data):** the ensemble scores highest, 0.7132 against 0.6732 for the shipped deep head and 0.6114 for shipped XGBoost, and has the best invalid-fact F1 (0.57). Only its gain over XGBoost is significant; its gain over the averaged deep head (+0.0140) is not. Its probabilities are also the least calibrated (ECE 0.1171 against 0.0163 for the deep head). Seed averaging alone reaches 0.6992, with the best accuracy (80.76%) and the lowest NLL (0.4979).
+- **csv5k:** every model scores between 0.8538 and 0.8912, close to the 0.9230 ceiling. Every model classifies the low class perfectly, so all errors are mid versus high. With 86 test sentences, the differences between models are within noise.
+- **csv10k:** the models score between 0.4999 and 0.5441 against a ceiling of 0.5264, so this dataset cannot tell them apart. Seed averaging raised the deep head's macro F1 by 0.0333 (significant) but lowered accuracy by 2.10 points: it finds 95% of the low-score rows instead of 37%, at the cost of calling more mid and high rows low.
+- **Thresholds** stayed at 1/1/1 in half of the cases and never moved macro F1 by more than 0.0143.
+
+#### Checks and caveats
+
+- The experiment code reproduces the shipped MSC models exactly. Scoring the shipped model files through it gives the shipped confusion matrices (macro F1 0.6114, 0.6732 and 0.6504), and retraining from scratch gives the same scores again.
+- The CSV texts and scores are AI-generated, so only the MSC results reflect real data. The MSC results repeat the shipped evaluation rather than adding new evidence.
+- The 0.4 / 0.7 cut-offs are a modelling choice. Equal thirds lower XGBoost to 0.8156 on csv5k and 0.4984 on csv10k.
+- The effective test sets are small (86 sentences for csv5k), and validation was reused for several choices, so validation scores are optimistic. Only the test scores count.
+- These results have not had the independent adversarial review that the shipped changes had.
+
 ## Reproduce the experiments
 
 After installation, run from the repository root:
@@ -361,6 +507,7 @@ After installation, run from the repository root:
 .venv/bin/python -m training.train_neural_retention
 .venv/bin/python -m training.compare_neural_depth
 .venv/bin/python scripts/measure_all.py --tag final --candidate-limit default --ann-arms   # every measurement
+.venv/bin/python -m training.experiments.run_all   # optional: retention models on three datasets (not used by the system)
 .venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch
 ```
 
@@ -377,7 +524,7 @@ To run the automated tests, install the test runner (`uv pip install --python .v
 | [`main/storage/`](main/storage/) | JSONL revisions, locks, SQLite index structures, cleanup. |
 | [`main/graph/`](main/graph/) | Temporal entities/relations, provenance, historical and multi-hop queries. |
 | [`main/retrieval/`](main/retrieval/) | Keyword ranking, BGE embeddings, hybrid search, reranking, context, answers. |
-| [`main/ml.py`](main/ml.py), [`main/neural.py`](main/neural.py), [`training/`](training/) | Optional retention scorers and training. |
+| [`main/ml.py`](main/ml.py), [`main/neural.py`](main/neural.py), [`training/`](training/) | Optional retention scorers and training. [`training/experiments/`](training/experiments/) holds the three-dataset experiment, which the system does not use. |
 | [`api/`](api/), [`static/`](static/) | Authenticated HTTP API, monitoring, privacy operations, demo. |
 | [`evaluation/`](evaluation/), [`docs/reports/`](docs/reports/) | Datasets, runners, saved metrics, failure cases, review forms. |
 | [`tests/`](tests/) | Automated behavior and integration tests. |

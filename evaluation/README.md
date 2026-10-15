@@ -46,6 +46,14 @@ entries are exactly what a product call with `limit=K` returns.
 | `python -m evaluation.lifecycle` | 16 deterministic lifecycle, task, and supersession checks | `docs/reports/lifecycle.json` |
 | `python -m evaluation.report [--retention-only]` | Renders `SUMMARY.md` and the retention-model markdown from JSON | `docs/reports/SUMMARY.md`, `evaluation/reports/*.md` |
 
+## Experiments
+
+`python -m training.experiments.run_all` trains the XGBoost retention model and both frozen-BGE heads on three
+datasets separately: the two importance-score CSVs (binned at 0.4 / 0.7, split by sentence) and the pinned MSC
+parquet. It also runs seed-averaged heads, an XGBoost + neural ensemble and per-class thresholds, all tuned on
+validation only. Working files go to the git-ignored `artifacts/experiments/`; the summary is
+`evaluation/reports/experiments/retention_datasets.{json,md}`. The shipped artifacts and reports are not touched.
+
 ## The benchmark
 
 - **Authorship.** Twelve personas, 456 memories and 360 questions were written by Claude (AI)
