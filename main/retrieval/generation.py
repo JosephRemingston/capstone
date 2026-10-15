@@ -73,7 +73,7 @@ def gemini_client(*, env_file='.env'):
         from dotenv import load_dotenv
         from langchain_google_genai import ChatGoogleGenerativeAI
     except ImportError as exc:
-        raise ValueError('Install requirements-rag.txt to use Gemini') from exc
+        raise ValueError('Install requirements.txt to use Gemini') from exc
     load_dotenv(Path(env_file), override=False)
     api_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('GEMINI_API_KEY')
     if not api_key:

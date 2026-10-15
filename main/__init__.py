@@ -9,11 +9,14 @@ from .domain.scoring import ImportanceScorer
 from .domain.classification import MemoryClassifier
 from .storage.store import LocalMemoryStore
 from .retrieval.ranker import MemoryRanker
-from .ml import MLFeatureExtractor, MLImportanceScorer
+from .ml import MLFeatureExtractor
+from .ensemble import EnsembleModel, HybridImportanceScorer
 
 __all__ = [
+    "EnsembleModel",
     "FeatureExtractor",
     "GraphMemoryAdapter",
+    "HybridImportanceScorer",
     "ImportanceScorer",
     "LifecycleManager",
     "LocalMemoryStore",
@@ -24,6 +27,5 @@ __all__ = [
     "MemoryRecord",
     "MemoryRanker",
     "MLFeatureExtractor",
-    "MLImportanceScorer",
     "MemoryTier",
 ]

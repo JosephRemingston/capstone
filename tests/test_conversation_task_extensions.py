@@ -16,7 +16,7 @@ NOW = datetime(2026, 9, 26, 10, tzinfo=timezone.utc)
 
 
 def process(text, at=NOW, user='u', session='s', **metadata):
-    return MemoryCore().process(MemoryInput(content=text, user_id=user, session_id=session,
+    return MemoryCore.with_heuristic().process(MemoryInput(content=text, user_id=user, session_id=session,
                                            timestamp=at, metadata=metadata))
 
 
@@ -37,7 +37,7 @@ class ConversationExtensions(unittest.TestCase):
 
     def test_mixed_messages_quotes_and_procedure_scope(self):
         def split(text):
-            return MemoryCore().process_many(MemoryInput(content=text, user_id='u', session_id='s'))
+            return MemoryCore.with_heuristic().process_many(MemoryInput(content=text, user_id='u', session_id='s'))
         records = split('I would rather have short answers, but remind me to send the invoice tomorrow.')
         self.assertEqual([r.category.value for r in records], ['preference', 'task'])
         quoted = split('She said "I finished it; I sent it."; I prefer concise answers.')
@@ -215,7 +215,7 @@ class TaskWorkflowExtensions(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 code = cli_main(['--store', str(self.store.path), 'process', *args,
-                                 '--user-id', 'u', '--session-id', 's'])
+                                 '--user-id', 'u', '--session-id', 's', '--scorer', 'heuristic'])
             self.assertEqual(code, 0, output.getvalue())
             return json.loads(output.getvalue())
         task = run('Remind me to pay rent monthly', '--due-at', '2026-10-01')

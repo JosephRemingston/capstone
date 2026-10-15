@@ -72,7 +72,7 @@ class RerankerPipelineTests(unittest.TestCase):
         self.store = LocalMemoryStore(Path(temporary.name) / 'memories.jsonl')
 
     def add(self, text, *, user='u', session='s', identifier=None):
-        record = MemoryCore().process(MemoryInput(
+        record = MemoryCore.with_heuristic().process(MemoryInput(
             content=text, user_id=user, session_id=session, timestamp=NOW))
         record.tier = MemoryTier.LONG_TERM
         record.expires_at = None

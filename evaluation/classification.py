@@ -15,7 +15,9 @@ from pathlib import Path
 
 from main.application.core import MemoryCore
 from main.domain.models import MemoryInput
+from main.ensemble import describe_scorer
 
+from .clock import pinned_clock
 from .schema import DATASET_DIR
 
 CASES = DATASET_DIR / 'conversational_cases.jsonl'
@@ -45,11 +47,28 @@ def macro_f1(pairs: list[tuple[str, str]]) -> tuple[float, dict]:
     return sum(item['f1'] for item in per_class.values()) / len(per_class), per_class
 
 
+def range_baselines(results: list[dict]) -> dict:
+    """Importance-range agreement of constant scores and per hand-labelled range, so a scorer's agreement can be read
+    against what a constant achieves (40 of the 60 ranges are [.45, 1])."""
+    ranges = [tuple(r['importance_range']) for r in results]
+    agreement = lambda value: sum(lo <= value <= hi for lo, hi in ranges) / len(ranges)
+    grid = [round(0.01 * i, 2) for i in range(101)]
+    best = max(grid, key=agreement)
+    groups = {}
+    for r in results:
+        key = '{:.2f}-{:.2f}'.format(*r['importance_range'])
+        groups.setdefault(key, []).append(r['importance_in_range'])
+    return {'constant': {str(v): agreement(v) for v in (0.1, 0.3, 0.5, 0.7, 0.9)},
+            'best_constant': {'score': best, 'agreement': agreement(best)},
+            'by_range': {key: {'cases': len(hits), 'agreement': sum(hits) / len(hits)} for key, hits in sorted(groups.items())}}
+
+
 def evaluate(rows: list[dict]) -> dict:
     core = MemoryCore()
     results = []
     for row in rows:
-        record = core.process(MemoryInput(row['content'], 'classification-eval', row['id'], timestamp=NOW))
+        with pinned_clock(NOW):   # the heuristic's recency feature reads the clock; scoring happens "at" NOW
+            record = core.process(MemoryInput(row['content'], 'classification-eval', row['id'], timestamp=NOW))
         lo, hi = row['importance_range']
         results.append({'id': row['id'], 'content': row['content'],
                         'expected_category': row['expected_category'], 'predicted_category': record.category.value,
@@ -63,6 +82,8 @@ def evaluate(rows: list[dict]) -> dict:
     confusion = Counter(f'{e} -> {p}' for e, p in pairs)
     n = len(results)
     return {'cases': n, 'label_source': 'claude_authored, labelled before running the classifier; not human-validated',
+            'importance_model': describe_scorer(core.importance_scorer), 'clock': NOW.isoformat(),
+            'importance_range_baselines': range_baselines(results),
             'category_accuracy': sum(r['category_correct'] for r in results) / n,
             'category_macro_f1': macro, 'per_class': per_class,
             'tier_accuracy': sum(r['tier_correct'] for r in results) / n,

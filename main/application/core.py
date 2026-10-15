@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 
 from ..domain.classification import MemoryClassifier
 from ..domain.features import FeatureExtractor
@@ -19,6 +18,7 @@ from ..domain.recurrence import parse_recurrence, scheduled_at
 from ..domain.claims import extract_claim
 from ..domain.reconciliation import validate_evidence
 from ..domain.privacy import redact_metadata, redact_sensitive
+from ..ensemble import default_importance_scorer
 
 
 @dataclass(slots=True)
@@ -27,23 +27,14 @@ class MemoryCore:
 
     classifier: MemoryClassifier = field(default_factory=MemoryClassifier)
     feature_extractor: FeatureExtractor = field(default_factory=FeatureExtractor)
-    importance_scorer: ImportanceScoring = field(default_factory=ImportanceScorer)
+    # Default: the hybrid scorer (25 % csv5k ensemble + 75 % heuristic), or COGNIMEM_SCORER=heuristic.
+    importance_scorer: ImportanceScoring = field(default_factory=default_importance_scorer)
     lifecycle_manager: LifecycleManager = field(default_factory=LifecycleManager)
 
     @classmethod
-    def with_ml(cls, model_dir: str | Path | None = None) -> "MemoryCore":
-        """Use the optional XGBoost scorer identified by its artifact metadata."""
-        from ..ml import DEFAULT_MODEL_DIR, MLFeatureExtractor, MLImportanceScorer
-        return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
-                   importance_scorer=MLImportanceScorer(model_dir or DEFAULT_MODEL_DIR))
-
-    @classmethod
-    def with_neural(cls, model_dir: str | Path | None = None) -> "MemoryCore":
-        """Use the local frozen-encoder retention scorer when explicitly selected."""
-        from ..ml import MLFeatureExtractor
-        from ..neural import DEFAULT_NEURAL_DIR, NeuralImportanceScorer
-        return cls(classifier=MemoryClassifier(legacy=True), feature_extractor=MLFeatureExtractor(),
-                   importance_scorer=NeuralImportanceScorer(model_dir or DEFAULT_NEURAL_DIR))
+    def with_heuristic(cls) -> "MemoryCore":
+        """Use only the rule-based importance score (the COGNIMEM_SCORER=heuristic opt-out)."""
+        return cls(importance_scorer=ImportanceScorer())
 
     def process(self, memory_input: MemoryInput) -> MemoryRecord:
         sanitized, sensitive_types = redact_sensitive(memory_input.content)
@@ -87,9 +78,15 @@ class MemoryCore:
                 record.due_at = parse_deadline(record.content, memory_input.timestamp,
                                                memory_input.metadata.get("due_at"))
         features = self.feature_extractor.extract(memory_input, record)
-        text_scorer = getattr(self.importance_scorer, "score_text", None)
-        score = (text_scorer(memory_input.content, features) if callable(text_scorer)
-                 else self.importance_scorer.score(features))
+        assess = getattr(self.importance_scorer, "assess", None)
+        if callable(assess):
+            score, provenance = assess(memory_input.content, features)
+        else:
+            text_scorer = getattr(self.importance_scorer, "score_text", None)
+            score = (text_scorer(memory_input.content, features) if callable(text_scorer)
+                     else self.importance_scorer.score(features))
+            provenance = {"type": "heuristic" if isinstance(self.importance_scorer, ImportanceScorer)
+                          else type(self.importance_scorer).__name__}
         tier = self.lifecycle_manager.assign_tier(record, score)
 
         record.features = features
@@ -97,18 +94,8 @@ class MemoryCore:
         record.tier = tier
         record.expires_at = self.lifecycle_manager.expiry_for(record)
         record.archive_after = self.lifecycle_manager.archive_after_for(record)
-        from ..ml import MLImportanceScorer
-        if isinstance(self.importance_scorer, MLImportanceScorer):
-            record.source_metadata["importance_model"] = {
-                "type": "xgboost", "target": self.importance_scorer.metadata["target"],
-                "sha256": self.importance_scorer.metadata["model_sha256"],
-            }
-        elif getattr(self.importance_scorer, "model_kind", None) == "neural":
-            record.source_metadata["importance_model"] = {
-                "type": "neural", "target": self.importance_scorer.metadata["target"],
-                "sha256": self.importance_scorer.metadata["model_sha256"],
-                "encoder": self.importance_scorer.metadata["encoder_id"],
-            }
+        # Always overwritten, so a caller-supplied value cannot misstate which scorer ran.
+        record.source_metadata["importance_model"] = provenance
         return record
 
     def process_many(self, memory_input: MemoryInput) -> list[MemoryRecord]:

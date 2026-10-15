@@ -10,7 +10,7 @@ from main.ml import MLFeatureExtractor
 
 class ConversationalRuleTests(unittest.TestCase):
     def process(self, text):
-        return MemoryCore().process(MemoryInput(content=text, user_id="u", session_id="s"))
+        return MemoryCore.with_heuristic().process(MemoryInput(content=text, user_id="u", session_id="s"))
 
     def test_categories_and_tiers(self):
         cases = [

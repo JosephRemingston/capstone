@@ -18,6 +18,14 @@ def load(tag: str) -> dict:
     return json.loads(path.read_text())
 
 
+# Settings and provenance, not metrics: never compared numerically. Cleanup counts (._cleanup.) and diagnostics are.
+NOT_METRICS = ('._protocol.', '._vector_paths.')
+
+
+def is_metric(key: str) -> bool:
+    return not key.startswith('_scorers.') and not any(marker in key for marker in NOT_METRICS)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('before')
@@ -34,17 +42,20 @@ def main() -> None:
             raise SystemExit(message + ' (pass --allow-dataset-mismatch to compare anyway)')
         print(f'WARNING: {message}')
     before, after = first['flat'], second['flat']
-    protocol = sorted(k for k in set(before) | set(after) if '._protocol.' in k and before.get(k) != after.get(k))
-    for key in protocol:
-        print(f'protocol differs: {key}: {before.get(key)!r} -> {after.get(key)!r}')
     keys = sorted(k for k in set(before) & set(after)
                   if isinstance(before[k], (int, float)) and isinstance(after[k], (int, float))
-                  and '._' not in k and all(m in k for m in args.match))
+                  and is_metric(k) and all(m in k for m in args.match))
+    # Settings changes are always shown for every section whose metrics are printed, even under --match.
+    sections = {k.split('.')[0] for k in keys} if args.match else None
+    protocol = sorted(k for k in set(before) | set(after) if '._protocol.' in k and before.get(k) != after.get(k)
+                      and (sections is None or k.split('.')[0] in sections))
+    for key in protocol:
+        print(f'protocol differs: {key}: {before.get(key)!r} -> {after.get(key)!r}')
     width = max((len(k) for k in keys), default=10)
     print(f"{'metric':<{width}}  {args.before:>10}  {args.after:>10}  {'delta':>10}")
     for key in keys:
         print(f'{key:<{width}}  {before[key]:>10.4f}  {after[key]:>10.4f}  {after[key] - before[key]:>+10.4f}')
-    missing = sorted(k for k in set(before) ^ set(after) if '._' not in k and all(m in k for m in args.match))
+    missing = sorted(k for k in set(before) ^ set(after) if is_metric(k) and all(m in k for m in args.match))
     if missing:
         print(f'{len(missing)} metrics exist in only one snapshot, e.g. {missing[:5]}')
 

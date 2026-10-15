@@ -48,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ann_exact_threshold=settings.ann_exact_threshold,
         candidate_pool=settings.candidate_pool,
         model_threads=settings.model_threads,
+        scorer=settings.scorer,
     )
     app.state.registry = CollectorRegistry()
     app.state.metrics = Metrics(app.state.registry)
@@ -133,7 +134,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             checks["index_store"] = "error"
         ready_status = all(value == "ok" for value in checks.values())
         request.app.state.metrics.ready.set(1 if ready_status else 0)
-        body = {"status": "ready" if ready_status else "not_ready", "checks": checks}
+        scorer = request.app.state.service.core.importance_scorer
+        model = getattr(scorer, "model", None)
+        body = {"status": "ready" if ready_status else "not_ready", "checks": checks,
+                # built at start-up (a missing model stops the app there); reported for provenance
+                "importance_scorer": {"type": getattr(scorer, "kind", "heuristic"),
+                                      **({"model_sha256": model.sha256} if model is not None else {})}}
         return success(body, request.state.request_id, 200 if ready_status else 503)
 
     @app.get("/metrics")

@@ -29,7 +29,7 @@ CogniMem provides these connected capabilities:
 | RAG | Builds bounded, cited evidence context; can answer extractively or through Gemini. |
 | Knowledge graph | Stores typed, time-aware relationships with source evidence. |
 | Cleanup | Safely removes eligible expired memories and derived index data. |
-| ML experiment | Offers an optional XGBoost importance scorer; it is not the default. |
+| Trained importance model | Supplies 25% of the default importance score (csv5k ensemble); the rule-based heuristic supplies the other 75%. |
 
 Not currently provided: production database migration, automated scheduler installation, general-purpose relation extraction, or independently human-rated answer quality.
 
@@ -73,8 +73,10 @@ main/
   storage/                 JSONL store, SQLite indexes, cleanup, locks
   retrieval/               ranker, embeddings, RAG, generation
   graph/                   temporal graph and graph contract
-  ml.py                    optional trained-scorer integration
-training/                  optional importance-model training
+  ensemble.py              default hybrid importance scorer (trained model + heuristic)
+  ml.py                    importance feature schema shared with the model
+training/                  importance-model training (training/ensemble/)
+artifacts/                 trained importance model (importance_ensemble/)
 tests/                     unit and integration tests
 docs/                      focused guides and reports
 data/                      datasets, caches, and local artifacts
@@ -103,11 +105,22 @@ precedence over `.env`. The key is ignored by Git. Local FastEmbed embeddings
 do not send memory text to an embedding provider; Gemini receives only the
 question and selected context when hosted generation is intentionally used.
 
+The default importance scorer also needs the trained model in
+`artifacts/importance_ensemble/` (tracked in Git) and the BGE encoder cached in
+`data/rag/models`. The scorer never downloads the encoder, in the CLI, Python, or
+the API; fetch it once with
+`.venv/bin/python -c "from main.retrieval.embeddings import FastEmbedder; FastEmbedder()"`
+from the repository root, or set `COGNIMEM_SCORER=heuristic` to run without the model.
+The API builds one local-only BGE encoder shared by retrieval and the scorer, so a
+missing encoder cache stops it at start-up with that command and the opt-out; with
+`COGNIMEM_SCORER=heuristic` the API starts without BGE as before.
+
 Runtime locations:
 
 - JSONL store: `memory_store/memories.jsonl`
 - SQLite index: beside the store, normally `memories.index.sqlite3`
-- embedding cache: `data/rag/models`
+- embedding cache (retrieval and importance scorer): `data/rag/models`
+- importance model: `artifacts/importance_ensemble/`
 - reports: `docs/reports/`
 - local configuration: `.env`
 
@@ -250,7 +263,7 @@ timezone-aware ISO values. A record is serializable to JSON.
 2. Classify the content.
 3. Create a provisional record and timestamps.
 4. Extract numeric importance features.
-5. Score importance from 0 to 1.
+5. Score importance from 0 to 1 (by default 25% trained model, 75% heuristic).
 6. Assign lifecycle tier, expiry, and archive hints.
 7. Parse supported task, deadline, recurrence, claim, and graph metadata.
 8. Return the record; `LocalMemoryStore.ingest()` persists it and applies
@@ -279,11 +292,27 @@ pronouns, arbitrary negation, indirect preferences, or long mixed prose.
 
 ## Importance and lifecycle
 
-The default scorer is a transparent weighted sum clamped to 0–1. Semantic,
+The default scorer is a hybrid (`HybridImportanceScorer` in `main/ensemble.py`):
+`score = round(0.25 × model_score + 0.75 × heuristic_score, 4)`.
+
+The heuristic part (75%) is the rule-based `ImportanceScorer` in
+`main/domain/scoring.py`, a transparent weighted sum clamped to 0–1. Semantic,
 preference, and task category signals each weigh 0.38; procedural weighs 0.34;
 episodic weighs 0.20. It also uses task/preference language, deadline, access
 frequency, entity density, interaction metadata, recency, word count, and
 sentiment. Temporary memories receive a 0.25 multiplier.
+
+The model part (25%) is the value of the trained model's predicted class: low
+0.3102, mid 0.5792, high 0.8372 (the mean csv5k importance score of the fit and
+validation rows in that class; 3,992 rows, the test split excluded). For temporary records it is multiplied by the same 0.25
+small-talk penalty. The record's category still comes from the normal classifier;
+the model computes its own inputs from the text with the legacy feature path
+(`MemoryClassifier(legacy=True)` plus `MLFeatureExtractor` in `main/ml.py`).
+
+Every record stores provenance in `source_metadata["importance_model"]`. For the
+hybrid it holds `type`, `model_weight`, `model_class`, `model_probabilities`,
+`model_score`, `small_talk_penalty`, `heuristic_score`, `model_sha256`, and
+`encoder`; for the heuristic it is `{"type": "heuristic"}`.
 
 Lifecycle policy:
 
@@ -296,30 +325,73 @@ Lifecycle policy:
 - recurring tasks have no automatic expiry;
 - long-term archive view begins after 90 inactive days when eligible.
 
-These are product-policy thresholds, not statistically calibrated probabilities.
+These thresholds did not change with the hybrid default; balanced cleanup still
+archives rather than deletes expired records scoring >= 0.65 (`ARCHIVE_IMPORTANCE`
+in `main/storage/cleanup.py`). They are product-policy thresholds, not
+statistically calibrated probabilities. Measured on 16 October 2026 (snapshots
+`hybrid` and `heuristic_control`), the hybrid matched the heuristic on LongMemEval
+user-fact retention (90.55%), classification category and tier accuracy, and
+lifecycle checks (16/16), and its model score does not separate answer-bearing
+turns; see
+[Importance scoring (default)](README.md#importance-scoring-default).
 
-### Optional ML scorer
+### Trained model (25% of the default score)
 
-`MemoryCore.with_ml()` can explicitly load the experimental XGBoost scorer.
-It was trained on 2,222 usable human-labeled conversational fact candidates from
-[Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc).
-It predicts invalid, short-term, or long-term. Its 0–1 score is a policy proxy:
-`P(long_term) + 0.5 × P(short_term)`, not a human importance rating. On the
-published 556-fact test split, accuracy is 69.24% and macro F1 is 0.6114;
-the always-long-term baseline has 68.17% accuracy and 0.2702 macro F1.
-It is not the default because task requests and greetings are underrepresented,
-the split is not conversation-disjoint, and lifecycle thresholds remain uncalibrated.
+The model is the csv5k "Ensemble + thresholds" bundle in
+`artifacts/importance_ensemble/` (`xgboost.ubj`, `deep_seed_42/43/44.onnx`, and
+`metadata.json` with SHA-256 checksums and golden vectors). At load,
+`EnsembleModel` checks the checksums, schema, boosting rounds, ONNX interfaces,
+temperatures, weights, and encoder id; the golden vectors are checked by the test
+suite (`tests/test_hybrid_importance.py`), not at load time. A fit-only XGBoost model on 525 features (13 text features + 512
+hashed word counts; max depth 3, min child weight 3, 304 boosting rounds) is
+temperature-calibrated and blended 0.5/0.5 with the average of three seeds (42,
+43, 44) of a deep head on the frozen `BAAI/bge-small-en-v1.5` embedding (384
+values) plus the 13 numeric features (text branch 384→192→128, numeric 13→64→32,
+joint 160→128→64→3, LayerNorm/GELU/dropout 0.2). Each seed is
+temperature-calibrated and the average is calibrated again; class weights
+1 / 0.7 / 1 then pick low, mid, or high. Serving uses xgboost, ONNX Runtime, and
+the cached local BGE encoder (the API builds one local-only encoder shared with
+retrieval); PyTorch is needed only for training. Cost is roughly 14 ms per user
+message and about 100 ms per long assistant message, mostly the BGE embedding. A
+missing model raises a clear error naming the training command and the opt-out; a
+missing encoder cache, one naming the download command and the opt-out.
 
-`MemoryCore.with_neural()` enables a separate local neural scorer. A frozen
-384-dimensional BGE encoder processes redacted fact text; a 13-feature numeric
-branch joins a small three-class dense head. PyTorch trains the head, while
-ONNX Runtime handles inference. On the same published test split, it reaches
-78.06% accuracy and 0.6732 macro F1 with the deeper head selected on validation.
-The original neural head reached 0.6504 macro F1. Deeper-head invalid-fact
-recall is 42.35%, still below XGBoost's 50.59%, and its constructed proxy MAE
-is worse than the original neural head's. Both models remain optional. See the
-[neural report](evaluation/reports/neural_retention.md) for architecture,
-calibration, latency, and the exploratory-comparison limitation.
+Training data is csv5k (`cognimem_memory_importance_5000.csv`): 5,000
+AI-generated memory sentences (443 distinct after removing a " (example N)"
+suffix) with synthetic importance scores from 0.20 to 1.00, binned as
+low < 0.4 <= mid < 0.7 <= high. The split is grouped by sentence with seed 42:
+3,200 / 792 / 1,008 rows (286 / 71 / 86 sentences). Temperatures, blend weight,
+and class weights were chosen on validation only. On the test split, macro F1 is
+0.8912 (95% sentence-bootstrap interval 0.809–0.949) and accuracy 89.09%; the
+always-most-common-class baseline has 0.2529 macro F1 and the best possible
+(oracle) 0.9230. The [ensemble report](evaluation/reports/retention_ensemble.md)
+has the full results.
+
+Retrain with the package `training/ensemble/`. The first run on a fresh clone needs
+the CSV: `python -m training.ensemble.run --csv /path/to/cognimem_memory_importance_5000.csv`
+copies it to the Git-ignored `data/experiments/csv5k.csv`, and later runs need no
+flag (the bare command fails on a fresh clone). Working files go to the Git-ignored
+`artifacts/ensemble_training/`. Training reproduces the model files (`xgboost.ubj`
+and the three ONNX files, whose SHA-256 values are listed in the metadata `files`)
+bit for bit; `metadata.json` carries a `created_at` timestamp, so its hash (shown as
+`model_sha256` in provenance and `/health/ready`) changes on every retrain.
+
+Select the scorer with `COGNIMEM_SCORER=hybrid` (default) or `heuristic`. CLI:
+`python -m main process ... --scorer hybrid|heuristic` (`--model-dir` only with
+`hybrid`). Python: `MemoryCore()` uses the default and
+`MemoryCore.with_heuristic()` opts out. API: `Settings.scorer` reads
+`COGNIMEM_SCORER`; the scorer is built at start-up and `/health/ready` reports it.
+
+Limits: csv5k is synthetic (AI-generated sentences and scores, not human
+ratings), and the test split has only 86 distinct sentences. Conversation turns
+are far longer than the csv5k sentences (at most 13 words; LongMemEval
+user turns median 42 words), so the model runs out of distribution. Its 25% weight
+is a fixed, user-chosen setting that was not tuned or calibrated; this evidence is a
+reason to keep it small, not where it came from. Before the small-talk penalty it rates greetings
+mid or high. Its low/mid/high importance target differs from the
+invalid/short-term/long-term target of the removed XGBoost-only and neural (MSC)
+scorers, whose code, models, and reports are gone; dated snapshots
+`evaluation/reports/<tag>_summary.json` keep their old numbers as history.
 
 ## Task management
 
@@ -472,7 +544,10 @@ Structured metadata supports explicit relationships outside the narrow grammar:
 The evaluation package was rebuilt on 12 October 2026 together with a fresh benchmark; the
 [README](README.md#evaluation-and-measured-results) has the before/after tables and the
 [evaluation guide](evaluation/README.md) the protocol. Headline numbers from the `final`
-snapshot (`evaluation/reports/final_summary.json`, shipped defaults):
+snapshot (`evaluation/reports/final_summary.json`, measured with the heuristic importance
+scorer, the default before the hybrid; for the hybrid, measured on 16 October 2026 in
+the `hybrid` and `heuristic_control` snapshots, see
+[Importance scoring (default)](README.md#importance-scoring-default)):
 
 | Evaluation | Result and interpretation |
 | --- | --- |
@@ -485,6 +560,13 @@ snapshot (`evaluation/reports/final_summary.json`, shipped defaults):
 These are evidence-retrieval and retention results with an extractive answerer, not
 generated-answer accuracy. Run every measurement with
 `.venv/bin/python scripts/measure_all.py --tag <name> --candidate-limit default --ann-arms`.
+`--scorer hybrid|heuristic` picks the importance scorer, and `--scorer-steps-only` runs only
+the steps that use it (retention, classification, lifecycle, and the summary; ablation and
+LoCoMo never call it). The classification and lifecycle runners pin the clock
+(`evaluation/clock.py`), every scorer-dependent runner records which scorer ran,
+`evaluation/report.py` adds the importance-model summary from
+`evaluation/reports/retention_ensemble.json` to `retention_summary.json`, and
+`scripts/report_delta.py` also compares cleanup counts (`longmemeval._cleanup.*`).
 
 Independent human labels for conversational importance/tier/category, conflict
 decisions, personalization, and live Gemini answer quality are still required.
@@ -492,12 +574,16 @@ decisions, personalization, and live Gemini answer quality are still required.
 ## Testing
 
 ```bash
-python3 -m unittest discover -s tests -q
+.venv/bin/python -m pytest -q
 python3 -m compileall -q main training tests
 ```
 
-The standard suite currently has 139 tests; four optional ML tests are skipped
-when trained artifact metadata is unavailable. Tests cover the core pipeline,
+`python -m unittest discover -t . -s tests -q` is an alternative; without `-t .`
+discovery does not run `tests/__init__.py`.
+
+Hybrid-scorer tests are skipped when the trained model in
+`artifacts/importance_ensemble/` or the cached BGE encoder is unavailable, and
+training tests when PyTorch or xgboost is not installed. Tests cover the core pipeline,
 rules, lifecycle, tasks, revisions, ranking, conflicts, graph/RAG, local reranking,
 cleanup, locks, and CLI behavior.
 
@@ -538,7 +624,7 @@ identity, authorization, privacy endpoints, and operational instrumentation.
 | Method | Endpoint | Purpose | Auth |
 | --- | --- | --- | --- |
 | GET | `/health/live` | Liveness probe | No |
-| GET | `/health/ready` | Readiness checks for auth, memory, and index stores | No |
+| GET | `/health/ready` | Readiness checks for auth, memory, and index stores; reports the importance scorer | No |
 | GET | `/metrics` | Prometheus exposition | No |
 | POST | `/api/v1/auth/signup` | Create a user account | No |
 | POST | `/api/v1/auth/login` | Issue a short-lived access token | No |
@@ -580,7 +666,13 @@ and duration. Sensitive request headers and credential fields are excluded from
 logs. Prometheus counters/histograms cover request traffic and latency, while
 separate counters track authentication events and memory ingestion. Readiness
 checks verify the auth database, authoritative memory store, and rebuildable
-index database.
+index database; the response also names the importance scorer built at start-up
+(for the hybrid, the SHA-256 of `metadata.json`, which changes on every retrain). A
+missing model stops the app at start-up. For the hybrid the API builds one
+local-only BGE encoder (cache `data/rag/models`, no download) shared by retrieval
+and the scorer, so a missing encoder cache also stops it at start-up with the
+download command and the `COGNIMEM_SCORER=heuristic` opt-out; with
+`COGNIMEM_SCORER=heuristic` the API starts without BGE as before.
 
 ### Approximate-nearest-neighbor retrieval
 

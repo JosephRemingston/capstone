@@ -2,8 +2,10 @@
 
     python scripts/measure_all.py --tag baseline --candidate-limit 20 --ann-arms
     python scripts/measure_all.py --tag e2 --candidate-limit 100 --skip-retention
+    python scripts/measure_all.py --tag hybrid --scorer-steps-only            # only what the importance scorer affects
+    python scripts/measure_all.py --tag heuristic_control --scorer-steps-only --scorer heuristic
 
-Each step runs as its own process (XGBoost and torch must not share a process on macOS).
+Each step runs as its own process.
 A failed step is logged under docs/reports/logs/ and later steps still run. The snapshot
 goes to docs/reports/<tag>/ with a MANIFEST.json, and summary.json is also copied to the
 tracked evaluation/reports/<tag>_summary.json because docs/ is git-ignored.
@@ -18,6 +20,7 @@ import argparse
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -42,14 +45,19 @@ def steps(args) -> list[tuple[str, list[str]]]:
         shared += ['--abstain-threshold', str(args.abstain_threshold)]
     if args.structure != 'default':
         shared += ['--structure', args.structure]
-    plan = [('build_dataset', [PY, '-m', 'evaluation.build_dataset', '--check']),
-            ('ablation_test', [PY, '-m', 'evaluation.ablation', '--split', 'test', '--output-dir', 'docs/reports/ablation', *shared]),
-            ('ablation_dev', [PY, '-m', 'evaluation.ablation', '--split', 'dev', '--output-dir', 'docs/reports/ablation_dev', *shared])]
-    if args.ann_arms:
+    if args.scorer_steps_only:
+        # The ablation and LoCoMo runners never call the importance scorer (fixed importance per record),
+        # so a scorer change is measured by retention, classification and lifecycle alone.
+        plan = []
+    else:
+        plan = [('build_dataset', [PY, '-m', 'evaluation.build_dataset', '--check']),
+                ('ablation_test', [PY, '-m', 'evaluation.ablation', '--split', 'test', '--output-dir', 'docs/reports/ablation', *shared]),
+                ('ablation_dev', [PY, '-m', 'evaluation.ablation', '--split', 'dev', '--output-dir', 'docs/reports/ablation_dev', *shared])]
+    if args.ann_arms and not args.scorer_steps_only:
         ann = [a for a in shared if a != '--ann'] + ['--ann']
         plan.append(('ablation_test_ann', [PY, '-m', 'evaluation.ablation', '--split', 'test',
                                            '--output-dir', 'docs/reports/ablation_ann', *ann]))
-    if not args.skip_locomo:
+    if not args.skip_locomo and not args.scorer_steps_only:
         locomo = [PY, '-m', 'evaluation.locomo', '--candidate-limit', str(args.candidate_limit)]
         if args.ann:
             locomo.append('--ann')
@@ -119,7 +127,7 @@ def git_state() -> dict:
                           if (ROOT / name).is_file() and not name.startswith('docs/')}}
 
 
-def snapshot(tag: str, outcomes: list[dict], reused: dict) -> Path:
+def snapshot(tag: str, outcomes: list[dict], reused: dict, scorer: str) -> Path:
     target = REPORTS / tag
     if target.exists():
         shutil.rmtree(target)
@@ -131,7 +139,7 @@ def snapshot(tag: str, outcomes: list[dict], reused: dict) -> Path:
         shutil.copytree(item, destination) if item.is_dir() else shutil.copy2(item, destination)
     dataset = ROOT / 'evaluation/datasets/gold_queries.json'
     manifest = {'tag': tag, 'created_at': datetime.now().astimezone().isoformat(), 'argv': sys.argv, **git_state(),
-                'dataset_sha256': sha256(dataset) if dataset.exists() else None, 'steps': outcomes, 'reused': reused,
+                'dataset_sha256': sha256(dataset) if dataset.exists() else None, 'scorer': scorer, 'steps': outcomes, 'reused': reused,
                 'files': {str(p.relative_to(target)): sha256(p) for p in sorted(target.rglob('*')) if p.is_file()}}
     (target / 'MANIFEST.json').write_text(json.dumps(manifest, indent=2) + '\n')
     summary = REPORTS / 'summary.json'
@@ -139,7 +147,7 @@ def snapshot(tag: str, outcomes: list[dict], reused: dict) -> Path:
         tracked = ROOT / 'evaluation' / 'reports' / f'{tag}_summary.json'
         payload = json.loads(summary.read_text())
         payload['manifest'] = {k: manifest[k] for k in ('tag', 'created_at', 'argv', 'git_head', 'dirty_tree', 'diff_sha256',
-                                                        'dataset_sha256', 'steps', 'reused')}
+                                                        'dataset_sha256', 'scorer', 'steps', 'reused')}
         tracked.write_text(json.dumps(payload, indent=2) + '\n')
     return target
 
@@ -157,7 +165,12 @@ def main() -> None:
     parser.add_argument('--skip-download', action='store_true')
     parser.add_argument('--skip-locomo', action='store_true')
     parser.add_argument('--skip-retention', action='store_true',
-                        help='retention does not depend on retrieval settings; reuse the previous report')
+                        help='retention does not depend on retrieval settings; reuse the previous report '
+                             '(it must come from the same importance scorer)')
+    parser.add_argument('--scorer-steps-only', action='store_true',
+                        help='run only the steps that use the importance scorer (retention, classification, lifecycle)')
+    parser.add_argument('--scorer', choices=('hybrid', 'heuristic'), default=None,
+                        help='importance scorer for every step (sets COGNIMEM_SCORER; default: the environment, else hybrid)')
     parser.add_argument('--overwrite', action='store_true', help='replace an existing snapshot with the same tag')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
@@ -165,10 +178,19 @@ def main() -> None:
             (REPORTS / args.tag).exists() or (ROOT / 'evaluation' / 'reports' / f'{args.tag}_summary.json').exists()):
         parser.error(f'tag {args.tag!r} already exists; pass --overwrite to replace it')
     plan = steps(args)
+    scorer = args.scorer or os.getenv('COGNIMEM_SCORER') or 'hybrid'
+    env = {**os.environ, 'COGNIMEM_SCORER': scorer}
     logs = REPORTS / 'logs'
     reused = {}
     if not args.dry_run:
         reused = prepare(plan, args)
+        for name, item in reused.items():
+            if item['step'] == 'retention':
+                stamp = json.loads((REPORTS / name).read_text()).get('importance_model')
+                item['scorer'] = stamp.get('type') if isinstance(stamp, dict) else 'heuristic'   # older reports: heuristic
+                if item['scorer'] != scorer:
+                    parser.error(f'--skip-retention would reuse a {item["scorer"]} retention report in a {scorer} run; '
+                                 f'rerun retention or pass --scorer {item["scorer"]}')
         logs.mkdir(parents=True, exist_ok=True)
     outcomes = []
     for name, command in plan:
@@ -179,13 +201,13 @@ def main() -> None:
             remove(output)   # a failed step must not leave the previous run's report behind
         started = time.perf_counter()
         with (logs / f'{name}.log').open('w') as handle:
-            code = subprocess.run(command, cwd=ROOT, stdout=handle, stderr=subprocess.STDOUT).returncode
+            code = subprocess.run(command, cwd=ROOT, stdout=handle, stderr=subprocess.STDOUT, env=env).returncode
         outcomes.append({'step': name, 'command': command[1:], 'exit_code': code,
                          'seconds': round(time.perf_counter() - started, 1)})
         print(f'[{name}] exit {code} in {outcomes[-1]["seconds"]} s', flush=True)
     if args.dry_run:
         return
-    target = snapshot(args.tag, outcomes, reused)
+    target = snapshot(args.tag, outcomes, reused, scorer)
     failed = [o['step'] for o in outcomes if o['exit_code']]
     print(f'Snapshot: {target.relative_to(ROOT)}' + (f'; FAILED steps: {failed}' if failed else ''))
     sys.exit(1 if failed else 0)

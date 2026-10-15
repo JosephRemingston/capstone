@@ -86,3 +86,12 @@ Evidence from the designs and verdicts (dev and held-out runs by the design agen
 - README: a new "Before and after" section plus current results; architecture text and limits updated. DOCUMENTATION, PROJECT_VISION and system_design were updated and their dead links removed. `evaluation/reports/abstention_external.json` holds the external abstention numbers; `baseline_summary.json` gained the derived LoCoMo held-out section.
 - 232 tests pass (1 expected failure); dataset check passes; nothing is running.
 - Not done, by user decision: optional experiments E5–E8, the Gemini evaluation and the QNLI answerability model (not shipped). Nothing is committed yet.
+
+## 16 Oct 2026: one importance model, hybrid default
+
+- On request, every XGBoost and neural retention model was removed (code, model files, MSC data, the three-dataset experiment and their reports) except the csv5k "Ensemble + thresholds". Old models are backed up in `~/Downloads/code/capstone_backup_old_retention_models_2026-10-16/` (sha256 manifest verified).
+- Default importance score = 0.25 × the ensemble's class value (low 0.3102 / mid 0.5792 / high 0.8372; × 0.25 for small talk) + 0.75 × the heuristic. Code `main/ensemble.py`; training `training/ensemble/` (reproduces the experiment bit for bit); model `artifacts/importance_ensemble/` (tracked via a `.gitignore` exception); report `evaluation/reports/retention_ensemble.md`. `COGNIMEM_SCORER=heuristic` opts out.
+- Snapshots `heuristic_control` (same day, heuristic; equals `final` on all 457 LongMemEval examples) and `hybrid` (`measure_all --scorer-steps-only`). LongMemEval retention 90.55% in all three; cleanup 1,738 deleted / 38 archived vs 1,740 / 33; lifecycle 16/16; classification tier accuracy 56.7% for both scorers (clock pin). The model does not recognise answer-bearing turns (AUC 0.48 on user turns) and is out of distribution on conversations.
+- Classification and lifecycle runners now pin their clock (`evaluation/clock.py`); the 8 clock-dependent tests in `tests/test_user_disclosure_retention.py` pass.
+- Eight tracked files (API_IMPLEMENTATION.md, PROGRESS.md, PROJECT_VISION.md, TODO.md, requirements-dev.txt, reviews/*, static/index.html) vanished from the working tree between 04:23 and 04:28 without any command in this session deleting them; they were restored from `bad8836`.
+- Nothing is committed.

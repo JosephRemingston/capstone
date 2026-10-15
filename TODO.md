@@ -2,7 +2,8 @@
 
 ## Completed features
 
-- Memory creation, categorization, heuristic importance scoring, and lifecycle tiers.
+- Memory creation, categorization, importance scoring, and lifecycle tiers. The default score is 0.25 × the trained csv5k
+  ensemble + 0.75 × the rule-based heuristic; `COGNIMEM_SCORER=heuristic` opts out.
 - Task management: deadlines, completion, cancellation, rescheduling, recurrence, and history.
 - Conflict detection/resolution for supported facts and preferences.
 - Duplicate-memory consolidation with source evidence and revision history.
@@ -45,4 +46,9 @@
 
 ## Separate ML research track
 
-- [ ] Improve and validate the optional ML importance model with representative conversational labels.
+- [x] Ship the csv5k "Ensemble + thresholds" as 25 % of the default importance score (`python -m training.ensemble.run`);
+  the XGBoost-only and neural scorers were removed. Measured on 16 Oct 2026: no change to LongMemEval retention
+  (README, "Importance scoring (default)").
+- [ ] Collect human-rated importance labels for conversation turns.
+- [ ] Build in-domain conversational training data (csv5k sentences are synthetic and at most 13 words long).
+- [ ] Calibrate or re-justify the 25 % model weight once the model is trained on in-domain labels.

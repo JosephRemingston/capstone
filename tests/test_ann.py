@@ -78,7 +78,7 @@ class ANNTests(unittest.TestCase):
     def test_approximate_index_builds_and_searches_buckets(self):
         with TemporaryDirectory() as directory:
             store = LocalMemoryStore(Path(directory) / "memories.jsonl")
-            core = MemoryCore()
+            core = MemoryCore.with_heuristic()
             records = []
             for text in ["I live in Chennai", "I live in Bengaluru", "I use Python", "I work with a database"]:
                 records.append(store.ingest(core.process(MemoryInput(text, "u", "s"))))
@@ -175,7 +175,7 @@ class ANNTests(unittest.TestCase):
     def test_rag_switches_to_ann_after_threshold(self):
         with TemporaryDirectory() as directory:
             store = LocalMemoryStore(Path(directory) / "memories.jsonl")
-            core = MemoryCore()
+            core = MemoryCore.with_heuristic()
             for i in range(3):
                 store.ingest(core.process(MemoryInput(f"Python note {i}", "u", "s")))
             rag = MemoryRAG(store, embedder=TinyEmbedder(), index_path=Path(directory) / "index.sqlite3",

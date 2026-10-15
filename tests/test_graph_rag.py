@@ -39,7 +39,7 @@ class GraphRAGFixture(unittest.TestCase):
         self.rag = MemoryRAG(self.store, embedder=self.embedder)
 
     def add(self, text, day=1, known=1, user='u', metadata=None):
-        record = MemoryCore().process(MemoryInput(text, user, 's', timestamp=dt(day), metadata=metadata or {}))
+        record = MemoryCore.with_heuristic().process(MemoryInput(text, user, 's', timestamp=dt(day), metadata=metadata or {}))
         record.expires_at = None
         with patch('main.storage.store.utc_now', return_value=dt(known)):
             return self.store.ingest(record)
@@ -234,7 +234,7 @@ class ConfigurationAndCLITests(unittest.TestCase):
                 with patch('sys.stdout', output):
                     code = main(base + args)
                 return code, json.loads(output.getvalue())
-            code, record = call(['process', 'Alice reports to Bob', '--user-id', 'demo', '--session-id', 's'])
+            code, record = call(['process', 'Alice reports to Bob', '--user-id', 'demo', '--session-id', 's', '--scorer', 'heuristic'])
             self.assertEqual(code, 0)
             code, result = call(['graph', '--user-id', 'demo', '--query', 'Alice'])
             self.assertEqual(code, 0)

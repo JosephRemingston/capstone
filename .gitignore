@@ -14,4 +14,6 @@ memory_store/
 !/docs/architecture.md
 memory_store/*.indexes.json
 memory_store/*.cleanup-schedule.json
-/artifacts
+/artifacts/*
+# the default importance model ships with the code (python -m training.ensemble.run rebuilds it)
+!/artifacts/importance_ensemble/

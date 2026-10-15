@@ -1,0 +1,305 @@
+{
+  "sections": {
+    "longmemeval": {
+      "knowledge-update": {
+        "examples": 75,
+        "with_gold_turns": 69,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.8067632850241545,
+        "mean_visible_fraction": 0.495010101010101
+      },
+      "multi-session": {
+        "examples": 133,
+        "with_gold_turns": 125,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9906666666666666,
+        "mean_visible_fraction": 0.6004928714977567
+      },
+      "single-session-assistant": {
+        "examples": 56,
+        "with_gold_turns": 56,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.6785714285714286,
+        "mean_visible_fraction": 0.44275875122776387
+      },
+      "single-session-preference": {
+        "examples": 30,
+        "with_gold_turns": 30,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9833333333333333,
+        "mean_visible_fraction": 0.60494708994709
+      },
+      "single-session-user": {
+        "examples": 70,
+        "with_gold_turns": 64,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.984375,
+        "mean_visible_fraction": 0.5800000000000001
+      },
+      "temporal-reasoning": {
+        "examples": 93,
+        "with_gold_turns": 92,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9217391304347826,
+        "mean_visible_fraction": 0.5561692881405901
+      },
+      "all": {
+        "examples": 457,
+        "with_gold_turns": 436,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9055045871559634,
+        "mean_visible_fraction": 0.5519867747247298
+      },
+      "_cleanup": {
+        "examples": 457,
+        "visible_state_preserved": 457,
+        "removed_memories": 1740,
+        "archived_memories": 33,
+        "bytes_before": 25072219,
+        "bytes_after": 18701350
+      },
+      "_diagnostics": {
+        "user": {
+          "turns": 4914,
+          "answer_bearing": 752,
+          "auc_score": 0.5823151717157258,
+          "auc_heuristic_score": 0.5823151717157258
+        },
+        "assistant": {
+          "turns": 4917,
+          "answer_bearing": 54,
+          "auc_score": 0.5975449539607467,
+          "auc_heuristic_score": 0.5975449539607467
+        },
+        "all": {
+          "turns": 9831,
+          "answer_bearing": 806,
+          "auc_score": 0.6776890083377439,
+          "auc_heuristic_score": 0.6776890083377439
+        }
+      },
+      "_protocol": {
+        "hybrid_scorer": 0
+      }
+    },
+    "_scorers": {
+      "longmemeval": {
+        "type": "heuristic"
+      },
+      "classification": {
+        "type": "heuristic"
+      },
+      "lifecycle": {
+        "type": "heuristic"
+      }
+    },
+    "classification": {
+      "cases": 60,
+      "category_accuracy": 0.5333333333333333,
+      "category_macro_f1": 0.5436507936507936,
+      "tier_accuracy": 0.5666666666666667,
+      "importance_range_agreement": 0.5,
+      "_range_baselines": {
+        "constant": {
+          "0.1": 0.16666666666666666,
+          "0.3": 0.23333333333333334,
+          "0.5": 0.8333333333333334,
+          "0.7": 0.7666666666666667,
+          "0.9": 0.7666666666666667
+        },
+        "best_constant": {
+          "score": 0.45,
+          "agreement": 0.8333333333333334
+        },
+        "by_range": {
+          "0.00-0.35": {
+            "cases": 10,
+            "agreement": 1.0
+          },
+          "0.15-0.60": {
+            "cases": 4,
+            "agreement": 0.5
+          },
+          "0.40-1.00": {
+            "cases": 6,
+            "agreement": 0.3333333333333333
+          },
+          "0.45-1.00": {
+            "cases": 40,
+            "agreement": 0.4
+          }
+        }
+      },
+      "_protocol": {
+        "hybrid_scorer": 0,
+        "clock_pinned": 1
+      }
+    },
+    "lifecycle": {
+      "checks": 16,
+      "passed": 16,
+      "_protocol": {
+        "hybrid_scorer": 0,
+        "clock_pinned": 1
+      }
+    },
+    "importance_model": {
+      "ensemble_macro_f1": 0.8911851990482047,
+      "ensemble_accuracy": 0.8908730158730159,
+      "ensemble_balanced_accuracy": 0.8713553603259485,
+      "ensemble_sentence_ci95_low": 0.8091471048623347,
+      "ensemble_sentence_ci95_high": 0.9490558154441475,
+      "majority_macro_f1": 0.2528735632183908,
+      "oracle_macro_f1": 0.9229949650329209,
+      "test_rows": 1008,
+      "test_sentences": 86
+    }
+  },
+  "flat": {
+    "longmemeval.knowledge-update.examples": 75,
+    "longmemeval.knowledge-update.with_gold_turns": 69,
+    "longmemeval.knowledge-update.keep_everything_retention": 1.0,
+    "longmemeval.knowledge-update.memory_retention": 0.8067632850241545,
+    "longmemeval.knowledge-update.mean_visible_fraction": 0.495010101010101,
+    "longmemeval.multi-session.examples": 133,
+    "longmemeval.multi-session.with_gold_turns": 125,
+    "longmemeval.multi-session.keep_everything_retention": 1.0,
+    "longmemeval.multi-session.memory_retention": 0.9906666666666666,
+    "longmemeval.multi-session.mean_visible_fraction": 0.6004928714977567,
+    "longmemeval.single-session-assistant.examples": 56,
+    "longmemeval.single-session-assistant.with_gold_turns": 56,
+    "longmemeval.single-session-assistant.keep_everything_retention": 1.0,
+    "longmemeval.single-session-assistant.memory_retention": 0.6785714285714286,
+    "longmemeval.single-session-assistant.mean_visible_fraction": 0.44275875122776387,
+    "longmemeval.single-session-preference.examples": 30,
+    "longmemeval.single-session-preference.with_gold_turns": 30,
+    "longmemeval.single-session-preference.keep_everything_retention": 1.0,
+    "longmemeval.single-session-preference.memory_retention": 0.9833333333333333,
+    "longmemeval.single-session-preference.mean_visible_fraction": 0.60494708994709,
+    "longmemeval.single-session-user.examples": 70,
+    "longmemeval.single-session-user.with_gold_turns": 64,
+    "longmemeval.single-session-user.keep_everything_retention": 1.0,
+    "longmemeval.single-session-user.memory_retention": 0.984375,
+    "longmemeval.single-session-user.mean_visible_fraction": 0.5800000000000001,
+    "longmemeval.temporal-reasoning.examples": 93,
+    "longmemeval.temporal-reasoning.with_gold_turns": 92,
+    "longmemeval.temporal-reasoning.keep_everything_retention": 1.0,
+    "longmemeval.temporal-reasoning.memory_retention": 0.9217391304347826,
+    "longmemeval.temporal-reasoning.mean_visible_fraction": 0.5561692881405901,
+    "longmemeval.all.examples": 457,
+    "longmemeval.all.with_gold_turns": 436,
+    "longmemeval.all.keep_everything_retention": 1.0,
+    "longmemeval.all.memory_retention": 0.9055045871559634,
+    "longmemeval.all.mean_visible_fraction": 0.5519867747247298,
+    "longmemeval._cleanup.examples": 457,
+    "longmemeval._cleanup.visible_state_preserved": 457,
+    "longmemeval._cleanup.removed_memories": 1740,
+    "longmemeval._cleanup.archived_memories": 33,
+    "longmemeval._cleanup.bytes_before": 25072219,
+    "longmemeval._cleanup.bytes_after": 18701350,
+    "longmemeval._diagnostics.user.turns": 4914,
+    "longmemeval._diagnostics.user.answer_bearing": 752,
+    "longmemeval._diagnostics.user.auc_score": 0.5823151717157258,
+    "longmemeval._diagnostics.user.auc_heuristic_score": 0.5823151717157258,
+    "longmemeval._diagnostics.assistant.turns": 4917,
+    "longmemeval._diagnostics.assistant.answer_bearing": 54,
+    "longmemeval._diagnostics.assistant.auc_score": 0.5975449539607467,
+    "longmemeval._diagnostics.assistant.auc_heuristic_score": 0.5975449539607467,
+    "longmemeval._diagnostics.all.turns": 9831,
+    "longmemeval._diagnostics.all.answer_bearing": 806,
+    "longmemeval._diagnostics.all.auc_score": 0.6776890083377439,
+    "longmemeval._diagnostics.all.auc_heuristic_score": 0.6776890083377439,
+    "longmemeval._protocol.hybrid_scorer": 0,
+    "classification.cases": 60,
+    "classification.category_accuracy": 0.5333333333333333,
+    "classification.category_macro_f1": 0.5436507936507936,
+    "classification.tier_accuracy": 0.5666666666666667,
+    "classification.importance_range_agreement": 0.5,
+    "classification._range_baselines.constant.0.1": 0.16666666666666666,
+    "classification._range_baselines.constant.0.3": 0.23333333333333334,
+    "classification._range_baselines.constant.0.5": 0.8333333333333334,
+    "classification._range_baselines.constant.0.7": 0.7666666666666667,
+    "classification._range_baselines.constant.0.9": 0.7666666666666667,
+    "classification._range_baselines.best_constant.score": 0.45,
+    "classification._range_baselines.best_constant.agreement": 0.8333333333333334,
+    "classification._range_baselines.by_range.0.00-0.35.cases": 10,
+    "classification._range_baselines.by_range.0.00-0.35.agreement": 1.0,
+    "classification._range_baselines.by_range.0.15-0.60.cases": 4,
+    "classification._range_baselines.by_range.0.15-0.60.agreement": 0.5,
+    "classification._range_baselines.by_range.0.40-1.00.cases": 6,
+    "classification._range_baselines.by_range.0.40-1.00.agreement": 0.3333333333333333,
+    "classification._range_baselines.by_range.0.45-1.00.cases": 40,
+    "classification._range_baselines.by_range.0.45-1.00.agreement": 0.4,
+    "classification._protocol.hybrid_scorer": 0,
+    "classification._protocol.clock_pinned": 1,
+    "lifecycle.checks": 16,
+    "lifecycle.passed": 16,
+    "lifecycle._protocol.hybrid_scorer": 0,
+    "lifecycle._protocol.clock_pinned": 1,
+    "importance_model.ensemble_macro_f1": 0.8911851990482047,
+    "importance_model.ensemble_accuracy": 0.8908730158730159,
+    "importance_model.ensemble_balanced_accuracy": 0.8713553603259485,
+    "importance_model.ensemble_sentence_ci95_low": 0.8091471048623347,
+    "importance_model.ensemble_sentence_ci95_high": 0.9490558154441475,
+    "importance_model.majority_macro_f1": 0.2528735632183908,
+    "importance_model.oracle_macro_f1": 0.9229949650329209,
+    "importance_model.test_rows": 1008,
+    "importance_model.test_sentences": 86
+  },
+  "manifest": {
+    "tag": "heuristic_control",
+    "created_at": "2026-10-16T04:16:14.009486+05:30",
+    "argv": [
+      "scripts/measure_all.py",
+      "--tag",
+      "heuristic_control",
+      "--scorer-steps-only",
+      "--scorer",
+      "heuristic"
+    ],
+    "git_head": "bad8836",
+    "dirty_tree": true,
+    "diff_sha256": "e0f928dcdc57a5ddb531132229ffe22c5ced3b818f09b9e25c0cf314625a4d55",
+    "dataset_sha256": "a93ca70ff6d40b458db4d82a04fc79b8c7f91dd599840f0e2f96482153d00f25",
+    "scorer": "heuristic",
+    "steps": [
+      {
+        "step": "retention",
+        "command": [
+          "-m",
+          "evaluation.retention"
+        ],
+        "exit_code": 0,
+        "seconds": 14.1
+      },
+      {
+        "step": "classification",
+        "command": [
+          "-m",
+          "evaluation.classification"
+        ],
+        "exit_code": 0,
+        "seconds": 0.1
+      },
+      {
+        "step": "lifecycle",
+        "command": [
+          "-m",
+          "evaluation.lifecycle"
+        ],
+        "exit_code": 0,
+        "seconds": 0.1
+      },
+      {
+        "step": "report",
+        "command": [
+          "-m",
+          "evaluation.report"
+        ],
+        "exit_code": 0,
+        "seconds": 0.0
+      }
+    ],
+    "reused": {}
+  }
+}

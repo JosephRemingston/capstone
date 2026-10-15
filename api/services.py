@@ -11,6 +11,7 @@ from typing import Any
 
 from main.application.core import MemoryCore
 from main.domain.models import MemoryInput, MemoryRecord
+from main.ensemble import build_scorer, local_embedder, selected_scorer
 from main.retrieval.rag import MemoryRAG
 from main.storage.cleanup import atomic_write, purge_indexes
 from main.storage.store import LocalMemoryStore
@@ -25,10 +26,16 @@ class MemoryService:
 
     @classmethod
     def create(cls, store: LocalMemoryStore, *, index_path: Path, ann_enabled: bool = False,
-               ann_exact_threshold: int = 5000, candidate_pool: int | None = None, model_threads: int | None = None):
+               ann_exact_threshold: int = 5000, candidate_pool: int | None = None, model_threads: int | None = None,
+               scorer: str = "hybrid"):
+        name = selected_scorer(scorer)
+        # Hybrid: one local-only encoder serves retrieval and scoring, so BGE loads once, honours COGNIMEM_MODEL_THREADS,
+        # and a missing cache fails here at start-up instead of downloading or failing as HTTP 422 on every ingest.
+        embedder = local_embedder(model_threads) if name == "hybrid" else None
         rag = MemoryRAG(store, index_path=index_path, ann_enabled=ann_enabled, ann_exact_threshold=ann_exact_threshold,
-                        candidate_pool=candidate_pool, model_threads=model_threads)
-        return cls(store=store, core=MemoryCore(), rag=rag)
+                        candidate_pool=candidate_pool, model_threads=model_threads, embedder=embedder)
+        importance = build_scorer(name, embedder=embedder) if name == "hybrid" else build_scorer(name)
+        return cls(store=store, core=MemoryCore(importance_scorer=importance), rag=rag)
 
     def ingest(self, *, user_id: str, payload: dict[str, Any]) -> MemoryRecord:
         metadata = dict(payload.get("metadata") or {})

@@ -16,7 +16,7 @@ class LocalMemoryStoreTests(unittest.TestCase):
     def test_save_list_get_and_search_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = LocalMemoryStore(Path(temp_dir) / "memories.jsonl")
-            core = MemoryCore()
+            core = MemoryCore.with_heuristic()
             preference = store.save(
                 core.process(
                     MemoryInput(
@@ -74,6 +74,8 @@ class CliTests(unittest.TestCase):
                     "s1",
                     "--interaction-score",
                     "0.5",
+                    "--scorer",
+                    "heuristic",
                 ]
             )
 

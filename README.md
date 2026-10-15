@@ -17,7 +17,7 @@ CogniMem separates those responsibilities. It decides what to retain, preserves 
 | Capability | Implementation |
 | --- | --- |
 | Intake | Sensitive-pattern redaction, optional statement splitting, six rule-based categories, feature extraction, claims, and typed relation metadata. |
-| Retention | Heuristic scorer by default; optional XGBoost and neural retention-proxy scorers; working, short-term, long-term, and archive tiers. |
+| Retention | Importance score = 25 % csv5k-trained ensemble (XGBoost + frozen-BGE deep head) + 75 % heuristic by default, heuristic alone as an opt-out; working, short-term, long-term, and archive tiers. |
 | Updates | Task completion/cancellation/rescheduling and recurrence; supported fact/preference conflict resolution; evidence-preserving consolidation and history. |
 | Storage | Local JSONL revision log with SQLite vector/graph indexes, cross-process locks, cleanup preview, guarded physical deletion, and compaction. |
 | Retrieval | Ranked keyword, semantic/vector, graph, recency, and hybrid search; rank fusion and local cross-encoder reranking. |
@@ -66,7 +66,7 @@ The three main flows are:
 
 `MemoryCore` receives `MemoryInput` with text, user/session IDs, a role, timestamp, and optional metadata. It redacts supported sensitive patterns before scoring or storage. It classifies each statement as `semantic` (durable fact), `episodic` (event), `procedural` (workflow), `preference`, `task`, or `temporary` (transient chat). Optional segmentation creates separate records for clearly independent clauses. It extracts numeric cues such as deadlines, preferences, recency, and category. Supported factual statements become claims; callers can also provide explicit typed entities and relations for graph indexing.
 
-The default `ImportanceScorer` combines deterministic features into a 0–1 score. `LifecycleManager` uses that score and category-specific rules to assign `working`, `short_term`, `long_term`, or `archive`. Temporary messages normally remain working memory, one-off tasks remain short-term even when important, and durable facts or preferences can become long-term. Working memory normally expires after one hour, short-term after fourteen days, and dated tasks after their deadline plus 24 hours. Long-term records can appear as archive views after inactivity. These are policy decisions, not human-labeled truths.
+The default importance score is 75 % the rule-based `ImportanceScorer`, which combines deterministic features into a 0–1 score, and 25 % a trained model's importance class ([details](#importance-scoring-default)). `LifecycleManager` uses that score and category-specific rules to assign `working`, `short_term`, `long_term`, or `archive`. Temporary messages normally remain working memory, one-off tasks remain short-term even when important, and durable facts or preferences can become long-term. Working memory normally expires after one hour, short-term after fourteen days, and dated tasks after their deadline plus 24 hours. Long-term records can appear as archive views after inactivity. These are policy decisions, not human-labeled truths.
 
 | Category | Typical input | Why it matters later |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ The default `ImportanceScorer` combines deterministic features into a 0–1 scor
 | Task | “Remind me to submit the report Friday.” | Action state, deadlines, recurrence. |
 | Temporary | “Thanks!” | Immediate context without durable retention. |
 
-The optional XGBoost and neural scorers estimate `P(long_term) + 0.5 × P(short_term)` from extracted conversational facts. They predict a **retention-policy proxy**, not human-rated importance, and never replace the heuristic automatically. The neural path freezes the local 384-dimensional BGE encoder, combines text embeddings with 13 numeric features in a two-branch head, and serves its trained head through ONNX.
+The trained part is the csv5k "Ensemble + thresholds": a fit-only XGBoost model on 525 text features blended with three seeds of a small head on the frozen 384-dimensional BGE encoder, then class weights pick low, mid or high importance. Its quarter share is a fixed choice, not a tuned one; the model learned from short synthetic sentences, which is a reason to keep it small. Small talk gets a quarter of its class value, as in the heuristic. It runs locally through XGBoost and ONNX Runtime.
 
 ### Layer 2: Manage change, tasks, and retention
 
@@ -115,7 +115,7 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m main --help
 ```
 
-Local embedding and reranker models download on first use into the ignored cache under `data/rag/models/`. Store and index files are local runtime data. Optional trained retention scorers need their artifacts present or locally trained; see [reproduction](#reproduce-the-experiments).
+Local embedding and reranker models download on first use into the ignored cache under `data/rag/models/`. Store and index files are local runtime data. The default importance scorer also needs the BGE encoder in that cache, and reads it only from there: run a semantic search once, or `.venv/bin/python -c "from main.retrieval.embeddings import FastEmbedder; FastEmbedder()"`, before the first `process`. Its model files ship in `artifacts/importance_ensemble/`; `COGNIMEM_SCORER=heuristic` runs without both.
 
 For a hosted answer, copy the example environment file and set your key locally. The extractive generator needs no key.
 
@@ -174,7 +174,7 @@ hits = MemoryRAG(store).search("How should you answer me?", user_id="user_001")
 print([(hit["memory_id"], hit["text"]) for hit in hits])
 ```
 
-For optional trained retention scoring, select `MemoryCore.with_ml()` (XGBoost) or `MemoryCore.with_neural()`, or pass `--scorer xgboost` / `--scorer neural` to `process`. These options change retention scoring, not the retrieval model.
+`process` uses the hybrid importance scorer by default; pass `--scorer heuristic` (or set `COGNIMEM_SCORER=heuristic`, or use `MemoryCore.with_heuristic()` in Python) for the rule-based score alone. The scorer changes retention scoring, not the retrieval model.
 
 An HTTP integration can call the running API instead. Signup returns a bearer token; use its `data.access_token` value in subsequent requests. The authenticated identity determines which memories the caller can access.
 
@@ -199,7 +199,7 @@ The `/docs` page documents the other endpoints. Token, store, and index files ar
 
 ## Evaluation and measured results
 
-**The tables below describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection, answer metrics concern the extractive answer, and retention metrics concern what the lifecycle keeps. Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`), except the three-dataset retention experiment, which has its own report in [`evaluation/reports/experiments/`](evaluation/reports/experiments/). The tags are `baseline` (12 Oct 2026, before the fixes), `e2r` (search fixes only), `final` (all fixes, shipped defaults) and `final_abstain` (`final` plus the opt-in abstention rule). The [evaluation guide](evaluation/README.md) describes the protocol.
+**The tables below describe different datasets and tasks. Do not compare their percentages as if they were one experiment.** Retrieval metrics concern evidence selection, answer metrics concern the extractive answer, and retention metrics concern what the lifecycle keeps. Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`), except the importance model's own test metrics, which come from its training report ([`retention_ensemble.json`](evaluation/reports/retention_ensemble.json)). The tags are `baseline` (12 Oct 2026, before the fixes), `e2r` (search fixes only), `final` (all fixes, heuristic scorer), `final_abstain` (`final` plus the opt-in abstention rule), and from 16 Oct `heuristic_control` and `hybrid` (the scorer-dependent measurements with the heuristic alone and with the new default). The [evaluation guide](evaluation/README.md) describes the protocol.
 
 ### Before and after
 
@@ -262,7 +262,7 @@ Each change was designed on dev data, then checked by an independent adversarial
 
 What did not improve: correction questions ("scratch that…") stay at 54.5% correct first, and latest-update questions moved 43.5% → 39.1% (one question). Abstention barely helps on real conversations. Latency rose: `COGNIMEM_CANDIDATE_POOL=50` keeps most of the LoCoMo gain at about half the reranker cost.
 
-### Current results (shipped defaults, snapshot `final`)
+### Current results (snapshot `final`; the importance scorer does not affect retrieval)
 
 #### Controlled benchmark, test split
 
@@ -289,229 +289,82 @@ The graph channel alone still finds almost no LoCoMo evidence (Recall@5 1.2%), b
 
 #### Retention and lifecycle
 
+With the hybrid default (snapshot `hybrid`; the [comparison with `final`](#effect-on-the-system-measured-16-oct-2026) is below):
+
 | Check | Result |
 | --- | --- |
 | LongMemEval oracle (457 examples): answer turns still retrievable when the question is asked | 90.6% (keep-everything: 100%) |
 | Mean share of a conversation still visible | 55.2% |
-| 60 classification cases (AI-authored): category / tier accuracy | 53.3% / 53.3% (macro F1 0.544) |
+| 60 classification cases (AI-authored): category / tier accuracy | 53.3% / 56.7% (macro F1 0.544) |
 | Lifecycle, task and supersession checks | 16/16 |
 
-### Optional retention models (unchanged)
+### Importance scoring (default)
 
-XGBoost, an original shallow neural head, and a deeper neural head were evaluated on the same **556-fact** published test split from [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc): 85 invalid, 92 short-term, and 379 long-term. The always-long-term baseline exposes class imbalance. Proxy MAE compares a constructed target (`invalid=0`, `short_term=0.5`, `long_term=1`), not human importance ratings.
+Since 16 Oct 2026 the importance score of every new memory is **25 % a trained model + 75 % the heuristic** ([`main/ensemble.py`](main/ensemble.py)). The model is the csv5k "Ensemble + thresholds". Every other XGBoost and neural retention model, with its training code, data and reports, was removed; the old models are backed up outside the repository, and the dated snapshots keep their numbers as history.
 
-| Test metric | Deeper neural | Original neural | XGBoost | Always long-term |
-| --- | ---: | ---: | ---: | ---: |
-| Accuracy | 78.06% | 78.06% | 69.24% | 68.17% |
-| Balanced accuracy | 67.78% | 65.86% | 65.60% | 33.33% |
-| Macro F1 | **0.6732** | 0.6504 | 0.6114 | 0.2702 |
-| Weighted F1 | 0.7768 | 0.7703 | 0.7071 | 0.5526 |
-| Constructed proxy MAE | 0.2160 | **0.1957** | 0.2768 | — |
-| Negative log-likelihood | 0.5547 | **0.5345** | — | — |
-| Expected calibration error, 10 bins | **0.0163** | 0.0428 | — | — |
-| Warm inference P50 | **4.17 ms** | 5.01 ms | — | — |
-| Warm inference P95 | **5.79 ms** | 6.74 ms | — | — |
+```
+model_score = class value: low 0.3102 · mid 0.5792 · high 0.8372    (× 0.25 for small talk, as the heuristic does)
+score       = round(0.25 × model_score + 0.75 × heuristic_score, 4)
+```
 
-Per-class F1 (invalid / short-term / long-term) is **0.4932 / 0.6570 / 0.8696** for the deeper head, **0.4286 / 0.6455 / 0.8773** for the original, and **0.4574 / 0.5837 / 0.7931** for XGBoost. Invalid-fact recall is **42.35%** for the deeper head, **31.76%** for the original, and **50.59%** for XGBoost; the deeper model does not win every safety-relevant measure. `—` means unrecorded. Neural latency includes local BGE encoding and ONNX inference after warm-up; XGBoost latency was not measured.
+Each class value is the mean csv5k importance of the fit and validation sentences in that class (3,992 rows; the test split is excluded). The lifecycle thresholds are unchanged: working below 0.25, long-term at 0.42 or more for durable categories, and cleanup keeps expired memories scoring 0.65 or more. The record's category still comes from the normal classifier. `COGNIMEM_SCORER=heuristic`, `process --scorer heuristic` or `MemoryCore.with_heuristic()` restores the heuristic alone. Every record stores which scorer ran, the model's class and probabilities, and both part-scores in `source_metadata["importance_model"]`.
 
-Class-level test metrics (support is the number of gold examples):
+#### The model
 
-| Model | Gold class | Support | Precision | Recall | F1 |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Deeper neural | Invalid | 85 | 0.5902 | 0.4235 | 0.4932 |
-| Deeper neural | Short-term | 92 | 0.5913 | 0.7391 | 0.6570 |
-| Deeper neural | Long-term | 379 | 0.8684 | 0.8707 | 0.8696 |
-| Original neural | Invalid | 85 | 0.6585 | 0.3176 | 0.4286 |
-| Original neural | Short-term | 92 | 0.5547 | 0.7717 | 0.6455 |
-| Original neural | Long-term | 379 | 0.8682 | 0.8865 | 0.8773 |
-| XGBoost | Invalid | 85 | 0.4175 | 0.5059 | 0.4574 |
-| XGBoost | Short-term | 92 | 0.4823 | 0.7391 | 0.5837 |
-| XGBoost | Long-term | 379 | 0.8782 | 0.7230 | 0.7931 |
-| Always long-term | Invalid | 85 | 0 | 0 | 0 |
-| Always long-term | Short-term | 92 | 0 | 0 | 0 |
-| Always long-term | Long-term | 379 | 0.6817 | 1.0000 | 0.8107 |
-
-Confusion matrices below have gold classes as rows and predicted classes as columns:
-
-| Model | Gold class | Predicted invalid | Predicted short-term | Predicted long-term |
-| --- | --- | ---: | ---: | ---: |
-| Deeper neural | Invalid | 36 | 18 | 31 |
-| Deeper neural | Short-term | 5 | 68 | 19 |
-| Deeper neural | Long-term | 20 | 29 | 330 |
-| Original neural | Invalid | 27 | 26 | 32 |
-| Original neural | Short-term | 2 | 71 | 19 |
-| Original neural | Long-term | 12 | 31 | 336 |
-| XGBoost | Invalid | 43 | 17 | 25 |
-| XGBoost | Short-term | 11 | 68 | 13 |
-| XGBoost | Long-term | 49 | 56 | 274 |
-| Always long-term | Invalid | 0 | 0 | 85 |
-| Always long-term | Short-term | 0 | 0 | 92 |
-| Always long-term | Long-term | 0 | 0 | 379 |
-
-The deeper head's mean validation macro F1 over three seeds was **0.7194**, versus **0.7134** for the original; its selected seed reached **0.7291**. The dataset has one annotator, consists of extracted facts, and is not conversation-disjoint. The published test split had already been inspected during XGBoost development. These comparisons are exploratory and do not justify changing the default heuristic or lifecycle thresholds. Detailed class precision/recall, confusion matrices, calibration, and training methods are in the [XGBoost](evaluation/reports/conversational_retention.md), [original neural](evaluation/reports/neural_retention_shallow.md), [deeper neural](evaluation/reports/neural_retention.md), and [depth comparison](evaluation/reports/neural_depth_validation.json) reports.
-
-Model selection used a stratified training/validation split rather than choosing on the test set. XGBoost's four validation trials had macro F1 **0.5934, 0.6022, 0.6002, and 0.6211**; the last configuration (max depth 5, min child weight 8, 396 trees on refit) was selected. The original neural head's three best-checkpoint validation macro F1 values were **0.7175, 0.7057, and 0.7169** for seeds 42–44; the deeper head's were **0.7208, 0.7083, and 0.7291**. The selected original checkpoint used seed 42, epoch 4; the deeper checkpoint used seed 44, epoch 8. Temperature calibration reduced validation negative log-likelihood from **0.5644 to 0.5332** for the original (temperature 1.3946) and from **0.7913 to 0.5385** for the deeper head (temperature 2.4057).
-
-### Retention models on three datasets (experiment, not shipped)
-
-On 16 Oct 2026 the XGBoost model and both neural heads were retrained on three datasets, each trained and tested on its own. Three possible improvements were tested alongside them: averaging the neural heads over seeds, an XGBoost + neural ensemble, and per-class decision thresholds. This is a separate experiment. Nothing in `main/`, the shipped models under `artifacts/importance*` or the reports above changed, and the heuristic remains the default. Every number below comes from [`evaluation/reports/experiments/retention_datasets.md`](evaluation/reports/experiments/retention_datasets.md), which also lists validation scores, every seed and every XGBoost trial. The code is in [`training/experiments/`](training/experiments/), and [Reproduce the experiments](#reproduce-the-experiments) has the command.
-
-#### Datasets
-
-- **MSC**: [Personal Facts (MSC)](https://huggingface.co/datasets/adugeen/personal-facts-msc), with the same pinned files and split as the shipped models above. Each extracted fact is labelled invalid, short-term or long-term by the dataset's single annotator.
-- **csv5k**: `cognimem_memory_importance_5000.csv`, 5,000 AI-generated memory sentences, each with a synthetic importance score from 0.20 to 1.00 (mean 0.708). Removing the " (example N)" suffix leaves 443 distinct sentences.
-- **csv10k**: `cognimem_10000_memory_importance.csv`, 10,000 AI-generated sentences with scores from 0.30 to 0.99 (mean 0.644) and 2,410 distinct sentences. One sentence appears 500 times, with scores from 0.30 to 0.78.
-
-The CSV scores are cut into three classes: low (below 0.4), mid (0.4 to below 0.7) and high (0.7 and above). Most CSV sentences appear many times, so every copy of a sentence goes into the same split (a 5-fold split grouped by sentence, seed 42); otherwise the test set would repeat training sentences. A sentence holding at least 5% of the rows stays in training, which affects only csv10k's 500-copy sentence. The CSVs are copied to the git-ignored `data/experiments/`.
-
-| | MSC | csv5k | csv10k |
-| --- | --- | --- | --- |
-| Rows / unique texts | 2,778 / 2,778 | 5,000 / 443 | 10,000 / 2,410 |
-| Labels | invalid / short-term / long-term | low / mid / high | low / mid / high |
-| Train / validation / test rows | 1,777 / 445 / 556 | 3,200 / 792 / 1,008 | 6,578 / 1,521 / 1,901 |
-| Test sentences | 556 | 86 | 476 |
-| Test class counts | 85 / 92 / 379 | 120 / 272 / 616 | 86 / 1,017 / 798 |
-| Repeated texts whose labels disagree | — | 86 of 410 (21%) | 603 of 1,017 (59%) |
-| Best possible macro F1 (oracle) | — (every text unique) | 0.9230 | 0.5264 |
-
-The oracle predicts each test sentence's most common test label. It reads the test labels, so it is a ceiling, not a model. csv10k's ceiling is low because 59% of its repeated sentences carry conflicting labels. The oracle maximises accuracy rather than macro F1, so a model can score slightly above it on macro F1.
-
-#### Architectures
-
-| Name in the tables | What it is |
+| Part | Detail |
 | --- | --- |
-| XGBoost, shipped recipe | Gradient-boosted trees on 525 features (13 text features and 512 hashed word features). A grid over max depth {3, 5} × min child weight {3, 8} is searched on validation, then the winner is refit on train + validation. This is the shipped procedure. |
-| XGBoost, no refit | The grid winner trained on the train split only. The ensemble uses it, because the refit model has no unseen validation data left to tune on. |
-| Deep neural head | Frozen BAAI/bge-small-en-v1.5 sentence embedding (384 values) plus the 13 text features. Text branch 384→192→128, feature branch 13→64→32, joint head 160→128→64→3, with LayerNorm, GELU and dropout 0.2. The best of seeds 42, 43 and 44 on validation is kept, then temperature-calibrated. Same design as the shipped deeper head. |
-| Shallow neural head | Same inputs. Text branch 384→128, feature branch 13→32, joint head 160→64→3. Same design as the original shipped head. |
-| 3-seed average | Averages the calibrated probabilities of all three seeds instead of keeping the best one. |
-| Ensemble | w × XGBoost (no refit, calibrated) + (1 − w) × the averaged deep head, with w ∈ {0.25, 0.5, 0.75} chosen on validation. |
-| + per-class thresholds | Multiplies each class probability by a weight (81 combinations) chosen on validation before taking the top class. |
+| Training data | `cognimem_memory_importance_5000.csv` ("csv5k"): 5,000 AI-generated memory sentences (443 distinct after removing an " (example N)" suffix) with synthetic importance scores 0.20–1.00. Classes: low < 0.4 ≤ mid < 0.7 ≤ high. Every copy of a sentence stays in one split: 3,200 / 792 / 1,008 rows (286 / 71 / 86 sentences). |
+| XGBoost member | 525 features (13 text features + 512 hashed word counts); max depth 3, min child weight 3, 304 rounds, trained on the training split only; temperature-calibrated. |
+| Deep-head member | Frozen `BAAI/bge-small-en-v1.5` embedding (384 values) + the 13 text features: text branch 384→192→128, feature branch 13→64→32, joint head 160→128→64→3. Seeds 42, 43, 44, each calibrated, averaged and calibrated again. |
+| Blend and thresholds | 0.5 × XGBoost + 0.5 × deep head, then class weights 1 / 0.7 / 1 pick low / mid / high. Temperatures, blend and class weights were chosen on validation only. |
+| Files | [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) (2.5 MB, checksummed, tracked in Git). `python -m training.ensemble.run --csv /path/to/cognimem_memory_importance_5000.csv` rebuilds the model files bit for bit (the CSV is copied to `data/experiments/`, so later runs need no flag; `metadata.json` carries a timestamp); the scorer reads the BGE encoder only from the local cache and never downloads it. |
 
-Every choice is made on the validation split, and each model is scored on the test split once.
+Test split of csv5k (1,008 rows from 86 sentences; intervals are 95% bootstrap intervals over whole sentences; [full report](evaluation/reports/retention_ensemble.md)):
 
-#### Macro F1 at a glance
+| Model | Accuracy | Balanced accuracy | Macro F1 [95% CI] | F1 low / mid / high |
+| --- | ---: | ---: | --- | --- |
+| Always the most common class | 61.11% | 33.33% | 0.2529 [0.220, 0.283] | 0.00 / 0.00 / 0.76 |
+| Best possible (oracle) | 91.17% | 92.86% | 0.9230 [0.885, 0.957] | 1.00 / 0.84 / 0.93 |
+| **Ensemble + thresholds** | 89.09% | 87.14% | 0.8912 [0.809, 0.949] | 1.00 / 0.76 / 0.92 |
 
-| Model | MSC | csv5k | csv10k |
+The oracle predicts each test sentence's most common test label; it reads the test labels, so it is a ceiling, not a model.
+
+#### Effect on the system (measured 16 Oct 2026)
+
+Only three measurements use the importance scorer: LongMemEval retention, the 60 classification cases and the 16 lifecycle checks. The benchmark and LoCoMo runners never call it, so their numbers above are unchanged. The same-day heuristic run uses the same code and clock as the hybrid run and reproduces `final` on all 457 LongMemEval examples, so the last two columns isolate the scorer.
+
+| Metric | `final` (heuristic, 12 Oct) | Heuristic, same day | **Hybrid (default)** |
 | --- | ---: | ---: | ---: |
-| Always the most common class | 0.2702 | 0.2529 | 0.2324 |
-| Best possible (oracle) | — | 0.9230 | 0.5264 |
-| XGBoost, shipped recipe | 0.6114 | 0.8846 | 0.5322 |
-| XGBoost, no refit | 0.6012 | 0.8654 | 0.5309 |
-| Deep neural head | 0.6732 | 0.8850 | 0.4999 |
-| Shallow neural head | 0.6504 | 0.8538 | 0.5317 |
-| Deep head, 3-seed average | 0.6992 | 0.8699 | 0.5333 |
-| Shallow head, 3-seed average | 0.6631 | 0.8678 | **0.5441** |
-| Ensemble (XGBoost + averaged deep head) | **0.7132** | 0.8882 | 0.5342 |
-| Ensemble + per-class thresholds | **0.7132** | **0.8912** | 0.5342 |
+| LongMemEval user-fact retention | 90.6% | 90.6% | **90.6%** |
+| Mean share of a conversation still visible | 55.2% | 55.2% | **55.2%** |
+| Cleanup: expired memories deleted / kept as archive | 1,740 / — | 1,740 / 33 | **1,738 / 38** |
+| Classification cases: category / tier accuracy | 53.3% / 53.3% | 53.3% / 56.7% | **53.3% / 56.7%** |
+| Classification cases: score inside the labelled range | 50.0% | 50.0% | **58.3%** |
+| Lifecycle, task and supersession checks | 16/16 | 16/16 | **16/16** |
+| LongMemEval replay time | 13 s | 14 s | **581 s** |
 
-**Bold** marks the best model on each dataset; the oracle is a ceiling, not a model. Thresholds left the MSC ensemble unchanged, so the two ensemble rows tie there.
+- **Retention did not change.** All 457 of 457 examples keep the same answer turns and the same visible share. Tiers come mostly from the category rules; at 25 % weight the model did not change the visibility of a single answer turn. Cleanup kept 5 more expired memories as archive and deleted 2 fewer.
+- **The tier-accuracy rise is the clock, not the model.** The classification runner now pins its clock to the cases' timestamp; with the heuristic alone that gives 56.7%, the same as the hybrid.
+- **The range-agreement rise is not better judgement.** A constant score of 0.5 lands inside 83.3% of the hand-labelled ranges, because 40 of the 60 ranges are [0.45, 1].
+- **The model does not recognise answer-bearing turns.** As a ranking of answer-bearing against other turns its score has an AUC of 0.482 on user turns (heuristic 0.582) and 0.697 on assistant turns; the blended score's overall AUC is 0.654 against 0.678 for the heuristic. It labels 81.2% of turns "high", and 98.9% of turns have numeric inputs more than 5 standard deviations from the training data: conversation turns are far longer than the at most 13-word training sentences.
+- **It costs time.** Each memory is embedded with BGE, about 59 ms per memory on average over the 9,831 replayed turns (long assistant turns cost most), so the LongMemEval replay took 41× longer.
 
-#### Full test metrics
-
-Macro F1 weights the three classes equally, so the rare classes count as much as the common one. The 95% intervals come from 1,000 bootstrap resamples. MSC resamples test rows; the CSVs resample whole test sentences, because copies of a sentence are not independent. NLL (negative log-likelihood) and ECE (expected calibration error, 10 bins) measure the probabilities, and lower is better for both. XGBoost's MSC NLL and ECE were not recorded in the shipped report; they were computed here.
-
-**MSC**, 556 test facts:
-
-| Model | Accuracy | Balanced accuracy | Macro F1 [95% row CI] | Weighted F1 | F1 invalid / short-term / long-term | NLL | ECE |
-| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
-| Always the most common class (long-term) | 68.17% | 33.33% | 0.2702 [0.261, 0.279] | 0.5526 | 0.00 / 0.00 / 0.81 | — | — |
-| XGBoost, shipped recipe | 69.24% | 65.60% | 0.6114 [0.562, 0.656] | 0.7071 | 0.46 / 0.58 / 0.79 | 0.7255 | 0.0246 |
-| XGBoost, no refit | 68.71% | 64.18% | 0.6012 [0.553, 0.647] | 0.7013 | 0.45 / 0.56 / 0.79 | 0.7313 | 0.0247 |
-| Deep neural head | 78.06% | 67.78% | 0.6732 [0.621, 0.720] | 0.7768 | 0.49 / 0.66 / 0.87 | 0.5547 | 0.0163 |
-| Shallow neural head | 78.06% | 65.86% | 0.6504 [0.600, 0.700] | 0.7703 | 0.43 / 0.65 / 0.88 | 0.5345 | 0.0428 |
-| Deep head, 3-seed average | 80.76% | 68.33% | 0.6992 [0.648, 0.745] | 0.7993 | 0.53 / 0.68 / 0.89 | 0.4979 | 0.0317 |
-| Shallow head, 3-seed average | 78.78% | 67.10% | 0.6631 [0.611, 0.712] | 0.7789 | 0.45 / 0.66 / 0.88 | 0.5152 | 0.0538 |
-| Ensemble (XGBoost + averaged deep head), w = 0.5 | 80.40% | 71.39% | 0.7132 [0.662, 0.758] | 0.8025 | 0.57 / 0.68 / 0.88 | 0.5399 | 0.1171 |
-
-**csv5k**, 1,008 test rows from 86 sentences:
-
-| Model | Accuracy | Balanced accuracy | Macro F1 [95% sentence CI] | Weighted F1 | F1 low / mid / high | NLL | ECE |
-| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
-| Always the most common class (high) | 61.11% | 33.33% | 0.2529 [0.220, 0.283] | 0.4636 | 0.00 / 0.00 / 0.76 | — | — |
-| Best possible (oracle) | 91.17% | 92.86% | 0.9230 [0.885, 0.957] | 0.9126 | 1.00 / 0.84 / 0.93 | — | — |
-| XGBoost, shipped recipe | 86.71% | 89.05% | 0.8846 [0.824, 0.930] | 0.8687 | 1.00 / 0.76 / 0.89 | 0.2239 | 0.0238 |
-| XGBoost, no refit | 85.22% | 86.12% | 0.8654 [0.792, 0.917] | 0.8505 | 1.00 / 0.72 / 0.88 | 0.2358 | 0.0491 |
-| Deep neural head | 88.00% | 87.16% | 0.8850 [0.810, 0.941] | 0.8750 | 1.00 / 0.75 / 0.91 | 0.2608 | 0.0421 |
-| Shallow neural head | 84.82% | 84.19% | 0.8538 [0.770, 0.926] | 0.8415 | 1.00 / 0.68 / 0.88 | 0.2700 | 0.0584 |
-| Deep head, 3-seed average | 87.60% | 84.68% | 0.8699 [0.778, 0.944] | 0.8632 | 1.00 / 0.70 / 0.91 | 0.2131 | 0.0240 |
-| Shallow head, 3-seed average | 87.20% | 84.67% | 0.8678 [0.778, 0.941] | 0.8603 | 1.00 / 0.70 / 0.90 | 0.2682 | 0.0431 |
-| Ensemble (XGBoost + averaged deep head), w = 0.5 | 88.39% | 87.37% | 0.8882 [0.811, 0.945] | 0.8788 | 1.00 / 0.75 / 0.91 | 0.2193 | 0.0346 |
-| XGBoost on equal-thirds labels¹ | 81.55% | 81.58% | 0.8156 [0.747, 0.867] | 0.8140 | 0.83 / 0.74 / 0.88 | 0.3889 | 0.0435 |
-
-**csv10k**, 1,901 test rows from 476 sentences:
-
-| Model | Accuracy | Balanced accuracy | Macro F1 [95% sentence CI] | Weighted F1 | F1 low / mid / high | NLL | ECE |
-| --- | ---: | ---: | --- | ---: | --- | ---: | ---: |
-| Always the most common class (mid) | 53.50% | 33.33% | 0.2324 [0.217, 0.243] | 0.3729 | 0.00 / 0.70 / 0.00 | — | — |
-| Best possible (oracle) | 74.91% | 51.99% | 0.5264 [0.480, 0.609] | 0.7239 | 0.09 / 0.81 / 0.69 | — | — |
-| XGBoost, shipped recipe | 59.76% | 69.89% | 0.5322 [0.482, 0.577] | 0.6212 | 0.33 / 0.66 / 0.61 | 0.7850 | 0.1478 |
-| XGBoost, no refit | 59.60% | 69.78% | 0.5309 [0.480, 0.575] | 0.6198 | 0.33 / 0.65 / 0.61 | 0.7693 | 0.0979 |
-| Deep neural head | 62.39% | 53.59% | 0.4999 [0.453, 0.539] | 0.6320 | 0.21 / 0.70 / 0.59 | 0.7047 | 0.0483 |
-| Shallow neural head | 64.12% | 57.11% | 0.5317 [0.456, 0.581] | 0.6458 | 0.28 / 0.71 / 0.61 | 0.7186 | 0.0360 |
-| Deep head, 3-seed average | 60.28% | 69.94% | 0.5333 [0.483, 0.580] | 0.6231 | 0.34 / 0.67 / 0.59 | 0.7009 | 0.0852 |
-| Shallow head, 3-seed average | 62.02% | 68.89% | 0.5441 [0.492, 0.587] | 0.6346 | 0.35 / 0.69 / 0.59 | 0.6963 | 0.0488 |
-| Ensemble (XGBoost + averaged deep head), w = 0.25 | 60.39% | 70.02% | 0.5342 [0.484, 0.581] | 0.6244 | 0.34 / 0.67 / 0.59 | 0.7124 | 0.0677 |
-| XGBoost on equal-thirds labels¹ | 49.40% | 49.67% | 0.4984 [0.461, 0.527] | 0.4992 | 0.50 / 0.39 / 0.61 | 0.9497 | 0.0335 |
-
-¹ Uses different labels: the scores are cut into equal thirds (at 0.67 and 0.83 for csv5k, 0.56 and 0.73 for csv10k) instead of at 0.4 and 0.7, on the same split. It shows how much the cut-offs matter and is not directly comparable with the other rows.
-
-Per-class thresholds chosen on validation. The weights follow the class order of each dataset, and 1/1/1 means unchanged:
-
-| Dataset | Model | Chosen class weights | Macro F1 before → after | Accuracy before → after |
-| --- | --- | --- | --- | --- |
-| MSC | XGBoost, no refit | 0.5/0.5/1 | 0.6012 → 0.6155 | 68.71% → 73.38% |
-| MSC | Deep neural head | 1/1/1 | 0.6732 → 0.6732 | 78.06% → 78.06% |
-| MSC | Shallow neural head | 1/1/1 | 0.6504 → 0.6504 | 78.06% → 78.06% |
-| MSC | Ensemble (XGBoost + averaged deep head) | 1/1/1 | 0.7132 → 0.7132 | 80.40% → 80.40% |
-| csv5k | XGBoost, no refit | 1/0.5/1 | 0.8654 → 0.8687 | 85.22% → 87.20% |
-| csv5k | Deep neural head | 1/1/1 | 0.8850 → 0.8850 | 88.00% → 88.00% |
-| csv5k | Shallow neural head | 1/1/1 | 0.8538 → 0.8538 | 84.82% → 84.82% |
-| csv5k | Ensemble (XGBoost + averaged deep head) | 1/0.7/1 | 0.8882 → 0.8912 | 88.39% → 89.09% |
-| csv10k | XGBoost, no refit | 0.7/1.4/1 | 0.5309 → 0.5299 | 59.60% → 62.39% |
-| csv10k | Deep neural head | 1.4/1.4/1 | 0.4999 → 0.4986 | 62.39% → 62.49% |
-| csv10k | Shallow neural head | 2/2/1 | 0.5317 → 0.5334 | 64.12% → 65.18% |
-| csv10k | Ensemble (XGBoost + averaged deep head) | 1/1/1 | 0.5342 → 0.5342 | 60.39% → 60.39% |
-
-#### Did the improvements help?
-
-Four comparisons per dataset were fixed before the test run. Each cell gives the change in test macro F1 and the one-sided paired-bootstrap p-value. A change counts as significant when p is below 0.0125 (0.05 split across the four comparisons); for the CSVs it must also hold when whole sentences are resampled.
-
-| Comparison | MSC | csv5k | csv10k |
-| --- | --- | --- | --- |
-| Seed averaging vs single best seed (deep head) | +0.0260 (p 0.070; not significant) | −0.0151 (p 0.983 rows / 0.637 sentences; not significant) | +0.0333 (p 0.001 rows / 0.011 sentences; **significant**) |
-| Ensemble vs averaged deep head | +0.0140 (p 0.241; not significant) | +0.0184 (p 0.008 rows / 0.320 sentences; significant on rows only) | +0.0010 (p 0.145 rows / 0.365 sentences; not significant) |
-| Ensemble vs XGBoost (no refit) | +0.1120 (p 0.001; **significant**) | +0.0228 (p 0.007 rows / 0.199 sentences; significant on rows only) | +0.0034 (p 0.231 rows / 0.296 sentences; not significant) |
-| Per-class thresholds vs ensemble | 0 (no change) | +0.0030 (p 0.293 rows / 0.185 sentences; not significant) | 0 (no change) |
-
-What this shows:
-- **MSC (real data):** the ensemble scores highest, 0.7132 against 0.6732 for the shipped deep head and 0.6114 for shipped XGBoost, and has the best invalid-fact F1 (0.57). Only its gain over XGBoost is significant; its gain over the averaged deep head (+0.0140) is not. Its probabilities are also the least calibrated (ECE 0.1171 against 0.0163 for the deep head). Seed averaging alone reaches 0.6992, with the best accuracy (80.76%) and the lowest NLL (0.4979).
-- **csv5k:** every model scores between 0.8538 and 0.8912, close to the 0.9230 ceiling. Every model classifies the low class perfectly, so all errors are mid versus high. With 86 test sentences, the differences between models are within noise.
-- **csv10k:** the models score between 0.4999 and 0.5441 against a ceiling of 0.5264, so this dataset cannot tell them apart. Seed averaging raised the deep head's macro F1 by 0.0333 (significant) but lowered accuracy by 2.10 points: it finds 95% of the low-score rows instead of 37%, at the cost of calling more mid and high rows low.
-- **Thresholds** stayed at 1/1/1 in half of the cases and never moved macro F1 by more than 0.0143.
-
-#### Checks and caveats
-
-- The experiment code reproduces the shipped MSC models exactly. Scoring the shipped model files through it gives the shipped confusion matrices (macro F1 0.6114, 0.6732 and 0.6504), and retraining from scratch gives the same scores again.
-- The CSV texts and scores are AI-generated, so only the MSC results reflect real data. The MSC results repeat the shipped evaluation rather than adding new evidence.
-- The 0.4 / 0.7 cut-offs are a modelling choice. Equal thirds lower XGBoost to 0.8156 on csv5k and 0.4984 on csv10k.
-- The effective test sets are small (86 sentences for csv5k), and validation was reused for several choices, so validation scores are optimistic. Only the test scores count.
-- These results have not had the independent adversarial review that the shipped changes had.
+Caveats: csv5k is synthetic (AI-written sentences and scores, not human ratings), and its test split has only 86 distinct sentences. The model predicts low / mid / high importance, a different target from the removed models' invalid / short-term / long-term. Two lifecycle-check texts ("I live in Chennai.", "I live in Bengaluru.") appear verbatim in csv5k, and ten "My name is …" variants do too. Records stored before the switch keep their heuristic score, so an existing store mixes the two scales.
 
 ## Reproduce the experiments
 
 After installation, run from the repository root:
 
 ```bash
-.venv/bin/python -m training.train_conversational_retention          # retention models (separate processes)
-.venv/bin/python -m training.train_neural_retention
-.venv/bin/python -m training.compare_neural_depth
+.venv/bin/python -m training.ensemble.run --csv ~/Downloads/cognimem_memory_importance_5000.csv   # importance model (about 30 s)
 .venv/bin/python scripts/measure_all.py --tag final --candidate-limit default --ann-arms   # every measurement
-.venv/bin/python -m training.experiments.run_all   # optional: retention models on three datasets (not used by the system)
+.venv/bin/python scripts/measure_all.py --tag hybrid --scorer-steps-only                  # only what the importance scorer affects
+.venv/bin/python scripts/measure_all.py --tag heuristic_control --scorer-steps-only --scorer heuristic
 .venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch
+.venv/bin/python scripts/report_delta.py heuristic_control hybrid
 ```
 
-`measure_all.py` runs the benchmark ablation (test and dev), LoCoMo, LongMemEval retention, classification and lifecycle checks, and snapshots the reports under the tag. The first run downloads the models and datasets, and a full run takes about an hour on a laptop. `--abstain-threshold 0.0` measures the opt-in abstention rule, and `--structure none` disables the time- and link-aware reordering. The [evaluation guide](evaluation/README.md) lists every flag and module.
+`measure_all.py` runs the benchmark ablation (test and dev), LoCoMo, LongMemEval retention, classification and lifecycle checks, and snapshots the reports under the tag; `--scorer-steps-only` runs just the last three, and `--scorer` picks the importance scorer. The first run downloads the models and datasets, and a full run takes about an hour on a laptop. `--abstain-threshold 0.0` measures the opt-in abstention rule, and `--structure none` disables the time- and link-aware reordering. The [evaluation guide](evaluation/README.md) lists every flag and module.
 
 To run the automated tests, install the test runner (`uv pip install --python .venv/bin/python -r requirements-dev.txt`), then run `.venv/bin/python -m pytest -q`.
 
@@ -524,7 +377,7 @@ To run the automated tests, install the test runner (`uv pip install --python .v
 | [`main/storage/`](main/storage/) | JSONL revisions, locks, SQLite index structures, cleanup. |
 | [`main/graph/`](main/graph/) | Temporal entities/relations, provenance, historical and multi-hop queries. |
 | [`main/retrieval/`](main/retrieval/) | Keyword ranking, BGE embeddings, hybrid search, reranking, context, answers. |
-| [`main/ml.py`](main/ml.py), [`main/neural.py`](main/neural.py), [`training/`](training/) | Optional retention scorers and training. [`training/experiments/`](training/experiments/) holds the three-dataset experiment, which the system does not use. |
+| [`main/ensemble.py`](main/ensemble.py), [`main/ml.py`](main/ml.py), [`training/ensemble/`](training/ensemble/), [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) | Default hybrid importance scorer, its feature schema, its training, and the trained model. |
 | [`api/`](api/), [`static/`](static/) | Authenticated HTTP API, monitoring, privacy operations, demo. |
 | [`evaluation/`](evaluation/), [`docs/reports/`](docs/reports/) | Datasets, runners, saved metrics, failure cases, review forms. |
 | [`tests/`](tests/) | Automated behavior and integration tests. |
@@ -534,7 +387,7 @@ To run the automated tests, install the test runner (`uv pip install --python .v
 - **Generalization:** the controlled benchmark and classification cases were authored by an AI and are not human-validated, and its dev and test personas share templates. LoCoMo is generated dialogue, and its first three conversations were used to choose the reranker pool. Fresh conversation-disjoint data and independent human ratings are needed for a broader claim.
 - **Known gaps:** correction and latest-update questions are still often answered with an older statement; abstention is opt-in and catches only "attribute never stated" questions; category classification is 53% on the 60 cases; the larger reranker pool costs about 3–4× search latency; approximate search remains experimental. One lifecycle check and one task test fail rarely because of a wall-clock race in task updates.
 - **Answer quality:** saved RAG scores use extractive answers. Live Gemini correctness, personalization, citation usefulness, and conflict decisions still need independent review. Exact-quote citation validation alone cannot prove semantic truth.
-- **Extraction and retention:** graph extraction and indirect contradiction handling cover supported language patterns. Optional retention models learn fact validity/duration rather than human importance; the heuristic remains the default.
+- **Extraction and retention:** graph extraction and indirect contradiction handling cover supported language patterns. The trained quarter of the importance score learned from synthetic sentences, does not recognise answer-bearing conversation turns, and changed no measured retention outcome; human-rated, in-domain importance labels are needed before giving it more weight.
 - **Operations:** local JSONL and SQLite are not a production database architecture. Deployment needs backups, retention-policy review, stronger authorization/abuse controls, and workload-specific scale and latency measurements.
 
 For more implementation detail and day-to-day workflows, see [DOCUMENTATION.md](DOCUMENTATION.md). For evaluation protocols, see [evaluation/README.md](evaluation/README.md) and the saved reports linked above.

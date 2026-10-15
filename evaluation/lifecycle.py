@@ -12,6 +12,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from main import LifecycleManager, LocalMemoryStore, MemoryCore, MemoryInput, MemoryTier
+from main.ensemble import describe_scorer
+
+from .clock import pinned_clock
 
 NOW = datetime(2026, 10, 12, 10, tzinfo=timezone.utc)
 USER = 'lifecycle-user'
@@ -22,6 +25,11 @@ def process(text: str, *, at: datetime = NOW, **metadata):
 
 
 def evaluate() -> dict:
+    with pinned_clock(NOW):   # tiers, archiving and visibility read the clock; the checks are written for NOW
+        return _evaluate()
+
+
+def _evaluate() -> dict:
     checks = []
 
     def check(name, expected, actual):
@@ -73,7 +81,7 @@ def evaluate() -> dict:
         check('superseded_fact_kept_in_history', 'superseded',
               store.get(old.id).memory_status if store.get(old.id) else None)
 
-    return {'importance_model': 'disabled (heuristic scorer)', 'clock': NOW.isoformat(), 'checks': len(checks),
+    return {'importance_model': describe_scorer(MemoryCore().importance_scorer), 'clock': NOW.isoformat(), 'checks': len(checks),
             'passed': sum(c['passed'] for c in checks), 'results': checks}
 
 

@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Joseph Remingston L
 
-Last updated: September 27, 2026
+Last updated: October 16, 2026
 
 Related docs:
 
@@ -19,7 +19,7 @@ Scope: This document describes the current implemented Memory Core, CLI, local J
 
 CogniMem is a Cognitive Hybrid Memory Architecture for long-term personalized LLM agents. The project is based on the observation that standard vector-only RAG memory systems struggle with long-term personalization, temporal reasoning, contradictory information, lifecycle management, and structured memory types.
 
-The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates a heuristic importance score, assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
+The repository currently implements the first foundation layer: a Memory Core with local CLI access and JSONL persistence. This layer accepts raw interaction content, classifies the content into a memory category, extracts scoring features, calculates an importance score (by default a hybrid of a trained model and the rule-based heuristic), assigns a lifecycle tier, and returns a serializable memory record that can be saved locally.
 
 The core now includes local semantic/hybrid retrieval, cited Gemini RAG, SQLite temporal graph indexes, external evaluation, an authenticated FastAPI/demo surface, privacy endpoints, operational probes/metrics, and deterministic LSH ANN retrieval (opt-in, experimental; exact search is the default). Production database migration and deployment remain separate planned work. ML research remains separate. See [the retrieval and graph sections of DOCUMENTATION.md](DOCUMENTATION.md).
 
@@ -38,7 +38,7 @@ The current repository contains:
 | Production database layer | Not implemented | SQLite indexes exist; authoritative concurrent server storage is still planned. |
 | RAG/vector layer | Implemented locally | BGE embeddings, SQLite vectors, hybrid retrieval, bounded context, and LangChain Gemini with checked citations. |
 | Graph layer | Implemented locally | Typed SQLite graph with provenance, valid/recorded time, aliases, task edges, and traversal. |
-| ML training | Experimental implementation | XGBoost and frozen-encoder neural scorers trained on human-labeled conversational fact validity/duration; held-out metrics in `evaluation/reports/`. |
+| ML training | Implemented (default scorer) | csv5k importance ensemble (XGBoost plus a deep head on frozen BGE embeddings) whose model files are rebuilt bit for bit by `training/ensemble/`, served from `artifacts/importance_ensemble/` by `main/ensemble.py`; trained on synthetic data, test metrics in `evaluation/reports/retention_ensemble.md`. |
 | REST API | Implemented | FastAPI authentication, memory, search, health, metrics, and privacy endpoints. |
 
 ## 3. Implemented, Partial, Planned, and Out of Scope
@@ -51,7 +51,7 @@ Implemented:
 - `MemoryTier` values: `working`, `short_term`, `long_term`, and `archive`.
 - Rule-based memory classification.
 - Feature extraction for scoring.
-- Heuristic importance scoring.
+- Hybrid importance scoring (default): `0.25 × model_score + 0.75 × heuristic_score` from the trained csv5k ensemble and the rule-based heuristic; heuristic-only scoring as an opt-out.
 - Lifecycle tier assignment.
 - Serialization and deserialization.
 - Local JSONL memory persistence through `LocalMemoryStore`.
@@ -65,12 +65,12 @@ Partially implemented:
 
 - Graph language coverage: temporal storage/traversal work; automatic extraction covers only supported complete assertions. Structured relationships support richer caller-provided data.
 - Memory lifecycle: task deadline parsing, expiry filtering, resolved-task visibility, and inactivity archive views exist. Scheduled physical expiry cleanup and lossless compaction are implemented; archive migration remains planned.
-- Importance modeling: heuristic default plus optional trained XGBoost proxy; conversational validation remains outstanding.
+- Importance modeling: hybrid default (trained csv5k ensemble at 25 %, heuristic at 75 %) with a heuristic-only opt-out; the model is trained on synthetic sentences, so conversational validation remains outstanding; the system-level measurement (16 Oct 2026) left LongMemEval user-fact retention unchanged at 90.55 % (see [README "Importance scoring (default)"](README.md#importance-scoring-default)).
 - Retrieval quality: keyword/vector/graph/hybrid retrieval work; external results expose extraction and retention limitations.
 
 Planned:
 
-- In-domain validation and calibration of XGBoost importance prediction.
+- In-domain (conversational) validation of the hybrid importance scorer; the csv5k ensemble is trained and tested only on synthetic memory sentences.
 - Human-rated numeric importance and more representative task/greeting labels.
 - Production storage backend.
 - Broader graph entity/relation extraction from paragraphs.
@@ -118,7 +118,7 @@ flowchart TD
     B --> C[MemoryClassifier]
     C --> D[MemoryRecord.from_input]
     D --> E[FeatureExtractor]
-    E --> F[ImportanceScorer]
+    E --> F[HybridImportanceScorer model plus heuristic]
     F --> G[LifecycleManager]
     G --> H[Final MemoryRecord]
     H --> I[to_dict serialization]
@@ -133,10 +133,10 @@ Current architecture properties:
 - Uses a local JSONL file store for development/demo persistence.
 - Uses no graph database.
 - Uses no vector database.
-- Offers an offline XGBoost training pipeline and optional ML runtime dependencies.
+- Scores importance by default with a local trained ensemble (xgboost, onnxruntime, and the BGE encoder cached in `data/rag/models`, which the scorer never downloads); `python -m training.ensemble.run --csv /path/to/cognimem_memory_importance_5000.csv` rebuilds it offline (the flag is needed only on the first run of a fresh clone), and torch is needed only for training.
 - Produces serializable Python objects and JSON CLI output.
 
-Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The optional retention-proxy model retains the legacy ML feature preprocessing. See rule experiment for results and limitations.
+Default conversational rules use whole-word matching, indirect preferences, explicit constraint/event recognition, conservative negation handling, and short-term handling of one-off tasks. The record's category comes from these default rules; the hybrid scorer's model computes its own inputs from the text with the legacy feature path (`MemoryClassifier(legacy=True)` plus `MLFeatureExtractor` in `main/ml.py`). See rule experiment for results and limitations.
 
 ## 6. Current Component Design
 
@@ -146,7 +146,8 @@ Default conversational rules use whole-word matching, indirect preferences, expl
 | Memory models | `main/domain/models.py` | Defines memory input, memory record, categories, tiers, timestamps, and serialization. | Raw field values or dict payload. | `MemoryInput` and `MemoryRecord`. |
 | Classifier | `main/domain/classification.py` | Categorizes content using deterministic keyword/pattern rules. | `MemoryInput`. | `MemoryCategory`. |
 | Feature extractor | `main/domain/features.py` | Converts content and metadata into numeric scoring features. | `MemoryInput`, `MemoryRecord`. | `dict[str, float]`. |
-| Importance scorer | `main/domain/scoring.py` | Applies heuristic weights to features. | Feature dictionary. | Float score from `0.0` to `1.0`. |
+| Heuristic importance scorer | `main/domain/scoring.py` | Applies heuristic weights to features; 75 % of the hybrid score, or the whole score when opted out. | Feature dictionary. | Float score from `0.0` to `1.0`. |
+| Hybrid importance scorer | `main/ensemble.py` | Default scorer: loads the validated `EnsembleModel` bundle, predicts low/mid/high from the text, and blends the class value with the heuristic score. | Content and feature dictionary. | Float score from `0.0` to `1.0` plus provenance. |
 | Lifecycle manager | `main/domain/lifecycle.py` | Assigns memory tier and expiry/archive hints. | `MemoryRecord`, score. | `MemoryTier`, timestamp hints. |
 | Memory orchestrator | `main/application/core.py` | Runs the full processing pipeline. | `MemoryInput`. | Final `MemoryRecord`. |
 | Local memory store | `main/storage/store.py` | Saves, loads, filters, gets, and keyword-searches JSONL memory records. | `MemoryRecord` or filter/query arguments. | Stored or retrieved `MemoryRecord` objects. |
@@ -183,9 +184,9 @@ Task completion/cancellation and multi-memory processing are implemented conserv
 | `created_at` | `datetime` | Creation timestamp. |
 | `updated_at` | `datetime` | Last update/access timestamp. |
 | `confidence` | `float` | Current default is `1.0`. |
-| `importance_score` | `float` | Heuristic importance score. |
+| `importance_score` | `float` | Importance score: hybrid by default, heuristic-only when opted out. |
 | `access_count` | `int` | Access counter, incremented by `touch()`. |
-| `source_metadata` | `dict` | Metadata copied from `MemoryInput`. |
+| `source_metadata` | `dict` | Metadata copied from `MemoryInput`, plus `importance_model` provenance written by the core (hybrid: `type`, `model_weight`, `model_class`, `model_probabilities`, `model_score`, `small_talk_penalty`, `heuristic_score`, `model_sha256`, `encoder`; heuristic: `{"type": "heuristic"}`). |
 | `features` | `dict[str, float]` | Extracted scoring features. |
 | `expires_at` | `datetime | None` | Expiry hint for working/short-term memory. |
 | `archive_after` | `datetime | None` | Archive hint for long-term memory. |
@@ -208,7 +209,7 @@ Intermediate transformations:
 - The classifier maps content to one category.
 - A `MemoryRecord` is created from the input.
 - Feature extraction calculates category flags, recency, entity density, task/preference indicators, sentiment strength, access frequency, and word-count normalization.
-- Importance scoring applies heuristic weights.
+- Importance scoring applies heuristic weights and, by default, blends them with the trained model: `round(0.25 × model_score + 0.75 × heuristic_score, 4)`.
 - Lifecycle assignment chooses the memory tier and timestamp hints.
 
 Output format:
@@ -221,8 +222,9 @@ Output format:
     "session_id": "session_001",
     "category": "preference",
     "tier": "long_term",
-    "importance_score": 0.6337,
+    "importance_score": 0.6737,  # MemoryCore.with_heuristic() on a just-received message; the default also blends in the model
     "features": {"category_preference": 1.0, "...": "..."},
+    "source_metadata": {"interaction_score": 0.5, "importance_model": {"type": "heuristic"}},
     "expires_at": None,
     "archive_after": "future UTC timestamp"
 }
@@ -230,7 +232,7 @@ Output format:
 
 ## 9. Current Model Design
 
-Optional XGBoost and frozen-encoder neural three-class models are trained on human-labeled conversational fact validity and duration. `MemoryCore.with_ml()` and `MemoryCore.with_neural()` enable their retention-proxy scores; the heuristic remains the default. See [XGBoost metrics](evaluation/reports/conversational_retention.json) and [neural metrics](evaluation/reports/neural_retention.json) for measured results and limitations.
+The default importance scorer is hybrid: `HybridImportanceScorer` (`main/ensemble.py`) combines the csv5k "Ensemble + thresholds" three-class (low/mid/high) model with the unchanged rule-based `ImportanceScorer`, giving the model 25 % of the score. `COGNIMEM_SCORER=heuristic`, `--scorer heuristic`, or `MemoryCore.with_heuristic()` opt out; the API builds one local-only BGE encoder (cache `data/rag/models`, no download) shared by retrieval and the scorer, reports the scorer on `/health/ready`, and stops at start-up with the download command and the `COGNIMEM_SCORER=heuristic` opt-out if that cache is missing; with the opt-out it starts without BGE. On the csv5k test split the model reaches macro F1 0.8912 (95 % sentence-bootstrap interval 0.809-0.949) and 89.09 % accuracy, against 0.2529 for the most-common-class baseline and 0.9230 for the oracle; see [the ensemble report](evaluation/reports/retention_ensemble.md). At system level (16 Oct 2026, snapshots `hybrid` and `heuristic_control`) the hybrid matches the heuristic on LongMemEval user-fact retention (90.55 %) and classification accuracy, and the model's score does not separate answer-bearing turns (AUC 0.482 vs 0.582 for the heuristic); see [README "Importance scoring (default)"](README.md#importance-scoring-default).
 
 Current classifier:
 
@@ -241,19 +243,19 @@ Current classifier:
 
 Current importance model:
 
-- Type: default heuristic scorer or optional XGBoost/neural three-class models.
-- Inputs: extracted feature dictionary for XGBoost; redacted text plus 13 numeric features for neural.
-- Output: float score from `0.0` to `1.0`.
-- Method: heuristic weighted sum, or `P(long_term) + 0.5 × P(short_term)` from trained class probabilities.
+- Type: default hybrid scorer (trained three-class ensemble plus heuristic), or the heuristic scorer alone.
+- Inputs: extracted feature dictionary for the heuristic. The model computes its own inputs from the text: 13 text features plus 512 hashed word counts for XGBoost, and the frozen `BAAI/bge-small-en-v1.5` embedding (384 values) plus the 13 numeric features for the deep head.
+- Output: float score from `0.0` to `1.0`, with provenance in `source_metadata["importance_model"]`.
+- Method: a temperature-calibrated XGBoost model (525 features, max depth 3, min child weight 3, 304 boosting rounds) is blended 0.5/0.5 with the average of three seeds (42, 43, 44) of a deep head (text branch 384→192→128, numeric 13→64→32, joint 160→128→64→3; LayerNorm/GELU/dropout 0.2), each seed temperature-calibrated and the average calibrated again; class weights 1 / 0.7 / 1 pick low/mid/high. The predicted class's value (low 0.3102, mid 0.5792, high 0.8372, the mean csv5k score of that class's rows among the 3,992 fit and validation rows, test split excluded; × 0.25 for `temporary` small talk) is `model_score`, and the final score is `round(0.25 × model_score + 0.75 × heuristic_score, 4)`.
 
 Current lifecycle model:
 
 - Type: deterministic rule-based tier assignment.
 - Inputs: `MemoryRecord` and importance score.
 - Output: one `MemoryTier`.
-- Method: threshold and category checks.
+- Method: threshold and category checks. Thresholds are unchanged by the hybrid default: working below 0.25 (or `temporary`), long-term at >= 0.42 for durable categories, archive rule >= 0.42; balanced cleanup archives rather than deletes expired records at >= 0.65 (`ARCHIVE_IMPORTANCE` in `main/storage/cleanup.py`).
 
-The offline training workflow evaluates four configurations using validation RMSE and early stopping, then evaluates the selected model on a held-out test set. Native model artifacts and metadata are stored under `artifacts/importance/`. There is no model registry.
+The offline training workflow (`python -m training.ensemble.run`, package `training/ensemble/`) splits csv5k by sentence, chooses temperatures, blend weight, and class weights on validation only, and evaluates once on the test split. The first run on a fresh clone needs `--csv /path/to/cognimem_memory_importance_5000.csv`, which copies the file to git-ignored `data/experiments/csv5k.csv`; later runs need no flag. It reproduces the model files (`xgboost.ubj` and the three ONNX files, whose SHA-256 values `metadata.json` lists under `files`) bit for bit; `metadata.json` carries a `created_at` timestamp, so its own hash (`model_sha256` in provenance and on `/health/ready`) changes on every retrain. Working files go to git-ignored `artifacts/ensemble_training/`. The serving bundle `artifacts/importance_ensemble/` (`xgboost.ubj`, `deep_seed_42/43/44.onnx`, and `metadata.json` with sha256 checks and golden vectors) is tracked in git. At load `EnsembleModel` checks the checksums, schema, boosting rounds, ONNX interfaces, temperatures, weights, and encoder id; the golden vectors are checked by the test suite (`tests/test_hybrid_importance.py`), not at load. A missing model raises an error naming the training command and the heuristic opt-out; a missing encoder, one naming the download command and the opt-out. Scoring costs roughly 14 ms per user message and about 100 ms per long assistant message, dominated by the BGE embedding. There is no model registry.
 
 ## 10. Current Storage Design
 
@@ -264,11 +266,11 @@ Current storage has two levels:
 
 | Data type | Current storage |
 | --- | --- |
-| Raw datasets | Research documents plus downloaded Personal Facts (MSC) under ignored `data/personal_facts_msc/`. |
-| Processed datasets | Features computed in memory during training; published split files are checksum-verified. |
+| Raw datasets | Research documents plus the csv5k source (`cognimem_memory_importance_5000.csv`), copied to `data/experiments/csv5k.csv` for training. |
+| Processed datasets | Features and the sentence-grouped split computed by `training/ensemble/`; working files under git-ignored `artifacts/ensemble_training/`. |
 | Features | Stored inside returned `MemoryRecord.features` and persisted in JSONL when saved. |
-| Trained models | Native XGBoost model and metadata under `artifacts/importance/`. |
-| Experiment results | Retention classification metrics under `evaluation/reports/`. |
+| Trained models | XGBoost model, three deep-head ONNX seeds, and `metadata.json` (sha256 checks, golden vectors) under git-tracked `artifacts/importance_ensemble/`; the BGE encoder is cached in `data/rag/models`. |
+| Experiment results | Importance-model test metrics in `evaluation/reports/retention_ensemble.{json,md}`, summarised into `retention_summary.json`; dated `<tag>_summary.json` snapshots keep older numbers as history. |
 | Logs | Not implemented. |
 | Configuration files | Not implemented. |
 | Memory records | In-memory object and optional JSONL records via `LocalMemoryStore`. |
@@ -277,7 +279,7 @@ JSONL remains the local source log with cooperative cross-process locking on mac
 
 ## 11. Current Evaluation
 
-Current evaluation includes automated tests, the Personal Facts (MSC) retention-proxy experiment, and a 48-case developer-authored conversational check. Human review remains pending; see `evaluation/README.md`.
+Current evaluation includes automated tests, the csv5k importance-model test split ([report](evaluation/reports/retention_ensemble.md)), and a 48-case developer-authored conversational check. `scripts/measure_all.py --scorer-steps-only --scorer hybrid|heuristic` re-runs only the steps that use the scorer (retention, classification, lifecycle, and the summary); those runners record which scorer ran, and classification and lifecycle pin the clock (`evaluation/clock.py`). The system-level measurement of the hybrid default is finished (16 Oct 2026): LongMemEval user-fact retention (90.55 %), classification accuracy, and the lifecycle checks (16/16) match the heuristic, importance-range agreement rises from 50.0 % to 58.3 % (a constant 0.5 scores 83.3 %), and the LongMemEval replay took 581 s instead of 14 s; see [README "Importance scoring (default)"](README.md#importance-scoring-default). Human review remains pending; see `evaluation/README.md`.
 
 The tests verify:
 
@@ -302,7 +304,7 @@ flowchart LR
     A[MemoryInput content user_id session_id metadata] --> B[Rule-based classification]
     B --> C[MemoryRecord skeleton]
     C --> D[Feature extraction]
-    D --> E[Heuristic importance score]
+    D --> E[Hybrid importance score model plus heuristic]
     E --> F[Tier assignment]
     F --> G[Serializable MemoryRecord]
     G --> H[Optional JSONL save]
@@ -355,7 +357,7 @@ Planned complete architecture responsibilities:
 - Preprocess and validate input.
 - Classify memories into supported memory categories.
 - Extract features for ML scoring.
-- Predict importance using LightGBM/XGBoost.
+- Predict importance with a trained model (implemented: the XGBoost plus deep-head csv5k ensemble, blended with the heuristic as the default scorer).
 - Store memories in appropriate lifecycle tiers.
 - Build vector indexes for semantic retrieval.
 - Build a temporal knowledge graph for relationships and chronology.
@@ -373,7 +375,7 @@ Planned complete architecture responsibilities:
 | Preprocessing layer | Clean, normalize, validate, and optionally redact input. | Basic validation only. |
 | Memory classifier | Classify memory type. | Rule-based version implemented. |
 | Feature extractor | Generate scoring features. | Baseline implemented. |
-| Importance predictor | Decide storage value using ML. | Heuristic default; experimental XGBoost scorer implemented. |
+| Importance predictor | Decide storage value using ML. | Hybrid default implemented (trained csv5k ensemble at 25 %, heuristic at 75 %); heuristic-only opt-out. Conversational validation pending. |
 | Lifecycle manager | Assign tier, expiry, archive behavior. | Deadlines, inactivity archival, and expiry visibility implemented. |
 | Memory store | Persist memory records. | Local JSONL implemented; production storage planned. |
 | Vector store | Store embeddings for retrieval. | SQLite normalized vectors with exact cosine retrieval (one numpy matrix product) by default; random-hyperplane LSH ANN retrieval is opt-in (`COGNIMEM_ANN_ENABLED`, threshold 5,000 memories) and experimental. |
@@ -388,15 +390,15 @@ Planned complete architecture responsibilities:
 
 ## 16. Complete Training Pipeline
 
-The current training pipeline uses human-annotated Personal Facts (MSC) candidates with validity and short-/long-term duration labels. The published train/test split is stratified by category, not by speaker or conversation. It does not provide human numeric importance ratings or lifecycle tier labels.
+The current training pipeline (`training/ensemble/`, run with `python -m training.ensemble.run`, plus `--csv /path/to/cognimem_memory_importance_5000.csv` on the first run of a fresh clone) uses csv5k (`cognimem_memory_importance_5000.csv`): 5,000 AI-generated memory sentences (443 distinct after removing a " (example N)" suffix) with synthetic importance scores 0.20-1.00, binned into low (< 0.4), mid, and high (>= 0.7). The split is grouped by sentence with seed 42: 3,200 / 792 / 1,008 rows (286 / 71 / 86 sentences). It does not provide human numeric importance ratings or lifecycle tier labels.
 
 ```mermaid
 flowchart LR
-    A[Labeled memory examples] --> B[Feature extraction]
-    B --> C[Train LightGBM or XGBoost]
-    C --> D[Validate model]
-    D --> E[Save model artifact]
-    E --> F[ImportanceScorer replacement]
+    A[csv5k memory sentences] --> B[Text features hashed words and BGE embedding]
+    B --> C[Train XGBoost and three deep-head seeds]
+    C --> D[Calibrate blend and weight classes on validation]
+    D --> E[Save artifacts importance_ensemble]
+    E --> F[HybridImportanceScorer default]
 ```
 
 Planned training data fields:
@@ -412,7 +414,7 @@ Planned training data fields:
 - `interaction_signal`
 - `retrieval_success`
 
-Personal Facts (MSC) supplies the current retention-proxy target. Human-rated numeric importance, task, greeting, and lifecycle tier labels are still needed.
+csv5k supplies the current low/mid/high importance target, which differs from the invalid/short-term/long-term target of the removed XGBoost-only and neural scorers. Its limits: the sentences and scores are AI-generated, not human ratings; the test split has only 86 distinct sentences; and conversation turns are far longer than the csv5k sentences (at most 13 words, LongMemEval user turns median 42 words), so the model runs out of distribution, a reason to keep its share small. Its 25 % weight is a fixed, user-chosen setting that was not tuned or calibrated. Before the small-talk penalty it rates greetings mid or high. Human-rated numeric importance, task, greeting, and lifecycle tier labels are still needed.
 
 ## 17. Complete Retrieval Pipeline
 
@@ -467,6 +469,7 @@ Current CLI interface:
 
 ```bash
 python3 -m main process --user-id user_001 --session-id session_001 "I prefer concise summaries"
+python3 -m main process --scorer heuristic --user-id user_001 --session-id session_001 "I prefer concise summaries"
 python3 -m main list --user-id user_001 --pretty
 python3 -m main search "technical summaries" --user-id user_001 --pretty
 python3 -m main get MEMORY_ID --pretty
@@ -531,13 +534,13 @@ Future operational signals:
 | Vector-only RAG memory | Simple and common for conversational memory. | The proposal identifies limitations in chronology, personalization, lifecycle management, and conflict handling. |
 | Graph-only memory | Strong for relationships and temporal reasoning. | Does not solve semantic similarity retrieval alone; implemented as one hybrid retrieval channel. |
 | LLM-only memory extraction | Flexible and semantically rich. | Adds cost, latency, nondeterminism, and external dependencies before the core is stable. |
-| ML-first classifier/scorer | Better long-term adaptability. | Requires labeled data that does not exist yet. |
+| ML-first classifier/scorer | Better long-term adaptability. | Human-labeled conversational data does not exist yet; the trained model (synthetic csv5k data) supplies only 25 % of the default hybrid score, and classification stays rule-based. |
 | Full-stack implementation first | Would show an end-to-end demo earlier. | Higher risk because core contracts, memory schema, and lifecycle behavior need to stabilize first. |
 
 ## 22. Open Questions
 
 - Should the next production storage backend be SQLite, Postgres, or a document database?
-- Which independent, conversation-disjoint dataset can validate the retention proxy and lifecycle decisions?
+- Which independent, conversation-disjoint dataset can validate the hybrid importance scorer and lifecycle decisions?
 - How should the local LSH ANN configuration be tuned against workload size and recall?
 - How should paragraph-level extraction extend the implemented typed bitemporal graph?
 - Which independent human judgments and full-system baselines should extend LoCoMo/LongMemEval?
@@ -606,7 +609,7 @@ See current behavior and verification and
 
 `main/domain/claims.py` extracts a narrow single assertion: subject, predicate, normalized
 value, polarity, and exclusivity. The default classifier recognizes those forms;
-the optional scorer retains its frozen classification preprocessing. Ingestion
+the hybrid scorer's model keeps its own legacy classification preprocessing. Ingestion
 recomputes claims from the original content, including older records without
 claim fields. Current user assertions with the same subject/predicate are checked
 for opposing polarity or different values on an exclusive attribute. Compatible

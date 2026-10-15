@@ -15,7 +15,7 @@ NOW = datetime(2026, 9, 26, 10, tzinfo=timezone.utc)
 
 
 def memory(text, *, offset=0, user='u', session='s', role='user', **metadata):
-    return MemoryCore().process(MemoryInput(content=text, user_id=user, session_id=session,
+    return MemoryCore.with_heuristic().process(MemoryInput(content=text, user_id=user, session_id=session,
                                            role=role, timestamp=NOW + timedelta(seconds=offset), metadata=metadata))
 
 
@@ -329,8 +329,8 @@ class ReconciliationTests(unittest.TestCase):
                 code = cli_main(['--store', str(self.store.path), *args])
             self.assertEqual(code, 0, output.getvalue())
             return json.loads(output.getvalue())
-        old = cli('process', 'I live in Chennai.', '--user-id', 'u', '--session-id', 's', '--confidence', '.8')
-        new = cli('process', 'I live in Mumbai.', '--user-id', 'u', '--session-id', 's', '--confidence', '.9')
+        old = cli('process', 'I live in Chennai.', '--user-id', 'u', '--session-id', 's', '--confidence', '.8', '--scorer', 'heuristic')
+        new = cli('process', 'I live in Mumbai.', '--user-id', 'u', '--session-id', 's', '--confidence', '.9', '--scorer', 'heuristic')
         self.assertEqual(cli('list', '--user-id', 'u')[0]['id'], new['id'])
         self.assertEqual(len(cli('list', '--user-id', 'u', '--include-history')), 2)
         self.assertEqual(len(cli('history', old['id'], '--user-id', 'u')), 2)

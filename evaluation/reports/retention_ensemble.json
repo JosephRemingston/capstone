@@ -1,0 +1,908 @@
+{
+  "generated_at": "2026-10-15T22:30:02+00:00",
+  "model": "csv5k Ensemble + thresholds: fit-only XGBoost + frozen-BGE deep head (3-seed average), class-weighted",
+  "dataset": {
+    "name": "csv5k",
+    "class_names": [
+      "low",
+      "mid",
+      "high"
+    ],
+    "source": {
+      "path": "data/experiments/csv5k.csv",
+      "sha256": "29b47e54b15988e7661df19eabb348df252fab084b9468e53f22b7b914f72502"
+    },
+    "n_rows": 5000,
+    "seed": 42,
+    "split_protocol": "grouped by sentence (StratifiedGroupKFold, 5 folds)",
+    "bin_edges": [
+      0.4,
+      0.7
+    ],
+    "normalisation": "strip ' (example N)' suffix and collapse whitespace; used for grouping and model input",
+    "group_encoding": "first-appearance (row-order) integer codes",
+    "pin_fraction": 0.05,
+    "pinned_groups": [],
+    "split_sizes": {
+      "fit": 3200,
+      "val": 792,
+      "test": 1008
+    },
+    "split_sentences": {
+      "fit": 286,
+      "val": 71,
+      "test": 86
+    },
+    "class_counts": {
+      "all": {
+        "low": 559,
+        "mid": 1359,
+        "high": 3082
+      },
+      "fit": {
+        "low": 358,
+        "mid": 869,
+        "high": 1973
+      },
+      "val": {
+        "low": 81,
+        "mid": 218,
+        "high": 493
+      },
+      "test": {
+        "low": 120,
+        "mid": 272,
+        "high": 616
+      }
+    },
+    "diagnostics": {
+      "rows": 5000,
+      "unique_sentences": 443,
+      "singleton_groups": 33,
+      "multi_row_groups": 410,
+      "largest_group": {
+        "text": "My current goal is a cloud certification.",
+        "rows": 43
+      },
+      "disagreeing_multi_groups": 86,
+      "disagreeing_multi_group_share": 0.2097560975609756,
+      "mean_within_group_score_std": 0.03556072654969044,
+      "words_per_text": {
+        "mean": 6.1854,
+        "max": 13
+      },
+      "score_range": [
+        0.2,
+        1.0
+      ],
+      "score_mean": 0.708266,
+      "class_counts": {
+        "all": {
+          "low": 559,
+          "mid": 1359,
+          "high": 3082
+        },
+        "fit": {
+          "low": 358,
+          "mid": 869,
+          "high": 1973
+        },
+        "val": {
+          "low": 81,
+          "mid": 218,
+          "high": 493
+        },
+        "test": {
+          "low": 120,
+          "mid": 272,
+          "high": 616
+        }
+      },
+      "split_sizes": {
+        "fit": 3200,
+        "val": 792,
+        "test": 1008
+      },
+      "split_sentences": {
+        "fit": 286,
+        "val": 71,
+        "test": 86
+      },
+      "majority": {
+        "class_index": 2,
+        "class_name": "high",
+        "test": {
+          "accuracy": 0.6111111111111112,
+          "balanced_accuracy": 0.3333333333333333,
+          "macro_f1": 0.2528735632183908,
+          "weighted_f1": 0.4636015325670498,
+          "confusion_matrix": [
+            [
+              0,
+              0,
+              120
+            ],
+            [
+              0,
+              0,
+              272
+            ],
+            [
+              0,
+              0,
+              616
+            ]
+          ],
+          "per_class": {
+            "low": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 120
+            },
+            "mid": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 272
+            },
+            "high": {
+              "precision": 0.6111111111111112,
+              "recall": 1.0,
+              "f1": 0.7586206896551724,
+              "support": 616
+            }
+          }
+        }
+      },
+      "oracle": {
+        "definition": "each test row predicted as the majority class among the test rows of its sentence (ties -> lowest index); uses the test labels, is the best any deterministic text function can score, is not a model, and a model exceeding it indicates a bug",
+        "test": {
+          "accuracy": 0.9117063492063492,
+          "balanced_accuracy": 0.9285714285714285,
+          "macro_f1": 0.9229949650329209,
+          "weighted_f1": 0.9125816527780822,
+          "confusion_matrix": [
+            [
+              120,
+              0,
+              0
+            ],
+            [
+              0,
+              238,
+              34
+            ],
+            [
+              0,
+              55,
+              561
+            ]
+          ],
+          "per_class": {
+            "low": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 120
+            },
+            "mid": {
+              "precision": 0.8122866894197952,
+              "recall": 0.875,
+              "f1": 0.8424778761061947,
+              "support": 272
+            },
+            "high": {
+              "precision": 0.9428571428571428,
+              "recall": 0.9107142857142857,
+              "f1": 0.9265070189925682,
+              "support": 616
+            }
+          }
+        }
+      }
+    }
+  },
+  "class_names": [
+    "low",
+    "mid",
+    "high"
+  ],
+  "resamples": 1000,
+  "bootstrap_seed": 42,
+  "class_values": [
+    0.3102,
+    0.5792,
+    0.8372
+  ],
+  "tuned": {
+    "per_seed_temperature": {
+      "42": 0.7543728691522217,
+      "43": 0.9594487234654934,
+      "44": 0.712233162216292
+    },
+    "ensemble_temperature": 0.9059686036779965,
+    "xgb_temperature": 0.8961907630218715,
+    "w_xgb": 0.5,
+    "blend_table": [
+      {
+        "w": 0.25,
+        "macro_f1": 0.910382136415468,
+        "nll": 0.18470678060033713
+      },
+      {
+        "w": 0.5,
+        "macro_f1": 0.9116659762729533,
+        "nll": 0.1876444230138203
+      },
+      {
+        "w": 0.75,
+        "macro_f1": 0.9100166300765103,
+        "nll": 0.19375499793438566
+      }
+    ],
+    "class_weights": [
+      1.0,
+      0.7,
+      1.0
+    ],
+    "val_macro_f1_before": 0.9116659762729533,
+    "val_macro_f1_after": 0.9140601127262648,
+    "val_balanced_accuracy_after": 0.908464682931
+  },
+  "ensemble_thresholds": {
+    "test": {
+      "accuracy": 0.8908730158730159,
+      "balanced_accuracy": 0.8713553603259485,
+      "macro_f1": 0.8911851990482047,
+      "weighted_f1": 0.8835585932543396,
+      "confusion_matrix": [
+        [
+          120,
+          0,
+          0
+        ],
+        [
+          0,
+          171,
+          101
+        ],
+        [
+          0,
+          9,
+          607
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 120
+        },
+        "mid": {
+          "precision": 0.95,
+          "recall": 0.6286764705882353,
+          "f1": 0.7566371681415929,
+          "support": 272
+        },
+        "high": {
+          "precision": 0.8573446327683616,
+          "recall": 0.9853896103896104,
+          "f1": 0.9169184290030211,
+          "support": 616
+        }
+      }
+    },
+    "row_ci95": [
+      0.8722786786029865,
+      0.9085940629614353
+    ],
+    "sentence_ci95": [
+      0.8091471048623347,
+      0.9490558154441475
+    ],
+    "sentence_level": {
+      "accuracy": 0.9186046511627907,
+      "balanced_accuracy": 0.9135802469135802,
+      "macro_f1": 0.9300647548566142,
+      "weighted_f1": 0.9150205451455371,
+      "confusion_matrix": [
+        [
+          5,
+          0,
+          0
+        ],
+        [
+          0,
+          20,
+          7
+        ],
+        [
+          0,
+          0,
+          54
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        "mid": {
+          "precision": 1.0,
+          "recall": 0.7407407407407407,
+          "f1": 0.851063829787234,
+          "support": 27
+        },
+        "high": {
+          "precision": 0.8852459016393442,
+          "recall": 1.0,
+          "f1": 0.9391304347826087,
+          "support": 54
+        }
+      }
+    },
+    "validation_macro_f1": 0.9140601127262648,
+    "probability_calibration": {
+      "test_nll": 0.21925417827666518,
+      "test_ece_10_bins": 0.034581204224509034,
+      "note": "blended probabilities before the class weights"
+    }
+  },
+  "majority": {
+    "test": {
+      "accuracy": 0.6111111111111112,
+      "balanced_accuracy": 0.3333333333333333,
+      "macro_f1": 0.2528735632183908,
+      "weighted_f1": 0.4636015325670498,
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          120
+        ],
+        [
+          0,
+          0,
+          272
+        ],
+        [
+          0,
+          0,
+          616
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 120
+        },
+        "mid": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 272
+        },
+        "high": {
+          "precision": 0.6111111111111112,
+          "recall": 1.0,
+          "f1": 0.7586206896551724,
+          "support": 616
+        }
+      }
+    },
+    "row_ci95": [
+      0.2450857381848599,
+      0.260385016761831
+    ],
+    "sentence_ci95": [
+      0.2198795524004043,
+      0.2828720180941407
+    ],
+    "sentence_level": {
+      "accuracy": 0.627906976744186,
+      "balanced_accuracy": 0.3333333333333333,
+      "macro_f1": 0.2571428571428572,
+      "weighted_f1": 0.4843853820598007,
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          27
+        ],
+        [
+          0,
+          0,
+          54
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 5
+        },
+        "mid": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 27
+        },
+        "high": {
+          "precision": 0.627906976744186,
+          "recall": 1.0,
+          "f1": 0.7714285714285715,
+          "support": 54
+        }
+      }
+    },
+    "class_name": "high"
+  },
+  "oracle": {
+    "test": {
+      "accuracy": 0.9117063492063492,
+      "balanced_accuracy": 0.9285714285714285,
+      "macro_f1": 0.9229949650329209,
+      "weighted_f1": 0.9125816527780822,
+      "confusion_matrix": [
+        [
+          120,
+          0,
+          0
+        ],
+        [
+          0,
+          238,
+          34
+        ],
+        [
+          0,
+          55,
+          561
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 120
+        },
+        "mid": {
+          "precision": 0.8122866894197952,
+          "recall": 0.875,
+          "f1": 0.8424778761061947,
+          "support": 272
+        },
+        "high": {
+          "precision": 0.9428571428571428,
+          "recall": 0.9107142857142857,
+          "f1": 0.9265070189925682,
+          "support": 616
+        }
+      }
+    },
+    "row_ci95": [
+      0.9062827476608206,
+      0.9376958481269285
+    ],
+    "sentence_ci95": [
+      0.8846973280049275,
+      0.9566754362085381
+    ],
+    "sentence_level": {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "macro_f1": 1.0,
+      "weighted_f1": 1.0,
+      "confusion_matrix": [
+        [
+          5,
+          0,
+          0
+        ],
+        [
+          0,
+          27,
+          0
+        ],
+        [
+          0,
+          0,
+          54
+        ]
+      ],
+      "per_class": {
+        "low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        "mid": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 27
+        },
+        "high": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 54
+        }
+      }
+    },
+    "definition": "each test row predicted as the majority class among the test rows of its sentence (ties -> lowest index); uses the test labels, is the best any deterministic text function can score, is not a model, and a model exceeding it indicates a bug"
+  },
+  "xgboost": {
+    "chosen": {
+      "max_depth": 3,
+      "min_child_weight": 3,
+      "best_iteration": 303
+    },
+    "rounds": 304,
+    "trials": [
+      {
+        "max_depth": 3,
+        "min_child_weight": 3,
+        "best_iteration": 303,
+        "accuracy": 0.9078282828282829,
+        "balanced_accuracy": 0.9114080304693849,
+        "macro_f1": 0.9089999760670505,
+        "weighted_f1": 0.9064239655997939,
+        "confusion_matrix": [
+          [
+            81,
+            0,
+            0
+          ],
+          [
+            5,
+            172,
+            41
+          ],
+          [
+            0,
+            27,
+            466
+          ]
+        ],
+        "per_class": {
+          "low": {
+            "precision": 0.9418604651162791,
+            "recall": 1.0,
+            "f1": 0.9700598802395209,
+            "support": 81
+          },
+          "mid": {
+            "precision": 0.864321608040201,
+            "recall": 0.7889908256880734,
+            "f1": 0.8249400479616307,
+            "support": 218
+          },
+          "high": {
+            "precision": 0.9191321499013807,
+            "recall": 0.9452332657200812,
+            "f1": 0.932,
+            "support": 493
+          }
+        }
+      },
+      {
+        "max_depth": 3,
+        "min_child_weight": 8,
+        "best_iteration": 395,
+        "accuracy": 0.9015151515151515,
+        "balanced_accuracy": 0.9088802873253066,
+        "macro_f1": 0.9041943379576897,
+        "weighted_f1": 0.9005408810886993,
+        "confusion_matrix": [
+          [
+            81,
+            0,
+            0
+          ],
+          [
+            5,
+            173,
+            40
+          ],
+          [
+            0,
+            33,
+            460
+          ]
+        ],
+        "per_class": {
+          "low": {
+            "precision": 0.9418604651162791,
+            "recall": 1.0,
+            "f1": 0.9700598802395209,
+            "support": 81
+          },
+          "mid": {
+            "precision": 0.8398058252427184,
+            "recall": 0.7935779816513762,
+            "f1": 0.8160377358490566,
+            "support": 218
+          },
+          "high": {
+            "precision": 0.92,
+            "recall": 0.9330628803245437,
+            "f1": 0.9264853977844915,
+            "support": 493
+          }
+        }
+      },
+      {
+        "max_depth": 5,
+        "min_child_weight": 3,
+        "best_iteration": 273,
+        "accuracy": 0.9053030303030303,
+        "balanced_accuracy": 0.9100557654254363,
+        "macro_f1": 0.9069739954377479,
+        "weighted_f1": 0.9040078437741972,
+        "confusion_matrix": [
+          [
+            81,
+            0,
+            0
+          ],
+          [
+            5,
+            172,
+            41
+          ],
+          [
+            0,
+            29,
+            464
+          ]
+        ],
+        "per_class": {
+          "low": {
+            "precision": 0.9418604651162791,
+            "recall": 1.0,
+            "f1": 0.9700598802395209,
+            "support": 81
+          },
+          "mid": {
+            "precision": 0.8557213930348259,
+            "recall": 0.7889908256880734,
+            "f1": 0.8210023866348448,
+            "support": 218
+          },
+          "high": {
+            "precision": 0.9188118811881189,
+            "recall": 0.9411764705882353,
+            "f1": 0.9298597194388778,
+            "support": 493
+          }
+        }
+      },
+      {
+        "max_depth": 5,
+        "min_child_weight": 8,
+        "best_iteration": 271,
+        "accuracy": 0.9027777777777778,
+        "balanced_accuracy": 0.9078505809156944,
+        "macro_f1": 0.904714902869158,
+        "weighted_f1": 0.9014465448546686,
+        "confusion_matrix": [
+          [
+            81,
+            0,
+            0
+          ],
+          [
+            5,
+            171,
+            42
+          ],
+          [
+            0,
+            30,
+            463
+          ]
+        ],
+        "per_class": {
+          "low": {
+            "precision": 0.9418604651162791,
+            "recall": 1.0,
+            "f1": 0.9700598802395209,
+            "support": 81
+          },
+          "mid": {
+            "precision": 0.8507462686567164,
+            "recall": 0.7844036697247706,
+            "f1": 0.8162291169451074,
+            "support": 218
+          },
+          "high": {
+            "precision": 0.9168316831683169,
+            "recall": 0.9391480730223124,
+            "f1": 0.9278557114228457,
+            "support": 493
+          }
+        }
+      }
+    ],
+    "params": {
+      "objective": "multi:softprob",
+      "num_class": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.85,
+      "colsample_bytree": 0.85,
+      "reg_lambda": 2.0,
+      "tree_method": "hist",
+      "random_state": 42,
+      "eval_metric": "mlogloss",
+      "n_estimators": 400,
+      "early_stopping_rounds": 25
+    },
+    "xgboost_version": "3.4.1"
+  },
+  "neural": {
+    "architecture": "frozen-bge-deep-head-v1",
+    "seeds": [
+      {
+        "seed": 42,
+        "best_epoch": 12,
+        "validation_macro_f1": 0.9000790490449543,
+        "validation_nll": 0.1878289431333542,
+        "onnx_max_abs_logit_diff": 4.291534423828125e-06,
+        "onnx_sha256": "7a1703ba8d88a54ceed9ef0d16dd6899a3a14ea391efaf1ce17443a2e9b83f88",
+        "weights_sha256": "43d1bbac4b47a6a6c131eb39471b1d51379e0383e46fea22d2ad96ee59f057db"
+      },
+      {
+        "seed": 43,
+        "best_epoch": 7,
+        "validation_macro_f1": 0.8986719229215537,
+        "validation_nll": 0.18363378942012787,
+        "onnx_max_abs_logit_diff": 3.814697265625e-06,
+        "onnx_sha256": "ad6dc2807bd354f344842841bb681f6412a1c7184a3ea6ecc33a76a092a3046f",
+        "weights_sha256": "e303a432fbb7daa395ca82d0add963652572cef1a9a80f1934fc413dd9fb39c7"
+      },
+      {
+        "seed": 44,
+        "best_epoch": 6,
+        "validation_macro_f1": 0.910382136415468,
+        "validation_nll": 0.1947411745786667,
+        "onnx_max_abs_logit_diff": 4.291534423828125e-06,
+        "onnx_sha256": "648a5eb8e8c30183fe833a7a4bc4db8e5be7e9b61894987fecef2dcc5bd7a056",
+        "weights_sha256": "d3b52ffe5ff89d89a27f7c2687aa8860d8df5a37ce8b5c7f87f6e2e6a5be53b6"
+      }
+    ],
+    "torch_version": "2.14.1",
+    "encoder_id": "BAAI/bge-small-en-v1.5:fastembed-0.8.1"
+  },
+  "serving_checks": {
+    "onnx_val": {
+      "class_mismatches": 0,
+      "max_abs_probability_diff": 8.410298846239783e-08
+    },
+    "onnx_test": {
+      "class_mismatches": 0,
+      "max_abs_probability_diff": 3.961138206332038e-08
+    },
+    "live_test": {
+      "rows": 1008,
+      "class_mismatches": 0,
+      "max_abs_probability_diff": 3.1560223464954795e-05,
+      "tolerance": 0.001
+    }
+  },
+  "golden": {
+    "tolerance": 0.001,
+    "vectors": [
+      {
+        "text": "I prefer morning meetings.",
+        "class": "high",
+        "probabilities": [
+          0.00024651108205076417,
+          0.014108731537734278,
+          0.9856447573802151
+        ]
+      },
+      {
+        "text": "My name is Joseph.",
+        "class": "high",
+        "probabilities": [
+          2.4584732014247236e-05,
+          0.0005523760737547515,
+          0.9994230391942309
+        ]
+      },
+      {
+        "text": "I went to the office yesterday.",
+        "class": "low",
+        "probabilities": [
+          0.9993277585448286,
+          0.00035921072475561403,
+          0.00031303073041579485
+        ]
+      },
+      {
+        "text": "Remind me to back up the laptop every Friday.",
+        "class": "high",
+        "probabilities": [
+          0.00015247713497130256,
+          0.030810980428214424,
+          0.9690365424368143
+        ]
+      },
+      {
+        "text": "Never include peanuts in my meals.",
+        "class": "mid",
+        "probabilities": [
+          0.0007790869778684456,
+          0.7427697041716693,
+          0.2564512088504623
+        ]
+      },
+      {
+        "text": "The weather is nice today.",
+        "class": "mid",
+        "probabilities": [
+          0.0002190427264503528,
+          0.9662538324044294,
+          0.03352712486912035
+        ]
+      },
+      {
+        "text": "hello",
+        "class": "high",
+        "probabilities": [
+          0.0009756419817074502,
+          0.5141995012856404,
+          0.4848248567326522
+        ]
+      },
+      {
+        "text": "Sure, here is a summary of the article you asked about.",
+        "class": "high",
+        "probabilities": [
+          0.0004993054324983169,
+          0.2700641153426915,
+          0.7294365792248101
+        ]
+      }
+    ]
+  },
+  "artifact": {
+    "dir": "artifacts/importance_ensemble",
+    "files": {
+      "xgboost.ubj": "820baa7875ea0325aff79dd2caa7f4f3dfa17e9cf0d7da3aee259fb57bf89feb",
+      "deep_seed_42.onnx": "7a1703ba8d88a54ceed9ef0d16dd6899a3a14ea391efaf1ce17443a2e9b83f88",
+      "deep_seed_43.onnx": "ad6dc2807bd354f344842841bb681f6412a1c7184a3ea6ecc33a76a092a3046f",
+      "deep_seed_44.onnx": "648a5eb8e8c30183fe833a7a4bc4db8e5be7e9b61894987fecef2dcc5bd7a056"
+    },
+    "metadata_sha256": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551"
+  },
+  "versions": {
+    "numpy": "2.5.3",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "onnxruntime": "1.30.0",
+    "fastembed": "0.8.1"
+  },
+  "caveats": [
+    "csv5k is AI-generated: template sentences with synthetic importance scores, not human ratings.",
+    "The test split has 1,008 rows but only 86 distinct sentences; the sentence-bootstrap interval is the honest one.",
+    "The 0.4 / 0.7 bin edges are a modelling choice.",
+    "csv5k sentences are short (at most 13 words); conversation turns are much longer, so serving runs far outside the training distribution. The system's 25 % model weight is a fixed choice, not tuned; this is a reason to keep it small.",
+    "Validation chose the temperatures, blend weight and class weights; only the test numbers are unbiased."
+  ]
+}

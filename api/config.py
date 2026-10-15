@@ -6,6 +6,7 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from main.ensemble import selected_scorer
 from main.retrieval.rag import options_from_env
 
 
@@ -22,6 +23,7 @@ class Settings:
     ann_exact_threshold: int = 5000
     candidate_pool: int | None = None
     model_threads: int | None = None
+    scorer: str = "hybrid"   # importance scorer: hybrid (default) or heuristic
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -46,6 +48,7 @@ class Settings:
             access_token_minutes=minutes,
             cors_origins=origins,
             log_level=os.getenv("COGNIMEM_LOG_LEVEL", "INFO").upper(),
+            scorer=selected_scorer(os.getenv("COGNIMEM_SCORER")),
             **retrieval,
         )
 
@@ -59,4 +62,5 @@ class Settings:
             cors_origins=(),
             ann_enabled=True,
             ann_exact_threshold=8,
+            scorer="heuristic",   # hermetic: no model files or BGE download in unit tests
         )

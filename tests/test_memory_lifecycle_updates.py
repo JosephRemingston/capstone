@@ -17,7 +17,7 @@ NOW = datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc)
 
 
 def process(text, user='u', timestamp=NOW, **metadata):
-    return MemoryCore().process(MemoryInput(content=text, user_id=user, session_id='s',
+    return MemoryCore.with_heuristic().process(MemoryInput(content=text, user_id=user, session_id='s',
                                            timestamp=timestamp, metadata=metadata))
 
 
@@ -135,7 +135,7 @@ class TaskUpdateTests(unittest.TestCase):
         invoice = self.store.ingest(process('Send the invoice tomorrow'))
         incoming = MemoryInput(content="I submitted the report, but I haven't sent the invoice.",
                                user_id='u', session_id='s', timestamp=NOW)
-        records = MemoryCore().process_many(incoming)
+        records = MemoryCore.with_heuristic().process_many(incoming)
         self.assertEqual(len(records), 2)
         for record in records:
             self.store.ingest(record)
@@ -180,7 +180,7 @@ class LifecycleVisibilityTests(unittest.TestCase):
 
 class SegmentationTests(unittest.TestCase):
     def test_multiple_intents_and_no_split_for_list_or_procedure(self):
-        core = MemoryCore()
+        core = MemoryCore.with_heuristic()
         incoming = MemoryInput(content='I prefer Python, and remind me to call Alex tomorrow.', user_id='u', session_id='s')
         records = core.process_many(incoming)
         self.assertEqual([r.category.value for r in records], ['preference', 'task'])
@@ -198,13 +198,13 @@ class SegmentationTests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 status = cli_main(['--store', store, 'process', 'I prefer Python, and remind me to submit the report tomorrow.',
-                                   '--user-id', 'u', '--session-id', 's', '--split'])
+                                   '--user-id', 'u', '--session-id', 's', '--split', '--scorer', 'heuristic'])
             self.assertEqual(status, 0)
             records = json.loads(output.getvalue())
             self.assertEqual(len(records), 2)
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(cli_main(['--store', store, 'process', 'I submitted the report.',
-                                          '--user-id', 'u', '--session-id', 's']), 0)
+                                          '--user-id', 'u', '--session-id', 's', '--scorer', 'heuristic']), 0)
             self.assertEqual(LocalMemoryStore(store).get(records[1]['id']).task_status, 'completed')
 
 

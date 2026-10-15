@@ -41,7 +41,7 @@ class MemoryClassifierTests(unittest.TestCase):
 
 class ScoringAndLifecycleTests(unittest.TestCase):
     def test_durable_memory_scores_higher_than_greeting(self) -> None:
-        core = MemoryCore()
+        core = MemoryCore.with_heuristic()
         preference = core.process(
             MemoryInput(
                 content="I prefer Python examples with clear tests.",
@@ -101,7 +101,7 @@ class ScoringAndLifecycleTests(unittest.TestCase):
 
 class SerializationTests(unittest.TestCase):
     def test_memory_record_serializes_stably(self) -> None:
-        core = MemoryCore()
+        core = MemoryCore.with_heuristic()
         record = core.process(
             MemoryInput(
                 content="I like retrieval systems that combine ranking signals.",
@@ -121,7 +121,7 @@ class SerializationTests(unittest.TestCase):
 
 class GraphIsolationTests(unittest.TestCase):
     def test_memory_core_does_not_require_graph_modules(self) -> None:
-        core = MemoryCore()
+        core = MemoryCore.with_heuristic()
         record = core.process(MemoryInput(content="My project title is CogniMem.", user_id="u1", session_id="s1"))
 
         self.assertEqual(record.category, MemoryCategory.SEMANTIC)

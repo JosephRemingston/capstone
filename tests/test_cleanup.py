@@ -181,7 +181,7 @@ class CleanupFailureTests(CleanupFixture):
         first = NOW - timedelta(days=30)
         second = NOW - timedelta(days=20)
         for when, text in ((first, 'Alice reports to Bob'), (second, 'Alice reports to Carol')):
-            record = MemoryCore().process(MemoryInput(text, 'u', 's', timestamp=when))
+            record = MemoryCore.with_heuristic().process(MemoryInput(text, 'u', 's', timestamp=when))
             record.expires_at = None
             with patch('main.storage.store.utc_now', return_value=when):
                 self.store.ingest(record)

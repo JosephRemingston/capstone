@@ -15,7 +15,7 @@ NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 class QualityImprovementTests(unittest.TestCase):
     def process(self, text, **metadata):
-        return MemoryCore().process(MemoryInput(
+        return MemoryCore.with_heuristic().process(MemoryInput(
             content=text, user_id='u', session_id='s', timestamp=NOW, metadata=metadata))
 
     def test_useful_conversational_fact_is_retained(self):
@@ -29,14 +29,14 @@ class QualityImprovementTests(unittest.TestCase):
         self.assertNotIn('joseph@example.com', record.content)
         self.assertNotIn('abcdefghijklmnop', record.content)
         self.assertEqual(record.source_metadata['privacy']['types'], ['api_key', 'email'])
-        parts = MemoryCore().process_many(MemoryInput(
+        parts = MemoryCore.with_heuristic().process_many(MemoryInput(
             content='Email me at joseph@example.com. I live in Chennai.',
             user_id='u', session_id='s', timestamp=NOW))
         self.assertTrue(parts)
         self.assertTrue(all('joseph@example.com' not in str(part.source_metadata) for part in parts))
 
     def test_multi_sentence_conflict_can_be_processed_as_independent_observations(self):
-        core = MemoryCore()
+        core = MemoryCore.with_heuristic()
         incoming = MemoryInput(content='I live in Chennai. I live in Bengaluru.',
                                user_id='u', session_id='s', timestamp=NOW)
         records = core.process_many(incoming)
@@ -63,7 +63,7 @@ class QualityImprovementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = LocalMemoryStore(Path(directory) / 'store.jsonl')
             first = self.process('We use Python for data processing.')
-            second = MemoryCore().process(MemoryInput(
+            second = MemoryCore.with_heuristic().process(MemoryInput(
                 content='Our team uses Python for data processing.', user_id='u', session_id='s2',
                 timestamp=NOW + timedelta(minutes=1)))
             store.ingest(first)

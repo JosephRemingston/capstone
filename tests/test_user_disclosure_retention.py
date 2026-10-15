@@ -2,6 +2,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
+from evaluation.clock import pinned_clock
 from main import MemoryCore, MemoryInput
 from main.domain.classification import MemoryClassifier
 from main.domain.text_rules import phatic, self_disclosure
@@ -10,10 +11,14 @@ NOW = datetime(2026, 10, 12, 9, tzinfo=timezone.utc)
 
 
 def process(text, role='user'):
-    return MemoryCore().process(MemoryInput(text, 'u', 's', role=role, timestamp=NOW))
+    return MemoryCore.with_heuristic().process(MemoryInput(text, 'u', 's', role=role, timestamp=NOW))
 
 
 class UserDisclosureRetentionTests(unittest.TestCase):
+    def setUp(self):
+        # The heuristic's recency feature reads the clock; score "at" NOW, as production scores a new memory.
+        self.enterContext(pinned_clock(NOW))
+
     def test_first_person_content_inside_questions_and_hedges_is_kept(self):
         for text in ["I'm planning a trip to Lisbon in May, can you suggest neighbourhoods?",
                      'I have a golden retriever who hates baths, any tips?',
@@ -60,7 +65,7 @@ class UserDisclosureRetentionTests(unittest.TestCase):
         self.assertEqual(episode.expires_at, NOW + timedelta(days=14))
 
     def test_explicit_relations_still_become_long_term_semantic_facts(self):
-        record = MemoryCore().process(MemoryInput(
+        record = MemoryCore.with_heuristic().process(MemoryInput(
             "I'm at Acme now, can you update my profile?", 'u', 's', timestamp=NOW,
             metadata={'entities': [{'id': 'org:acme', 'type': 'organization', 'label': 'Acme'}],
                       'relations': [{'subject': 'self', 'predicate': 'works_at', 'object': 'org:acme'}]}))
@@ -83,6 +88,9 @@ class UserDisclosureRetentionTests(unittest.TestCase):
 
 
 class ReviewFixTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(pinned_clock(NOW))
+
     def test_recall_questions_are_not_new_disclosures(self):
         for text in ["What was my dog's name again?", 'Wait, what is my dog called?']:
             with self.subTest(text=text):

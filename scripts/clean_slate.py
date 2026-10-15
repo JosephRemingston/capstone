@@ -16,16 +16,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Directories or files removed outright (relative to ROOT).
 TARGETS = (
-    'artifacts/importance',
-    'artifacts/importance_neural',
-    'artifacts/importance_neural_shallow',
+    'artifacts/ensemble_training',
     'data/rag/models',
     'data/evaluation/locomo',
     'data/evaluation/longmemeval',
     'data/evaluation/babi',
     'data/evaluation/personalization',
     'data/evaluation/retrieval_training',
-    'data/personal_facts_msc',
     'data/halumem',
     'data/hippocorpus',
     'docs/reports',
@@ -46,6 +43,7 @@ PROTECTED = (
     'reviews',
     'static',
     'PROJECT_VISION.md',
+    'artifacts/importance_ensemble',   # the tracked default importance model
 )
 
 

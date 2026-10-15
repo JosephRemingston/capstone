@@ -11,6 +11,9 @@ import tempfile
 from .locking import store_lock
 from ..domain.models import utc_now
 
+# Balanced cleanup archives (keeps) an expired record at or above this importance instead of deleting it.
+ARCHIVE_IMPORTANCE = 0.65
+
 
 def atomic_write(path, payload):
     """Stage alongside target, fsync data, replace atomically, fsync directory."""
@@ -91,7 +94,7 @@ def plan(store, *, user_id, now=None, grace_days=7, retention_policy='balanced')
     archived = {key for key, record in latest.items() if record.user_id == user_id
                 and record.expires_at is not None and record.expires_at <= cutoff
                 and retention_policy == 'balanced'
-                and (record.importance_score >= .65
+                and (record.importance_score >= ARCHIVE_IMPORTANCE
                      or record.category.value in {'semantic', 'preference', 'procedural'}
                      or bool(record.source_metadata.get('privacy', {}).get('redacted')))}
     eligible = {key for key, record in latest.items() if record.user_id == user_id

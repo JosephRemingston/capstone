@@ -21,6 +21,7 @@ from unittest.mock import patch
 
 from main.application.core import MemoryCore
 from main.domain.models import MemoryInput
+from main.ensemble import CLASS_ORDER, HybridImportanceScorer, describe_scorer, model_inputs
 from main.storage.cleanup import cleanup
 from main.storage.store import LocalMemoryStore
 
@@ -46,7 +47,7 @@ def replay(row: dict) -> dict:
     asked = parse_date(row['question_date'])
     sessions = sorted(zip(row['haystack_dates'], row['haystack_session_ids'], row['haystack_sessions']),
                       key=lambda item: parse_date(item[0]))
-    gold, ingested = set(), []
+    gold, ingested, turn_scores = set(), [], []
     with TemporaryDirectory() as directory:
         store = LocalMemoryStore(Path(directory) / 'records.jsonl')
         for date, session_id, turns in sessions:
@@ -64,6 +65,11 @@ def replay(row: dict) -> dict:
                     record.id = identifier
                     store.ingest(record)
                 ingested.append(identifier)
+                stamp = record.source_metadata.get('importance_model') or {}
+                turn_scores.append({'role': turn['role'], 'gold': bool(turn.get('has_answer')), 'score': record.importance_score,
+                                    'heuristic_score': stamp.get('heuristic_score', record.importance_score),
+                                    'model_score': stamp.get('model_score'), 'model_class': stamp.get('model_class'),
+                                    'content': record.content})
         visible = store.list(user_id=owner, now=asked)
         retained = {record.id for record in visible} | {key for record in visible for key in record.evidence_ids}
         bytes_before = store.path.stat().st_size if store.path.exists() else 0
@@ -78,9 +84,11 @@ def replay(row: dict) -> dict:
             'missing_gold_turns': sorted(gold - retained),
             'cleanup_preserved_visible_state': [r.to_dict() for r in after] == [r.to_dict() for r in visible],
             'cleanup_removed_memories': cleaned['removed_memories'],
+            'cleanup_archived_memories': len(cleaned['archived_ids']),
             'bytes_before_cleanup': bytes_before, 'bytes_after_cleanup': cleaned['bytes_after'],
             'superseded': sum(r.memory_status == 'superseded' for r in all_records),
-            'consolidated': sum(r.memory_status == 'consolidated' for r in all_records)}
+            'consolidated': sum(r.memory_status == 'consolidated' for r in all_records),
+            'turn_scores': turn_scores}
 
 
 def summarize(results: list[dict]) -> dict:
@@ -93,6 +101,36 @@ def summarize(results: list[dict]) -> dict:
                          'memory_retention': statistics.fmean(r['memory_retention'] for r in labelled) if labelled else None,
                          'mean_visible_fraction': statistics.fmean(r['visible_fraction'] for r in selected) if selected else None}
     return summary
+
+
+def diagnostics(turns: list[dict], scorer) -> dict:
+    """Does the score separate answer-bearing turns from the rest? AUC per role for every score the run recorded,
+    the model's class shares, and (hybrid) how often a turn's numeric model inputs sit beyond 5 training SDs."""
+    from sklearn.metrics import roc_auc_score
+    import numpy as np
+    out = {}
+    for role in ('user', 'assistant', 'all'):
+        selected = [t for t in turns if role == 'all' or t['role'] == role]
+        gold = [t['gold'] for t in selected]
+        entry = {'turns': len(selected), 'answer_bearing': sum(gold)}
+        if 0 < sum(gold) < len(selected):
+            for key in ('score', 'heuristic_score', 'model_score'):
+                values = [t[key] for t in selected]
+                if all(value is not None for value in values):
+                    entry[f'auc_{key}'] = float(roc_auc_score(gold, values))
+        classes = [t['model_class'] for t in selected if t['model_class']]
+        if classes:
+            entry['model_class_share'] = {name: classes.count(name) / len(classes) for name in CLASS_ORDER}
+        out[role] = entry
+    if isinstance(scorer, HybridImportanceScorer):
+        neural = scorer.model.metadata['neural']
+        mean, scale = np.asarray(neural['numeric_mean'], np.float32), np.asarray(neural['numeric_scale'], np.float32)
+        z = np.abs((model_inputs([t['content'] for t in turns])[2] - mean) / scale).max(axis=1)
+        roles = np.asarray([t['role'] for t in turns])
+        for role in ('user', 'assistant', 'all'):
+            mask = np.ones(len(turns), bool) if role == 'all' else roles == role
+            out[role]['numeric_inputs_beyond_5_sd_share'] = float((z[mask] > 5).mean()) if mask.any() else None
+    return out
 
 
 def main() -> None:
@@ -114,16 +152,21 @@ def main() -> None:
     rows = json.loads(payload)[:args.limit]
     excluded = [r['question_id'] for r in rows if not chronology_valid(r)]
     results = [replay(r) for r in rows if chronology_valid(r)]
+    turns = [turn for r in results for turn in r.pop('turn_scores')]
+    scorer = MemoryCore().importance_scorer
     report = {'dataset': SOURCE, 'revision': REVISION, 'sha256': SHA256,
               'protocol': ('All oracle examples; original timestamps; has_answer used only for scoring; no model is '
                            'fitted here, but the self-disclosure retention rule was designed against LongMemEval failures.'),
+              'importance_model': describe_scorer(scorer),
               'chronology_exclusions': {'count': len(excluded), 'question_ids': excluded},
               'summary': summarize(results),
               'cleanup': {'examples': len(results),
                           'visible_state_preserved': sum(r['cleanup_preserved_visible_state'] for r in results),
                           'removed_memories': sum(r['cleanup_removed_memories'] for r in results),
+                          'archived_memories': sum(r['cleanup_archived_memories'] for r in results),
                           'bytes_before': sum(r['bytes_before_cleanup'] for r in results),
                           'bytes_after': sum(r['bytes_after_cleanup'] for r in results)},
+              'diagnostics': diagnostics(turns, scorer),
               'results': results}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')

@@ -1,14 +1,11 @@
 {
-  "xgboost_macro_f1": 0.611397113740403,
-  "xgboost_accuracy": 0.6924460431654677,
-  "majority_macro_f1": 0.27023172905525844,
-  "xgboost_invalid_recall": 0.5058823529411764,
-  "deep_macro_f1": 0.6732402444135618,
-  "deep_accuracy": 0.7805755395683454,
-  "deep_ece": 0.016321375966072086,
-  "deep_invalid_recall": 0.4235294117647059,
-  "shallow_macro_f1": 0.6504368564420785,
-  "shallow_accuracy": 0.7805755395683454,
-  "shallow_ece": 0.04284322058125368,
-  "shallow_invalid_recall": 0.3176470588235294
+  "ensemble_macro_f1": 0.8911851990482047,
+  "ensemble_accuracy": 0.8908730158730159,
+  "ensemble_balanced_accuracy": 0.8713553603259485,
+  "ensemble_sentence_ci95_low": 0.8091471048623347,
+  "ensemble_sentence_ci95_high": 0.9490558154441475,
+  "majority_macro_f1": 0.2528735632183908,
+  "oracle_macro_f1": 0.9229949650329209,
+  "test_rows": 1008,
+  "test_sentences": 86
 }

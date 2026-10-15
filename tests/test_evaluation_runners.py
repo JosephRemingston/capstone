@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from evaluation import ablation, classification, lifecycle, locomo, retention
 from evaluation.schema import DATASET_PATH, GOLD_USER
@@ -57,6 +59,9 @@ class LocomoRunnerTests(unittest.TestCase):
         self.assertIsNone(locomo.score(['a'], ['a'], None)['pool_hit'])
 
 
+# The runners build MemoryCore() themselves; these tests check the runners on the heuristic scorer
+# (tests/test_hybrid_importance.py runs the lifecycle checks on the default hybrid scorer).
+@patch.dict(os.environ, {'COGNIMEM_SCORER': 'heuristic'})
 class RetentionRunnerTests(unittest.TestCase):
     ROW = {'question_id': 'q1', 'question_type': 'knowledge-update', 'question': 'Where do I live?',
            'question_date': '2023/06/01 (Thu) 10:00', 'haystack_dates': ['2023/05/01 (Mon) 09:00'],
@@ -77,6 +82,7 @@ class RetentionRunnerTests(unittest.TestCase):
             retention.replay(future)
 
 
+@patch.dict(os.environ, {'COGNIMEM_SCORER': 'heuristic'})
 class SmallRunnerTests(unittest.TestCase):
     def test_lifecycle_checks_all_pass(self):
         report = lifecycle.evaluate()

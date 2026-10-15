@@ -1,7 +1,7 @@
 """Render human-readable reports from the saved JSON results.
 
     python -m evaluation.report                  # docs/reports/SUMMARY.md and summary.json
-    python -m evaluation.report --retention-only # evaluation/reports/*.md from the training JSON
+    python -m evaluation.report --retention-only # only evaluation/reports/retention_summary.json
 
 Every number comes from a saved JSON report; nothing is recomputed or typed by hand.
 """
@@ -13,7 +13,6 @@ from pathlib import Path
 
 REPORTS = Path('docs/reports')
 TRAINING = Path('evaluation/reports')
-CLASSES = ('invalid', 'short_term', 'long_term')
 
 
 def load(path: Path):
@@ -28,83 +27,19 @@ def num(value, digits=4) -> str:
     return '—' if value is None else f'{value:.{digits}f}'
 
 
-def class_tables(metrics: dict) -> list[str]:
-    lines = ['| Gold class | Support | Precision | Recall | F1 |', '| --- | ---: | ---: | ---: | ---: |']
-    for name in CLASSES:
-        item = metrics['per_class'][name]
-        lines.append(f"| {name} | {item['support']} | {num(item['precision'])} | {num(item['recall'])} | {num(item['f1'])} |")
-    lines += ['', '| Gold \\ predicted | ' + ' | '.join(CLASSES) + ' |', '| --- | ---: | ---: | ---: |']
-    for name, row in zip(CLASSES, metrics['confusion_matrix']):
-        lines.append(f'| {name} | ' + ' | '.join(str(v) for v in row) + ' |')
-    return lines
-
-
-def render_xgboost(report: dict) -> str:
-    test, base = report['test'], report['majority_baseline']
-    lines = ['# XGBoost conversational retention model', '',
-             f"Dataset: {report['dataset']}. Target: {report['target']}. Model selection: {report['selection']}.", '',
-             f"Rows used: {report['dataset_size']['train_used']} train, {report['dataset_size']['test_used']} test "
-             f"({report['dataset_size']['train_omitted']} train row omitted).", '',
-             '## Validation trials', '', '| max_depth | min_child_weight | Best iteration | Macro F1 | Balanced accuracy |',
-             '| ---: | ---: | ---: | ---: | ---: |']
-    for trial in report['validation_trials']:
-        lines.append(f"| {trial['max_depth']} | {trial['min_child_weight']} | {trial['best_iteration']} | "
-                     f"{num(trial['macro_f1'])} | {num(trial['balanced_accuracy'])} |")
-    hyper = report['selected_hyperparameters']
-    lines += ['', f"Selected: max_depth {hyper['max_depth']}, min_child_weight {hyper['min_child_weight']}, "
-              f"{hyper['n_estimators']} trees on refit.", '', '## Published test split', '',
-              '| Metric | XGBoost | Always long-term |', '| --- | ---: | ---: |']
-    for key in ('accuracy', 'balanced_accuracy', 'macro_f1', 'weighted_f1'):
-        lines.append(f'| {key} | {num(test[key])} | {num(base.get(key))} |')
-    lines.append(f"| proxy_mae | {num(test['proxy_mae'])} | — |")
-    lines += [''] + class_tables(test) + ['', 'Reproduce: `python -m training.train_conversational_retention`.']
-    return '\n'.join(lines) + '\n'
-
-
-def render_neural(report: dict, depth: dict | None, *, artifact: str) -> str:
-    test, xgb = report['neural_test'], report['xgboost_test']
-    lines = [f"# Neural conversational retention model ({report['architecture']})", '',
-             f"Dataset: {report['dataset']}. Fit/validation/test: {report['fit_size']}/{report['validation_size']}/"
-             f"{report['test_size']}. Artifact: `{artifact}`.", '',
-             '## Seeds (validation)', '', '| Seed | Best epoch | Macro F1 | NLL |', '| ---: | ---: | ---: | ---: |']
-    for seed in report['seeds']:
-        lines.append(f"| {seed['seed']} | {seed['best_epoch']} | {num(seed['validation_macro_f1'])} | {num(seed['validation_nll'])} |")
-    lines += ['', f"Selected seed {report['selected_seed']}; temperature {num(report['temperature'])} reduced validation "
-              f"NLL from {num(report['validation_nll_before_calibration'])} to {num(report['validation_nll_after_calibration'])}.",
-              '', '## Published test split', '', '| Metric | Neural | XGBoost |', '| --- | ---: | ---: |']
-    for key in ('accuracy', 'balanced_accuracy', 'macro_f1', 'weighted_f1', 'proxy_mae'):
-        lines.append(f'| {key} | {num(test[key])} | {num(xgb[key])} |')
-    lines += [f"| nll | {num(test['nll'])} | — |", f"| ece_10_bins | {num(test['ece_10_bins'])} | — |",
-              f"| warm latency p50 / p95 ms | {num(report['latency_ms']['p50'], 2)} / {num(report['latency_ms']['p95'], 2)} | — |", '']
-    lines += class_tables(test)
-    if depth:
-        lines += ['', '## Depth comparison (train split only)', '', '| Architecture | Parameters | Mean validation macro F1 |',
-                  '| --- | ---: | ---: |']
-        for name, item in depth['results'].items():
-            lines.append(f"| {name} | {item['parameter_count']} | {num(item['mean_validation_macro_f1'])} |")
-    lines += ['', f"Caveat: {report.get('caveat', '')}"]
-    return '\n'.join(lines) + '\n'
-
-
 def render_retention() -> dict:
-    xgb = load(TRAINING / 'conversational_retention.json')
-    deep = load(TRAINING / 'neural_retention.json')
-    shallow = load(TRAINING / 'neural_retention_shallow.json')
-    depth = load(TRAINING / 'neural_depth_validation.json')
+    """Headline numbers of the default importance model from its training report (training/ensemble writes the .md)."""
+    report = load(TRAINING / 'retention_ensemble.json')
     summary = {}
-    if xgb:
-        (TRAINING / 'conversational_retention.md').write_text(render_xgboost(xgb))
-        summary.update(xgboost_macro_f1=xgb['test']['macro_f1'], xgboost_accuracy=xgb['test']['accuracy'],
-                       majority_macro_f1=xgb['majority_baseline']['macro_f1'],
-                       xgboost_invalid_recall=xgb['test']['per_class']['invalid']['recall'])
-    for name, report, artifact in (('deep', deep, 'artifacts/importance_neural'),
-                                   ('shallow', shallow, 'artifacts/importance_neural_shallow')):
-        if report:
-            out = 'neural_retention.md' if name == 'deep' else 'neural_retention_shallow.md'
-            (TRAINING / out).write_text(render_neural(report, depth, artifact=artifact))
-            test = report['neural_test']
-            summary.update({f'{name}_macro_f1': test['macro_f1'], f'{name}_accuracy': test['accuracy'],
-                            f'{name}_ece': test['ece_10_bins'], f'{name}_invalid_recall': test['per_class']['invalid']['recall']})
+    if report:
+        model = report['ensemble_thresholds']
+        summary = {'ensemble_macro_f1': model['test']['macro_f1'], 'ensemble_accuracy': model['test']['accuracy'],
+                   'ensemble_balanced_accuracy': model['test']['balanced_accuracy'],
+                   'ensemble_sentence_ci95_low': model['sentence_ci95'][0], 'ensemble_sentence_ci95_high': model['sentence_ci95'][1],
+                   'majority_macro_f1': report['majority']['test']['macro_f1'],
+                   'oracle_macro_f1': report['oracle']['test']['macro_f1'],
+                   'test_rows': sum(report['dataset']['class_counts']['test'].values()),
+                   'test_sentences': report['dataset']['split_sentences']['test']}
     (TRAINING / 'retention_summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     return summary
 
@@ -151,16 +86,32 @@ def collect(reports: Path = REPORTS) -> dict:
     if retention:
         sections['longmemeval'] = {kind: {k: v for k, v in item.items()} for kind, item in retention['summary'].items()}
         sections['longmemeval']['_cleanup'] = retention['cleanup']
+        if retention.get('diagnostics'):
+            sections['longmemeval']['_diagnostics'] = retention['diagnostics']
+    sections['_scorers'] = {name: report.get('importance_model') for name, report in (
+        ('longmemeval', retention), ('classification', load(reports / 'conversational_evaluation.json')),
+        ('lifecycle', load(reports / 'lifecycle.json'))) if report}
     classification = load(reports / 'conversational_evaluation.json')
     if classification:
         sections['classification'] = {k: classification[k] for k in ('cases', 'category_accuracy', 'category_macro_f1',
                                                                       'tier_accuracy', 'importance_range_agreement')}
+        if classification.get('importance_range_baselines'):
+            sections['classification']['_range_baselines'] = classification['importance_range_baselines']
     lifecycle = load(reports / 'lifecycle.json')
     if lifecycle:
         sections['lifecycle'] = {'checks': lifecycle['checks'], 'passed': lifecycle['passed']}
-    models = load(TRAINING / 'retention_summary.json')
-    if models:
-        sections['retention_models'] = models
+    # Numeric protocol markers, so report_delta warns when two snapshots used different scorers or clock handling.
+    # Reports written before 16 Oct 2026 store importance_model as a string (or not at all): heuristic, clock unpinned.
+    for name, report in (('longmemeval', retention), ('classification', classification), ('lifecycle', lifecycle)):
+        if report and name in sections:
+            stamp = report.get('importance_model')
+            protocol = {'hybrid_scorer': int(isinstance(stamp, dict) and stamp.get('type') == 'hybrid')}
+            if name != 'longmemeval':   # LongMemEval has always pinned its clock
+                protocol['clock_pinned'] = int(isinstance(stamp, dict))
+            sections[name]['_protocol'] = protocol
+    model = load(TRAINING / 'retention_summary.json')
+    if model:
+        sections['importance_model'] = model
     flat = {}
     flatten('', sections, flat)
     return {'sections': sections, 'flat': flat}
@@ -216,14 +167,18 @@ def render_summary(data: dict) -> str:
                   f"importance-range agreement {pct(c['importance_range_agreement'])}.", '']
     if 'lifecycle' in s:
         lines += [f"Lifecycle checks: {s['lifecycle']['passed']}/{s['lifecycle']['checks']} passed.", '']
-    if 'retention_models' in s:
-        m = s['retention_models']
-        lines += ['## Retention models (published test split)', '', '| Model | Macro F1 | Accuracy | Invalid recall |',
-                  '| --- | ---: | ---: | ---: |',
-                  f"| XGBoost | {num(m.get('xgboost_macro_f1'))} | {num(m.get('xgboost_accuracy'))} | {num(m.get('xgboost_invalid_recall'))} |",
-                  f"| Neural (deep) | {num(m.get('deep_macro_f1'))} | {num(m.get('deep_accuracy'))} | {num(m.get('deep_invalid_recall'))} |",
-                  f"| Neural (shallow) | {num(m.get('shallow_macro_f1'))} | {num(m.get('shallow_accuracy'))} | {num(m.get('shallow_invalid_recall'))} |",
-                  f"| Always long-term | {num(m.get('majority_macro_f1'))} | — | 0 |", '']
+    if s.get('_scorers'):
+        describe = lambda stamp: stamp.get('type', 'unrecorded') if isinstance(stamp, dict) else (stamp or 'unrecorded')
+        lines += ['Importance scorer per run: ' + '; '.join(
+            f"{name} {describe(stamp)}" for name, stamp in s['_scorers'].items()) + '.', '']
+    if 'importance_model' in s:
+        m = s['importance_model']
+        lines += ['## Importance model (csv5k test split)', '', '| Model | Macro F1 | Sentence CI | Accuracy | Balanced accuracy |',
+                  '| --- | ---: | --- | ---: | ---: |',
+                  f"| Ensemble + thresholds | {num(m.get('ensemble_macro_f1'))} | [{num(m.get('ensemble_sentence_ci95_low'), 3)}, "
+                  f"{num(m.get('ensemble_sentence_ci95_high'), 3)}] | {pct(m.get('ensemble_accuracy'))} | {pct(m.get('ensemble_balanced_accuracy'))} |",
+                  f"| Always the most common class | {num(m.get('majority_macro_f1'))} | — | — | — |",
+                  f"| Best possible (oracle) | {num(m.get('oracle_macro_f1'))} | — | — | — |", '']
     return '\n'.join(lines)
 
 
@@ -237,10 +192,11 @@ def main() -> None:
         print(json.dumps(summary, indent=2))
         return
     data = collect(args.reports)
+    markdown = render_summary(data)   # render first: a failure must not leave a half-written snapshot behind
     args.reports.mkdir(parents=True, exist_ok=True)
     (args.reports / 'summary.json').write_text(json.dumps(data, indent=2) + '\n')
-    (args.reports / 'SUMMARY.md').write_text(render_summary(data))
-    print(render_summary(data))
+    (args.reports / 'SUMMARY.md').write_text(markdown)
+    print(markdown)
 
 
 if __name__ == '__main__':

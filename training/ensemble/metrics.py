@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.metrics import (accuracy_score, balanced_accuracy_score, confusion_matrix, f1_score, log_loss,
-                             mean_absolute_error, precision_recall_fscore_support)
+                             precision_recall_fscore_support)
 
-SCORE_VALUES = (0.0, 0.5, 1.0)   # MSC retention proxy, main/neural.py:16
 N_CLASSES = 3
 
 
 def classification_metrics(y, pred, *, class_names) -> dict:
-    # body of training/train_conversational_retention.py:92-105 with the class names parameterised
     y, pred = np.asarray(y), np.asarray(pred)
     precision, recall, f1, support = precision_recall_fscore_support(
         y, pred, labels=[0, 1, 2], zero_division=0
@@ -34,7 +32,7 @@ def nll(y, probs) -> float:
 
 
 def ece(labels, probs, bins=10) -> float:
-    # copy of training/train_neural_retention.py:68-76
+    """Expected calibration error with equal-width confidence bins."""
     labels, probs = np.asarray(labels), np.asarray(probs)
     confidence = probs.max(axis=1)
     correct = (probs.argmax(axis=1) == labels).astype(float)
@@ -46,20 +44,12 @@ def ece(labels, probs, bins=10) -> float:
                           else confidence < edges[i + 1])).any()))
 
 
-def proxy_mae(y, probs, score_values=SCORE_VALUES) -> float:
-    # training/train_conversational_retention.py:156-158 (MSC only)
-    values = np.asarray(score_values, dtype=np.float64)
-    return float(mean_absolute_error(values[np.asarray(y)], np.asarray(probs, dtype=np.float64) @ values))
-
-
-def full_metrics(y, probs, class_names, *, include_proxy: bool = False) -> dict:
-    """Argmax classification metrics plus nll / ece_10_bins (and proxy_mae for MSC)."""
+def full_metrics(y, probs, class_names) -> dict:
+    """Argmax classification metrics plus nll / ece_10_bins."""
     probs = np.asarray(probs, dtype=np.float64)
     result = classification_metrics(y, probs.argmax(axis=1), class_names=class_names)
     result["nll"] = nll(y, probs)
     result["ece_10_bins"] = ece(y, probs)
-    if include_proxy:
-        result["proxy_mae"] = proxy_mae(y, probs)
     return result
 
 

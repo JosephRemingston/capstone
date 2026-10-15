@@ -44,15 +44,38 @@ entries are exactly what a product call with `limit=K` returns.
 | `python -m evaluation.retention [--download]` | LongMemEval answer-turn retention through the full pipeline, plus cleanup safety | `docs/reports/longmemeval_retention.json` |
 | `python -m evaluation.classification` | 60 category/tier/importance cases | `docs/reports/conversational_evaluation.json` |
 | `python -m evaluation.lifecycle` | 16 deterministic lifecycle, task, and supersession checks | `docs/reports/lifecycle.json` |
-| `python -m evaluation.report [--retention-only]` | Renders `SUMMARY.md` and the retention-model markdown from JSON | `docs/reports/SUMMARY.md`, `evaluation/reports/*.md` |
+| `python -m evaluation.report [--retention-only]` | Renders `SUMMARY.md` and `summary.json` from the saved JSON and summarises the importance model from `evaluation/reports/retention_ensemble.json`; `--retention-only` only rewrites `retention_summary.json` | `docs/reports/SUMMARY.md`, `docs/reports/summary.json`, `evaluation/reports/retention_summary.json` |
 
-## Experiments
+## Importance model
 
-`python -m training.experiments.run_all` trains the XGBoost retention model and both frozen-BGE heads on three
-datasets separately: the two importance-score CSVs (binned at 0.4 / 0.7, split by sentence) and the pinned MSC
-parquet. It also runs seed-averaged heads, an XGBoost + neural ensemble and per-class thresholds, all tuned on
-validation only. Working files go to the git-ignored `artifacts/experiments/`; the summary is
-`evaluation/reports/experiments/retention_datasets.{json,md}`. The shipped artifacts and reports are not touched.
+`python -m training.ensemble.run` trains the model half of the default hybrid importance scorer: the csv5k
+"Ensemble + thresholds" (XGBoost blended with three seeds of a deep head on frozen BGE embeddings, with temperatures,
+blend weight and class weights chosen on validation only). It reads `data/experiments/csv5k.csv`, writes the
+tracked serving artifact `artifacts/importance_ensemble/` and the tracked report
+`evaluation/reports/retention_ensemble.{json,md}`, and keeps working files in the git-ignored
+`artifacts/ensemble_training/`. On a fresh clone that CSV is missing and the bare command fails; the first run
+needs `python -m training.ensemble.run --csv /path/to/cognimem_memory_importance_5000.csv`, which copies it to the
+git-ignored `data/experiments/csv5k.csv` (later runs need no flag). Training reproduces the model files bit for
+bit (`xgboost.ubj` and the three ONNX files, whose SHA-256 values are listed under `files` in `metadata.json`);
+`metadata.json` itself carries a `created_at` timestamp, so its hash (`model_sha256` in provenance and
+`/health/ready`) changes on every retrain. On the synthetic csv5k test split
+(1,008 rows, 86 sentences) it reaches macro F1 0.8912 against 0.2529 for always the most common class.
+
+- `measure_all.py --scorer-steps-only` runs only retention, classification and lifecycle plus the summary, the
+  steps that use the scorer; the ablation and LoCoMo never call it. `--scorer hybrid|heuristic` sets
+  `COGNIMEM_SCORER` for every step (default: the environment, else `hybrid`) and the manifest records it.
+- Every scorer-dependent runner records which scorer ran (`importance_model` in its report). The classification
+  and lifecycle runners pin the clock (`evaluation/clock.py`), so their results do not depend on the day.
+- `report_delta.py` also compares cleanup counts (`longmemeval._cleanup.*`). Compare memory counts, not bytes:
+  every record now carries its scorer stamp (about 40 bytes for the heuristic, about 300 more for the hybrid),
+  so byte totals differ even when cleanup removes the same memories.
+- Summaries carry `_protocol.hybrid_scorer` and `_protocol.clock_pinned` markers, so `report_delta.py` warns when
+  two snapshots used different scorers or clock handling; isolate a scorer's effect against a same-day run such as
+  `heuristic_control`, not against `final`.
+- System-level result (16 Oct 2026, snapshots `hybrid` and `heuristic_control`): LongMemEval user-fact retention
+  is 90.55% with either scorer, category and tier accuracy (53.3% / 56.7%) and the lifecycle checks (16/16) match,
+  the model's score does not separate answer-bearing turns (AUC 0.482 vs 0.582 for the heuristic), and the replay
+  takes 581 s instead of 14 s; see [Importance scoring (default)](../README.md#importance-scoring-default).
 
 ## The benchmark
 
@@ -105,9 +128,19 @@ extractive generator, which can measure grounding and abstention but not fluent 
   covers the other seven.
 - The retention-classifier change was designed against LongMemEval failures (dev examples),
   then confirmed once on held-out examples.
+- The importance model's temperatures, blend weight and class weights were chosen on the csv5k
+  validation split (grouped by sentence); its reported numbers are from the test split.
 
 ## Limits
 
 All benchmark labels are AI-authored and unreviewed. LoCoMo is generated dialogue, not real
 user chats. LongMemEval oracle sessions remove retrieval distractors, so its numbers measure
 retention, not question answering. Latency is measured on a single development machine.
+
+The importance model is trained and tested on csv5k, which is synthetic (AI-generated sentences
+and scores, not human ratings), and its test split has only 86 distinct sentences. Conversation
+turns are far longer than csv5k sentences (at most 13 words; LongMemEval user turns median
+42 words), so it runs out of distribution. Its 25% share of the hybrid score is a fixed setting
+chosen by the user, not tuned or calibrated; the out-of-distribution evidence is a reason to keep
+it small. Before the small-talk penalty it rates greetings mid or high, and its low/mid/high target
+differs from the invalid/short-term/long-term target of the removed models.
