@@ -542,7 +542,7 @@ Structured metadata supports explicit relationships outside the narrow grammar:
 ## Evaluation, limits, and results
 
 The evaluation package was rebuilt on 12 October 2026 together with a fresh benchmark; the
-[README](README.md#evaluation-and-measured-results) has the before/after tables and the
+[README](README.md#how-to-read-the-results) has the baseline, final and current metrics layer by layer and the
 [evaluation guide](evaluation/README.md) the protocol. Headline numbers from the `final`
 snapshot (`evaluation/reports/final_summary.json`, measured with the heuristic importance
 scorer, the default before the hybrid; for the hybrid, measured on 16 October 2026 in
