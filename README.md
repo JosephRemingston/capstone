@@ -60,13 +60,13 @@ Each layer below says what it does, how it is built, which problems the 12 Oct 2
 | Final | `final`, 12 Oct 2026 | All fixes, with the rule-based importance score. |
 | Current | `hybrid`, 16 Oct 2026 | The shipped default: importance = 25 % trained model + 75 % rules (Layer 2). |
 
-Only the retention, classification and lifecycle measurements use the importance score. The benchmark and LoCoMo runners never call it, so for their metrics Current equals Final, marked "=". Every number comes from a tagged snapshot in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`); the [evaluation guide](evaluation/README.md) describes the protocol. Metrics from different datasets measure different things, so do not compare their percentages with each other.
+Only the retention, classification and lifecycle measurements use the importance score. The benchmark and LoCoMo runners never call it, so for their metrics Current equals Final, marked "=". Table metrics come from the tagged snapshots in [`evaluation/reports/`](evaluation/reports/) (`<tag>_summary.json`), the importance model's test metrics from [`retention_ensemble.json`](evaluation/reports/retention_ensemble.json) and the abstention comparison from [`abstention_external.json`](evaluation/reports/abstention_external.json). Per-query-type values, paired intervals and run times are computed from the per-query rows and manifests that `scripts/measure_all.py` writes under the git-ignored `docs/reports/<tag>/`. Each change was designed on dev data and checked by an independent adversarial review before it was merged; the [evaluation guide](evaluation/README.md) describes the protocol. Metrics from different datasets measure different things, so do not compare their percentages with each other.
 
 | Measurement | Data | Size |
 | --- | --- | --- |
 | Controlled benchmark | AI-authored: 12 personas, 456 memories; tuned on the dev split only | Test split: 270 questions (247 answerable, 23 unanswerable) |
 | LoCoMo | Generated dialogue, 10 conversations; conversations 1–3 were used to choose the reranker pool | 1,973 questions |
-| LongMemEval (oracle) | Real chat histories with labelled answer turns | 457 examples, 9,831 turns |
+| LongMemEval (oracle) | Benchmark chat histories: LLM-simulated evidence sessions with labelled answer turns. The user-disclosure retention fix (Layers 1–2) was designed against its failures. | 457 examples (436 with answer turns), 9,831 turns |
 | Classification cases | AI-authored, labelled before the classifier ran | 60 cases |
 | Lifecycle checks | Developer-written task, tier and supersession checks | 16 checks |
 | csv5k | AI-generated memory sentences with synthetic importance scores (trains the importance model) | 5,000 rows, 86 distinct test sentences |
@@ -97,7 +97,7 @@ The metrics saved on 29 Sep 2026 looked strong but did not hold up on re-measure
 
 | Problem found in the baseline | Evidence | Fix | Code |
 | --- | --- | --- | --- |
-| Users' own facts inside questions and hedges were labelled temporary (“I'm planning a trip to Lisbon in May, can you suggest neighbourhoods?”). | 86% of LongMemEval answer turns were labelled temporary. | Questions and hedges that carry first-person facts become episodic; small talk and questions that ask to recall a stored fact stay temporary. | [`text_rules.py`](main/domain/text_rules.py), [`classification.py`](main/domain/classification.py) |
+| Users' own facts inside questions and hedges were labelled temporary (“I'm planning a trip to Lisbon in May, can you suggest neighbourhoods?”). | In a 60-example diagnosis, 150 of 175 user answer turns (86%) in LongMemEval were labelled temporary. | Questions and hedges that carry first-person facts become episodic; small talk and questions that ask to recall a stored fact stay temporary. | [`text_rules.py`](main/domain/text_rules.py), [`classification.py`](main/domain/classification.py) |
 | The saved “48/48 classification cases (100%)” had been used to develop the rules. | The cases were not held out. | 60 new AI-authored cases, labelled before the classifier was run. | [`evaluation/classification.py`](evaluation/classification.py) |
 
 | Metric (60 classification cases) | Baseline | Final | Current |
@@ -132,8 +132,8 @@ score       = round(0.25 × model_score + 0.75 × rule_score, 4)
 | XGBoost member | 525 features (13 text features + 512 hashed word counts); max depth 3, min child weight 3, 304 rounds; temperature-calibrated. |
 | Neural member | Frozen `BAAI/bge-small-en-v1.5` embedding (384 values) + the 13 text features: text branch 384→192→128, feature branch 13→64→32, joint head 160→128→64→3; seeds 42, 43, 44 averaged and calibrated. |
 | Blend and thresholds | 0.5 × XGBoost + 0.5 × neural, then class weights 1 / 0.7 / 1 pick low / mid / high; all chosen on validation only. |
-| Class values | The mean csv5k importance of the fit and validation sentences in each class (the test split is excluded). |
-| Files and switch | [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) (2.5 MB, checksummed, tracked in Git; rebuilt bit for bit by [`training/ensemble/`](training/ensemble/)). `COGNIMEM_SCORER=heuristic`, `process --scorer heuristic` or `MemoryCore.with_heuristic()` uses the rules alone. Every record stores the model's class, probabilities and both part-scores in `source_metadata["importance_model"]`. |
+| Class values | The mean csv5k importance of the fit and validation rows (3,992) in each class; the test split is excluded. |
+| Files and switch | [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) (2.5 MB, checksummed, tracked in Git). `python -m training.ensemble.run --csv /path/to/cognimem_memory_importance_5000.csv` ([`training/ensemble/`](training/ensemble/)) rebuilds the model files bit for bit; the CSV is copied to `data/experiments/`, so later runs need no flag, and `metadata.json` carries a timestamp. `COGNIMEM_SCORER=heuristic`, `process --scorer heuristic` or `MemoryCore.with_heuristic()` uses the rules alone. Every record stores which scorer ran in `source_metadata["importance_model"]` and, for the hybrid, the model's class, probabilities and both part-scores. |
 
 The model is new, so it has no baseline; on the csv5k test split (1,008 rows, 86 sentences; 95% intervals over whole sentences; [full report](evaluation/reports/retention_ensemble.md)) it is compared with the reference rows:
 
@@ -145,16 +145,18 @@ The model is new, so it has no baseline; on the csv5k test split (1,008 rows, 86
 
 The oracle predicts each test sentence's most common test label: a ceiling that reads the test labels, not a model.
 
+The trained models it replaced predicted a different target (fact validity and duration on Personal Facts (MSC), 556 test facts) and are kept as history in the dated snapshots' `retention_models` section; test macro F1: XGBoost 0.6114, deep neural head 0.6732, shallow neural head 0.6504, always the most common class 0.2702.
+
 | Problem found | Evidence | Fix | Code |
 | --- | --- | --- | --- |
-| Users' own statements expired after one hour. | LongMemEval user-fact retention 21.0%. | What users say about their own lives is kept 90 days instead of 14 (with the Layer 1 category fix). | [`lifecycle.py`](main/domain/lifecycle.py) |
+| Users' own statements expired after one hour. | LongMemEval answer-turn retention 21.0%. | What users say about their own lives is kept 90 days instead of 14 (with the Layer 1 category fix). | [`lifecycle.py`](main/domain/lifecycle.py) |
 | The trained retention models (XGBoost and two neural heads on Personal Facts) were separate, flag-enabled options that predicted fact validity and never ran by default. | Optional `--scorer xgboost/neural`. | Replaced by one built-in model trained on importance (csv5k “Ensemble + thresholds”), as 25 % of every score. The old models are backed up outside the repository. | [`main/ensemble.py`](main/ensemble.py), [`training/ensemble/`](training/ensemble/) |
 | The trained model rates greetings and small talk as important: it never saw conversation in training. | “hello” and “ok” come out *high*. | Its part is multiplied by 0.25 for small talk, the same penalty the rules apply. | [`main/ensemble.py`](main/ensemble.py) |
 | The evaluation runners read the wall clock, so tier results depended on the time of day. | Rerunning the unchanged rule-based score on another day moved classification tier accuracy, because the recency feature decays over a day. | The classification and lifecycle runners pin their clock to the cases' timestamp. | [`evaluation/clock.py`](evaluation/clock.py) |
 
 | Metric | Baseline | Final | Current |
 | --- | ---: | ---: | ---: |
-| LongMemEval user-fact retention (457 examples) | 21.0% | 90.6% | 90.6% |
+| LongMemEval answer-turn retention (436 examples with answer turns) | 21.0% | 90.6% | 90.6% |
 | Mean share of a conversation still visible | 18.2% | 55.2% | 55.2% |
 | Cleanup: expired memories deleted | 3,160 | 1,740 | 1,738 |
 | Cleanup: expired memories kept as archive | — | 33¹ | 38 |
@@ -169,7 +171,7 @@ The oracle predicts each test sentence's most common test label: a ceiling that 
 
 What the model changed, measured against the same-day rule-based run:
 - **Retention did not change.** Every one of the 457 examples kept the same answer turns and the same visible share; at 25 % weight the model did not change the visibility of a single answer turn. Cleanup kept 5 more expired memories as archive and deleted 2 fewer.
-- **It does not recognise answer-bearing turns.** As a ranking of answer turns against the rest, its score has an AUC of 0.482 on user turns (rules: 0.582); the blended score's overall AUC is 0.654 against 0.678. It labels 81.2% of turns *high*, and 98.9% of turns lie more than 5 standard deviations from its training data: conversation turns are far longer than the at most 13-word csv5k sentences.
+- **It does not help spot answer turns.** As a ranking of answer turns against the rest, its score has an AUC of 0.482 on user turns, where 752 of the 806 answer turns are (rules: 0.582), and 0.697 on assistant turns (rules: 0.598); the blended score's overall AUC is 0.654 against 0.678 for the rules alone. It labels 81.2% of turns *high*, and 98.9% of turns have at least one numeric input more than 5 standard deviations from its training data, mostly because of length: conversation turns are far longer than the at most 13-word csv5k sentences.
 - **It costs time.** Each memory is embedded with BGE (about 59 ms on average), so the LongMemEval replay took 41× longer.
 
 Caveats: csv5k is synthetic (AI-written sentences and scores, not human ratings) and its test split has only 86 distinct sentences; the 25 % weight is a fixed choice, not a tuned one; two lifecycle-check texts (“I live in Chennai.”, “I live in Bengaluru.”) appear verbatim in csv5k; records stored before the switch keep their rule-based score.
@@ -257,7 +259,7 @@ What did not improve: correction questions (“scratch that…”) stay at 54.5%
 | Extractive answer | `ask --generator extractive`: local, deterministic evidence text. | [`main/retrieval/generation.py`](main/retrieval/generation.py) |
 | Hosted answer | The default `ask` path uses LangChain/Gemini 2.5 Flash once a key is configured; memory text leaves the machine only then. | [`main/retrieval/generation.py`](main/retrieval/generation.py) |
 | Citation check | Hosted output must contain source IDs and exact supporting quotes from the supplied context; invalid citations are rejected. Quote checking proves provenance, not every semantic inference. | [`main/retrieval/generation.py`](main/retrieval/generation.py) |
-| Abstention (opt-in) | `--abstain` refuses typed questions (name, place, occupation, amount, duration…) that no confidently reranked memory answers. | [`main/retrieval/generation.py`](main/retrieval/generation.py) |
+| Abstention | Any generator answers “Insufficient memory evidence.” when nothing is retrieved, and the hosted answer is instructed to abstain when the evidence cannot answer. The opt-in `--abstain` rule also makes the extractive answer refuse typed questions (name, place, occupation, amount, duration…) that no confidently reranked memory answers. | [`main/retrieval/generation.py`](main/retrieval/generation.py) |
 
 | Problem found in the baseline | Evidence | Fix | Code | Measured change |
 | --- | --- | --- | --- | --- |
@@ -272,7 +274,17 @@ What did not improve: correction questions (“scratch that…”) stay at 54.5%
 | Answerable still answered (opt-in abstention) | 100.0% | 99.6% | 99.6% = |
 | Balanced answerability (opt-in abstention) | 50.0% | 58.5% | 58.5% = |
 
-The abstention rows come from the `final_abstain` snapshot (`final` plus `--abstain`); without the flag the system never refuses. Grounded correctness on answerable questions rose 1.6 points: 4 of 247 questions became correct and none became wrong. That is too few changes to be significant (two-sided sign-flip test p = 0.13; the bootstrap interval [+0.4, +3.2] is unreliable with so few non-zero differences).
+The abstention rows come from the `final_abstain` snapshot (`final` plus `--abstain`); without the flag the extractive answerer refused none of the unanswerable benchmark questions (it abstains only when nothing is retrieved). Grounded correctness on answerable questions rose 1.6 points: 4 of 247 questions became correct and none became wrong. That is too few changes to be significant (two-sided sign-flip test p = 0.13; the bootstrap interval [+0.4, +3.2] is unreliable with so few non-zero differences).
+
+Abstention designs compared on held-out data (answerable still answered / unanswerable refused / balanced accuracy); the external sets were never used for tuning:
+
+| Design | Benchmark test (247 answerable / 23 unanswerable) | LongMemEval (470 / 30) | LoCoMo (1540 / 446 (category 5)) |
+| --- | --- | --- | --- |
+| No abstention (default) | 100.0% / 0.0% / 50.0% | 100.0% / 0.0% / 50.0% | 100.0% / 0.0% / 50.0% |
+| Slot rule (shipped, opt-in `--abstain`) | 99.6% / 17.4% / 58.5% | 98.3% / 6.7% / 52.5% | 98.4% / 1.6% / 50.0% |
+| QNLI answerability model (not shipped) | 97.2% / 52.2% / 74.7% | 78.5% / 33.3% / 55.9% | 76.1% / 36.3% / 56.2% |
+
+The adoption rule required at least 95% (benchmark) / 90% (external) of answerable questions still answered and a balanced-accuracy gain of 3 points or more on both external sets; neither design passed, so abstention stays opt-in and the QNLI model was not shipped.
 
 ## Layer 6: Expose and operate the system
 
@@ -387,14 +399,14 @@ After installation, run from the repository root:
 
 ```bash
 .venv/bin/python -m training.ensemble.run --csv ~/Downloads/cognimem_memory_importance_5000.csv   # importance model (about 30 s)
-.venv/bin/python scripts/measure_all.py --tag final --candidate-limit default --ann-arms   # every measurement
-.venv/bin/python scripts/measure_all.py --tag hybrid --scorer-steps-only                  # only what the importance scorer affects
-.venv/bin/python scripts/measure_all.py --tag heuristic_control --scorer-steps-only --scorer heuristic
-.venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch
-.venv/bin/python scripts/report_delta.py heuristic_control hybrid
+.venv/bin/python scripts/measure_all.py --tag final_repro --candidate-limit default --ann-arms --scorer heuristic   # Final column: every measurement, rules only
+.venv/bin/python scripts/measure_all.py --tag hybrid_repro --scorer-steps-only     # Current column: only what the importance scorer affects
+.venv/bin/python scripts/report_delta.py final final_repro
+.venv/bin/python scripts/report_delta.py heuristic_control hybrid_repro
+.venv/bin/python scripts/report_delta.py baseline final --allow-dataset-mismatch   # compare the saved snapshots
 ```
 
-`measure_all.py` runs the benchmark ablation (test and dev), LoCoMo, LongMemEval retention, classification and lifecycle checks, and snapshots the reports under the tag; `--scorer-steps-only` runs just the last three, and `--scorer` picks the importance scorer. The first run downloads the models and datasets, and a full run takes about an hour on a laptop. `--abstain-threshold 0.0` measures the opt-in abstention rule, and `--structure none` disables the time- and link-aware reordering. The [evaluation guide](evaluation/README.md) lists every flag and module.
+`measure_all.py` runs the benchmark ablation (test and dev), LoCoMo, LongMemEval retention, classification and lifecycle checks, and snapshots the reports under the tag; `--scorer-steps-only` runs just the last three, and `--scorer` picks the importance scorer. Existing tags are refused unless `--overwrite` is given. The first run downloads the models and datasets, and a full run takes about an hour on a laptop. `--abstain-threshold 0.0` measures the opt-in abstention rule, and `--structure none` disables the time- and link-aware reordering. The [evaluation guide](evaluation/README.md) lists every flag and module.
 
 To run the automated tests, install the test runner (`uv pip install --python .venv/bin/python -r requirements-dev.txt`), then run `.venv/bin/python -m pytest -q`.
 
@@ -409,7 +421,7 @@ To run the automated tests, install the test runner (`uv pip install --python .v
 | [`main/retrieval/`](main/retrieval/) | Keyword ranking, BGE embeddings, hybrid search, reranking, context, answers. |
 | [`main/ensemble.py`](main/ensemble.py), [`main/ml.py`](main/ml.py), [`training/ensemble/`](training/ensemble/), [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) | Default hybrid importance scorer, its feature schema, its training, and the trained model. |
 | [`api/`](api/), [`static/`](static/) | Authenticated HTTP API, monitoring, privacy operations, demo. |
-| [`evaluation/`](evaluation/), [`docs/reports/`](docs/reports/) | Datasets, runners, saved metrics, failure cases, review forms. |
+| [`evaluation/`](evaluation/), `docs/reports/` (generated locally, git-ignored) | Datasets, runners, tracked summary metrics; full per-query reports and failure cases are regenerated under `docs/reports/`. |
 | [`tests/`](tests/) | Automated behavior and integration tests. |
 
 ## Limits and next steps

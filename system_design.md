@@ -603,7 +603,7 @@ keeps the cadence and cannot cross the next occurrence. `task_scope=series` rese
 the anchor or closes the series; re-anchoring cannot overlap resolved history.
 
 See current behavior and verification and
-[CLI examples](README.md#layer-2-score-retain-and-manage-change).
+[task CLI usage](DOCUMENTATION.md#task-management).
 
 ## 26. Assertion Reconciliation and Consolidation
 
@@ -645,7 +645,7 @@ supported root and supersedes its active contradictions. `reconcile_memories`
 replays current durable roots in memory and appends only changed records, making
 bulk processing idempotent. It does not rewrite prior JSONL rows or lock writers.
 
-See [README usage](README.md#layer-2-score-retain-and-manage-change) and
+See [conflict usage](DOCUMENTATION.md#claims-conflicts-and-consolidation) and
 verification.
 
 ## 28. Retrieval and temporal graph implementation
