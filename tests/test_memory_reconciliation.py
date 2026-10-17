@@ -47,6 +47,24 @@ class ReconciliationTests(unittest.TestCase):
         self.store.search('Bengaluru', now=NOW)
         self.assertEqual(self.store.path.read_bytes(), before)
 
+    def test_a_move_to_a_named_place_supersedes_the_old_residence(self):
+        for move in ('I moved to Bengaluru.', 'I recently relocated to New Delhi.', 'I have moved to Pune!'):
+            with self.subTest(move=move):
+                self.store.path.unlink(missing_ok=True)
+                old = self.add('I live in Chennai.')
+                new = self.add(move, offset=60)
+                self.assertEqual(new.category.value, 'semantic')
+                self.assertEqual(self.store.get(old.id).superseded_by, new.id)
+                self.assertEqual([r.id for r in self.store.list(user_id='u', now=NOW)], [new.id])
+
+    def test_moves_that_are_not_a_new_home_change_nothing(self):
+        old = self.add('I live in Chennai.')
+        for text in ('I moved to the backend team.', 'I moved to a new desk.'):
+            with self.subTest(text=text):
+                record = self.add(text, offset=60)
+                self.assertIsNone(record.claim)
+                self.assertEqual(self.store.get(old.id).memory_status, 'active')
+
     def test_compatible_preferences_coexist_but_opposite_polarities_conflict(self):
         tea = self.add('I like tea.')
         coffee = self.add('I like coffee.')

@@ -633,9 +633,16 @@ identity, authorization, privacy endpoints, and operational instrumentation.
 | GET | `/api/v1/memories` | List the caller's memories | Bearer token |
 | GET | `/api/v1/memories/{id}` | Read one caller-owned memory | Bearer token |
 | POST | `/api/v1/memories/search` | Keyword, semantic, hybrid, graph, or recency retrieval | Bearer token |
+| GET | `/api/v1/memories/{id}/history` | Every revision of one of the caller's memories, oldest first; 404 if missing or another user's | Bearer token |
+| GET | `/api/v1/graph` | The caller's temporal relations (`as_of`, `known_at`, `predicate`); with `query`, matched entities and paths up to `hops` (1–3) | Bearer token |
+| GET | `/api/v1/evaluation/snapshots` | Tracked measurement snapshots (`evaluation/reports/<tag>_summary.json`, override the folder with `COGNIMEM_REPORTS_DIR`), oldest first | Bearer token |
+| GET | `/api/v1/evaluation/snapshots/{tag}` | One snapshot's numeric metrics and provenance; 404 for unknown tags | Bearer token |
+| GET | `/api/v1/evaluation/model` | The importance model's test report | Bearer token |
+| POST | `/api/v1/memories/ask` | Cited answer from the caller's memories; `generator` is `extractive` (default) or `gemini` (503 when unavailable); optional `abstain`, `as_of`, `known_at` | Bearer token |
 | GET | `/api/v1/me/export?format=json\|csv` | Export account and memory data | Bearer token |
 | DELETE | `/api/v1/me` | Delete the account and its persisted memory/index data | Bearer token |
 | GET | `/demo/` | Lightweight browser demo | No |
+| GET | `/app/` | React web app (served when `frontend/dist` is built; client-side routes fall back to `index.html`) | No (the app signs in through the API) |
 
 All JSON API responses use a common envelope containing `success`, `data`,
 `error`, and `request_id`. FastAPI/Pydantic validation failures use the same
@@ -673,6 +680,16 @@ local-only BGE encoder (cache `data/rag/models`, no download) shared by retrieva
 and the scorer, so a missing encoder cache also stops it at start-up with the
 download command and the `COGNIMEM_SCORER=heuristic` opt-out; with
 `COGNIMEM_SCORER=heuristic` the API starts without BGE as before.
+
+### Web app
+
+`frontend/` is a React + TypeScript client (Vite, Tailwind, shadcn/ui, TanStack Query) over the API above; it holds
+no business logic. `pnpm build` writes `frontend/dist`, which the API serves at `/app` (`COGNIMEM_WEB_DIR` overrides
+the folder; without a build `/app` is simply absent). Screens: Chat, Memories, Memory detail, Search & Ask, Graph and
+System, plus Evaluation, which renders the README's per-layer baseline → final → current tables, the importance model report and a snapshot comparison from the tracked reports. The session token lives in `sessionStorage`; a 401 or the token's expiry signs the user out, because the API
+has no refresh endpoint. Answers are extractive by default, and switching to Gemini asks for confirmation first.
+`pnpm test` runs the Vitest unit tests and `pnpm e2e` a Playwright smoke test against a fresh API; see
+[`frontend/README.md`](frontend/README.md).
 
 ### Approximate-nearest-neighbor retrieval
 

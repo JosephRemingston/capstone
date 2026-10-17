@@ -1,0 +1,287 @@
+{
+  "sections": {
+    "longmemeval": {
+      "knowledge-update": {
+        "examples": 75,
+        "with_gold_turns": 69,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.8067632850241545,
+        "mean_visible_fraction": 0.495010101010101
+      },
+      "multi-session": {
+        "examples": 133,
+        "with_gold_turns": 125,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9906666666666666,
+        "mean_visible_fraction": 0.6004928714977567
+      },
+      "single-session-assistant": {
+        "examples": 56,
+        "with_gold_turns": 56,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.6785714285714286,
+        "mean_visible_fraction": 0.44275875122776387
+      },
+      "single-session-preference": {
+        "examples": 30,
+        "with_gold_turns": 30,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9833333333333333,
+        "mean_visible_fraction": 0.60494708994709
+      },
+      "single-session-user": {
+        "examples": 70,
+        "with_gold_turns": 64,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.984375,
+        "mean_visible_fraction": 0.5800000000000001
+      },
+      "temporal-reasoning": {
+        "examples": 93,
+        "with_gold_turns": 92,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9217391304347826,
+        "mean_visible_fraction": 0.5561692881405901
+      },
+      "all": {
+        "examples": 457,
+        "with_gold_turns": 436,
+        "keep_everything_retention": 1.0,
+        "memory_retention": 0.9055045871559634,
+        "mean_visible_fraction": 0.5519867747247298
+      },
+      "_cleanup": {
+        "examples": 457,
+        "visible_state_preserved": 457,
+        "removed_memories": 1738,
+        "archived_memories": 38,
+        "bytes_before": 28078467,
+        "bytes_after": 21038527
+      },
+      "_diagnostics": {
+        "user": {
+          "turns": 4914,
+          "answer_bearing": 752,
+          "auc_score": 0.5262664929401781,
+          "auc_heuristic_score": 0.5823151717157258,
+          "auc_model_score": 0.4820919642765855,
+          "model_class_share": {
+            "low": 0.009361009361009361,
+            "mid": 0.20533170533170533,
+            "high": 0.7853072853072853
+          },
+          "numeric_inputs_beyond_5_sd_share": 0.9790394790394791
+        },
+        "assistant": {
+          "turns": 4917,
+          "answer_bearing": 54,
+          "auc_score": 0.6037939543491672,
+          "auc_heuristic_score": 0.5975449539607467,
+          "auc_model_score": 0.6974223349403278,
+          "model_class_share": {
+            "low": 0.005897905226764287,
+            "mid": 0.15558267236119586,
+            "high": 0.8385194224120399
+          },
+          "numeric_inputs_beyond_5_sd_share": 0.9979662395769778
+        },
+        "all": {
+          "turns": 9831,
+          "answer_bearing": 806,
+          "auc_score": 0.6543077885388671,
+          "auc_heuristic_score": 0.6776890083377439,
+          "auc_model_score": 0.674576548462707,
+          "model_class_share": {
+            "low": 0.007628928898382667,
+            "mid": 0.18044959820974468,
+            "high": 0.8119214728918727
+          },
+          "numeric_inputs_beyond_5_sd_share": 0.9885057471264368
+        }
+      }
+    },
+    "_scorers": {
+      "longmemeval": {
+        "type": "hybrid",
+        "model_weight": 0.25,
+        "small_talk_penalty": 0.25,
+        "model_sha256": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551",
+        "encoder": "BAAI/bge-small-en-v1.5:fastembed-0.8.1"
+      },
+      "classification": {
+        "type": "hybrid",
+        "model_weight": 0.25,
+        "small_talk_penalty": 0.25,
+        "model_sha256": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551",
+        "encoder": "BAAI/bge-small-en-v1.5:fastembed-0.8.1"
+      },
+      "lifecycle": {
+        "type": "hybrid",
+        "model_weight": 0.25,
+        "small_talk_penalty": 0.25,
+        "model_sha256": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551",
+        "encoder": "BAAI/bge-small-en-v1.5:fastembed-0.8.1"
+      }
+    },
+    "classification": {
+      "cases": 60,
+      "category_accuracy": 0.5333333333333333,
+      "category_macro_f1": 0.5436507936507936,
+      "tier_accuracy": 0.5666666666666667,
+      "importance_range_agreement": 0.5833333333333334,
+      "_range_baselines": {
+        "constant": {
+          "0.1": 0.16666666666666666,
+          "0.3": 0.23333333333333334,
+          "0.5": 0.8333333333333334,
+          "0.7": 0.7666666666666667,
+          "0.9": 0.7666666666666667
+        },
+        "best_constant": {
+          "score": 0.45,
+          "agreement": 0.8333333333333334
+        },
+        "by_range": {
+          "0.00-0.35": {
+            "cases": 10,
+            "agreement": 0.9
+          },
+          "0.15-0.60": {
+            "cases": 4,
+            "agreement": 0.5
+          },
+          "0.40-1.00": {
+            "cases": 6,
+            "agreement": 0.6666666666666666
+          },
+          "0.45-1.00": {
+            "cases": 40,
+            "agreement": 0.5
+          }
+        }
+      }
+    },
+    "lifecycle": {
+      "checks": 16,
+      "passed": 16
+    },
+    "importance_model": {
+      "ensemble_macro_f1": 0.8911851990482047,
+      "ensemble_accuracy": 0.8908730158730159,
+      "ensemble_balanced_accuracy": 0.8713553603259485,
+      "ensemble_sentence_ci95_low": 0.8091471048623347,
+      "ensemble_sentence_ci95_high": 0.9490558154441475,
+      "majority_macro_f1": 0.2528735632183908,
+      "oracle_macro_f1": 0.9229949650329209,
+      "test_rows": 1008,
+      "test_sentences": 86
+    }
+  },
+  "flat": {
+    "longmemeval.knowledge-update.examples": 75,
+    "longmemeval.knowledge-update.with_gold_turns": 69,
+    "longmemeval.knowledge-update.keep_everything_retention": 1.0,
+    "longmemeval.knowledge-update.memory_retention": 0.8067632850241545,
+    "longmemeval.knowledge-update.mean_visible_fraction": 0.495010101010101,
+    "longmemeval.multi-session.examples": 133,
+    "longmemeval.multi-session.with_gold_turns": 125,
+    "longmemeval.multi-session.keep_everything_retention": 1.0,
+    "longmemeval.multi-session.memory_retention": 0.9906666666666666,
+    "longmemeval.multi-session.mean_visible_fraction": 0.6004928714977567,
+    "longmemeval.single-session-assistant.examples": 56,
+    "longmemeval.single-session-assistant.with_gold_turns": 56,
+    "longmemeval.single-session-assistant.keep_everything_retention": 1.0,
+    "longmemeval.single-session-assistant.memory_retention": 0.6785714285714286,
+    "longmemeval.single-session-assistant.mean_visible_fraction": 0.44275875122776387,
+    "longmemeval.single-session-preference.examples": 30,
+    "longmemeval.single-session-preference.with_gold_turns": 30,
+    "longmemeval.single-session-preference.keep_everything_retention": 1.0,
+    "longmemeval.single-session-preference.memory_retention": 0.9833333333333333,
+    "longmemeval.single-session-preference.mean_visible_fraction": 0.60494708994709,
+    "longmemeval.single-session-user.examples": 70,
+    "longmemeval.single-session-user.with_gold_turns": 64,
+    "longmemeval.single-session-user.keep_everything_retention": 1.0,
+    "longmemeval.single-session-user.memory_retention": 0.984375,
+    "longmemeval.single-session-user.mean_visible_fraction": 0.5800000000000001,
+    "longmemeval.temporal-reasoning.examples": 93,
+    "longmemeval.temporal-reasoning.with_gold_turns": 92,
+    "longmemeval.temporal-reasoning.keep_everything_retention": 1.0,
+    "longmemeval.temporal-reasoning.memory_retention": 0.9217391304347826,
+    "longmemeval.temporal-reasoning.mean_visible_fraction": 0.5561692881405901,
+    "longmemeval.all.examples": 457,
+    "longmemeval.all.with_gold_turns": 436,
+    "longmemeval.all.keep_everything_retention": 1.0,
+    "longmemeval.all.memory_retention": 0.9055045871559634,
+    "longmemeval.all.mean_visible_fraction": 0.5519867747247298,
+    "longmemeval._cleanup.examples": 457,
+    "longmemeval._cleanup.visible_state_preserved": 457,
+    "longmemeval._cleanup.removed_memories": 1738,
+    "longmemeval._cleanup.archived_memories": 38,
+    "longmemeval._cleanup.bytes_before": 28078467,
+    "longmemeval._cleanup.bytes_after": 21038527,
+    "longmemeval._diagnostics.user.turns": 4914,
+    "longmemeval._diagnostics.user.answer_bearing": 752,
+    "longmemeval._diagnostics.user.auc_score": 0.5262664929401781,
+    "longmemeval._diagnostics.user.auc_heuristic_score": 0.5823151717157258,
+    "longmemeval._diagnostics.user.auc_model_score": 0.4820919642765855,
+    "longmemeval._diagnostics.user.model_class_share.low": 0.009361009361009361,
+    "longmemeval._diagnostics.user.model_class_share.mid": 0.20533170533170533,
+    "longmemeval._diagnostics.user.model_class_share.high": 0.7853072853072853,
+    "longmemeval._diagnostics.user.numeric_inputs_beyond_5_sd_share": 0.9790394790394791,
+    "longmemeval._diagnostics.assistant.turns": 4917,
+    "longmemeval._diagnostics.assistant.answer_bearing": 54,
+    "longmemeval._diagnostics.assistant.auc_score": 0.6037939543491672,
+    "longmemeval._diagnostics.assistant.auc_heuristic_score": 0.5975449539607467,
+    "longmemeval._diagnostics.assistant.auc_model_score": 0.6974223349403278,
+    "longmemeval._diagnostics.assistant.model_class_share.low": 0.005897905226764287,
+    "longmemeval._diagnostics.assistant.model_class_share.mid": 0.15558267236119586,
+    "longmemeval._diagnostics.assistant.model_class_share.high": 0.8385194224120399,
+    "longmemeval._diagnostics.assistant.numeric_inputs_beyond_5_sd_share": 0.9979662395769778,
+    "longmemeval._diagnostics.all.turns": 9831,
+    "longmemeval._diagnostics.all.answer_bearing": 806,
+    "longmemeval._diagnostics.all.auc_score": 0.6543077885388671,
+    "longmemeval._diagnostics.all.auc_heuristic_score": 0.6776890083377439,
+    "longmemeval._diagnostics.all.auc_model_score": 0.674576548462707,
+    "longmemeval._diagnostics.all.model_class_share.low": 0.007628928898382667,
+    "longmemeval._diagnostics.all.model_class_share.mid": 0.18044959820974468,
+    "longmemeval._diagnostics.all.model_class_share.high": 0.8119214728918727,
+    "longmemeval._diagnostics.all.numeric_inputs_beyond_5_sd_share": 0.9885057471264368,
+    "_scorers.longmemeval.model_weight": 0.25,
+    "_scorers.longmemeval.small_talk_penalty": 0.25,
+    "_scorers.classification.model_weight": 0.25,
+    "_scorers.classification.small_talk_penalty": 0.25,
+    "_scorers.lifecycle.model_weight": 0.25,
+    "_scorers.lifecycle.small_talk_penalty": 0.25,
+    "classification.cases": 60,
+    "classification.category_accuracy": 0.5333333333333333,
+    "classification.category_macro_f1": 0.5436507936507936,
+    "classification.tier_accuracy": 0.5666666666666667,
+    "classification.importance_range_agreement": 0.5833333333333334,
+    "classification._range_baselines.constant.0.1": 0.16666666666666666,
+    "classification._range_baselines.constant.0.3": 0.23333333333333334,
+    "classification._range_baselines.constant.0.5": 0.8333333333333334,
+    "classification._range_baselines.constant.0.7": 0.7666666666666667,
+    "classification._range_baselines.constant.0.9": 0.7666666666666667,
+    "classification._range_baselines.best_constant.score": 0.45,
+    "classification._range_baselines.best_constant.agreement": 0.8333333333333334,
+    "classification._range_baselines.by_range.0.00-0.35.cases": 10,
+    "classification._range_baselines.by_range.0.00-0.35.agreement": 0.9,
+    "classification._range_baselines.by_range.0.15-0.60.cases": 4,
+    "classification._range_baselines.by_range.0.15-0.60.agreement": 0.5,
+    "classification._range_baselines.by_range.0.40-1.00.cases": 6,
+    "classification._range_baselines.by_range.0.40-1.00.agreement": 0.6666666666666666,
+    "classification._range_baselines.by_range.0.45-1.00.cases": 40,
+    "classification._range_baselines.by_range.0.45-1.00.agreement": 0.5,
+    "lifecycle.checks": 16,
+    "lifecycle.passed": 16,
+    "importance_model.ensemble_macro_f1": 0.8911851990482047,
+    "importance_model.ensemble_accuracy": 0.8908730158730159,
+    "importance_model.ensemble_balanced_accuracy": 0.8713553603259485,
+    "importance_model.ensemble_sentence_ci95_low": 0.8091471048623347,
+    "importance_model.ensemble_sentence_ci95_high": 0.9490558154441475,
+    "importance_model.majority_macro_f1": 0.2528735632183908,
+    "importance_model.oracle_macro_f1": 0.9229949650329209,
+    "importance_model.test_rows": 1008,
+    "importance_model.test_sentences": 86
+  }
+}

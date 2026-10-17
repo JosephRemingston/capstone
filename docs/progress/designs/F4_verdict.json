@@ -1,0 +1,44 @@
+{
+ "fix_id": "F4",
+ "verdict": "partially_sound",
+ "reproduced": true,
+ "reproduced_numbers": "Fresh scratch copy at /private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/design/verify-rerank-graph-time/repo. The designer's rag_final.diff and test_final.diff applied cleanly; the resulting rag.py sha256 is faba49b3..., the same as the frozen hash.\nDEV, real harness, pool 20, exact search, hybrid_full, baseline -> F4: Recall@5 95.78 -> 99.40, MRR 0.905 -> 0.962, top1 73.49 -> 91.57, grounded 90.0 -> 92.2. This matches the claim exactly. vector, vector_reranker and vector_graph are byte-identical to baseline, and vector_graph_reranker equals hybrid_full.\nTEST, recomputed ONCE on the frozen design only to reproduce the claim (no tuning), hybrid_full: none 93.05 / 0.904 / 77.33 / 89.26 -> abcd 96.09 / 0.948 / 89.07 / 90.37. 29 top-1 wins, 0 losses. 14 queries changed Recall@5, none of them downward. Also an exact match.\nExtra DEV checks:\n- Ingest load mode: identical to save mode (99.4 / 0.962 / 91.6).\n- Pool 100: 95.2 / 0.905 / 73.5 -> 99.4 / 0.962 / 91.6.\n- Cue words stripped from the 23 dev temporal/conflict/recency queries (neutral phrasing): top1 68.7 -> 84.3, 13 wins, 0 losses.\n- Out-of-lexicon cues (\"at present\", \"following the reschedule\", \"ultimately\"): top1 77.1 -> 86.7, 8 wins, 0 losses.\n- Per type, the paraphrase gains are mostly temporal (neutral 1->7 of 8, alt 2->5 of 8). Conflict gains collapse (original phrasing 2->7 of 8; neutral 0->2; alt 4->4), and so do recency gains (5->7 of 7; neutral 4->4; alt 6->6).\nTest suite on my copy: 175 passed (repo baseline grew to 170, plus the 5 new tests), 136 subtests, no existing test changed.\nThe designer's LoCoMo files confirm hybrid_reranked R@5/R@10/Hit@5/pool unchanged, MRR@5 0.5052 -> 0.5040, 10 changed top-5 lists. I did not re-run LoCoMo myself: its runner writes indexes under data/.",
+ "issues": [
+  {
+   "severity": "major",
+   "issue": "The validity step (b) is not gated by the relevance band, although the summary says all four parts are. In _structured_order, take_place(successor, stale) runs for any stale candidate and any successor, whatever their reranker scores, for every query that is not a history query. Past-tense questions without a listed history cue therefore get the successor memory ranked first even when it is irrelevant. The benchmark never exercises this: historical queries carry as_of, which switches validity off, and there are no neutral past-tense questions about superseded facts.",
+   "evidence": "Real-model probe (scripts/probe_validity.py), using the designer's own Lisbon->Porto fixture with explicit valid_to.\n- 'How much rent did I pay for my flat in Lisbon?' (neutral): none puts old-home (7.92) first; F4 puts new-home (reranker -11.25, adjustment supersedes:old-home) first.\n- Same failure for 'What did I pay for the Lisbon apartment?' (2.12 vs -11.21) and 'Since when was I renting in Lisbon?' (6.63 vs -10.38).\nCode: the validity loop in _structured_order never checks `relevant`."
+  },
+  {
+   "severity": "major",
+   "issue": "The version-ordering part (c) depends on the cue lexicon, has no external benefit, and produces false positives outside the benchmark templates. Its conflict and recency gains disappear when the same dev questions are phrased neutrally or with cues outside the lexicon. On LoCoMo it is the only part that fires: 10 changed questions, 0 wins, 2 losses. On hand-written single-user probes it fixed 0 corrections, because real correction pairs were 4.6 to 7.7 logits apart, outside the 3-logit band. It created 1 wrong top-1 from a third-party statement that shared a query word.",
+   "evidence": "Dev conflict top1 with the original phrasing goes 2 -> 7 of 8; with neutral phrasing 0 -> 2; with alternative cues 4 -> 4. Recency: 5 -> 7 of 7 originally; neutral 4 -> 4; alt 6 -> 6.\nProbe (scripts/probe_real.py): 'What language am I learning these days?' put 'My friend is learning Mandarin' (-3.29) ahead of 'I am learning Portuguese' (-0.46), with adjustment newer_version_of:lang.\nProbes 'dentist ... now?' and 'team offsite now?' left the outdated statement first (gaps 7.7 and 5.95)."
+  },
+  {
+   "severity": "minor",
+   "issue": "Successors are injected into the pool before reranking, so they also appear when the reranker fails or is disabled. In that case search() returns a memory that no channel retrieved (fusion_score 0.0, signals {}, no 'ordering' field). This contradicts 'unchanged without reranking' for the fallback path, and the _validity SQL runs even though no reordering follows.",
+   "evidence": "scripts/edges.py with reranker=None or a raising reranker, limit=3, candidate_limit=3: the results are noise, old-home, new-home(fusion 0.0, status 'fallback'). Baseline returns only 2 hits."
+  },
+  {
+   "severity": "minor",
+   "issue": "The version loop is O(members^2) per pass, with up to len(members) passes. Worst case it is cubic in the pool. The shipped default reranker pool has since been raised to 100 (max(100, 4*limit), capped at 200).",
+   "evidence": "scripts/perf.py, with 200 same-topic memories inside the band and a 'now' query. Search time was 81 ms -> 2294 ms at pool 200, 85 -> 237 ms at pool 100, and 13 -> 59 ms at pool 50. In single-user stores speaker is None for every memory, so the same-speaker guard does not prune any pairs."
+  },
+  {
+   "severity": "minor",
+   "issue": "The large top-1 and MRR gains do not reach the answer context. context() re-sorts the selected hits by query-term coverage and fusion score, and an injected successor has fusion score 0.0. Only membership in the top `limit` affects what the generator sees, which is why grounded correctness moves only +2.2 (dev, p=0.51) and +1.1 (test, p=0.24).",
+   "evidence": "MemoryRAG.context picks max(remaining, key=(coverage gain, -redundancy, hit['score'])), where score is the fusion score. The test grounded change is 89.3 -> 90.4 with 3 wins, which is not significant."
+  },
+  {
+   "severity": "minor",
+   "issue": "Leakage check. The cue lexicon contains phrases that occur only in test queries: 'after the correction' (7 test, 0 dev) and 'still' (3 test, 0 dev). 'originally' (3 test, 0 dev) is also absent from dev, but the task prompt itself lists it. Only 1 of the 29 test top-1 wins (q-p08-recency-2, 'still') depends on such a phrase, so the effect on the headline is negligible. File timestamps show rag.py frozen at 02:06, with test runs starting at 02:20 and no later edits. Dev (p01-p03) and test (p04-p12) are disjoint by persona.",
+   "evidence": "scripts/test_wins.py over the test rows: 'wins whose intent hinges on a cue phrase absent from dev queries: 1'. rag.py mtime is 02:06:41; steps_test_FINAL/none.json is 02:24."
+  },
+  {
+   "severity": "minor",
+   "issue": "The structure band is in raw logit units. A reranker that outputs probabilities would put every candidate inside the band. The designer acknowledges this.",
+   "evidence": "edges.py with a reranker scoring on a 0-1 scale: every candidate counts as relevant."
+  }
+ ],
+ "recommended_adjustments": "1. Gate (b) validity. Apply supersedes:X only when the stale memory is relevant (inside the band) AND the predicate of its stale edge is cued by the question (graph_predicates(query), already computed as desired_predicates). Return the stale predicates from _validity. With this gate, 'How much rent did I pay in Lisbon?' does not cue lives_in, while 'Which city does X live in' does. Re-check on dev that the temporal gains survive.\n2. Inject successors only if the rerank is going to be applied. Alternatively, drop them from `ordered` in the fallback branch, and skip _validity when the reranker is None.\n3. Ship (a) chain and (d) graph promotion, plus the gated (b), as the robust core: the temporal, historical and multi-hop gains survive paraphrase and pool 100. Treat (c) versions as optional, or move the correction problem to write time: corrections should supersede the earlier memory or close its edge, which (b) then handles. Also add date-anchor handling ('before <date>', 'in <date>', 'ago'), and require the challenger to share a non-generic, ideally graph-entity, term rather than any content word of the question.\n4. Bound the version loop: cap the members at the top-k in the band (e.g. 10) or use one sort per speaker and topic group.\n5. If downstream answers should benefit, carry the structured rank into context(), using it instead of hit['score'] as the tie-break.\n6. Add tests for: a neutral past-tense question about a superseded fact; reranker=None or a raising reranker with a stale candidate (no injected successor); and a third-party 'my friend is X-ing' statement under a 'now' cue.\nNote: F4 already appears merged into the live repo's main/retrieval/rag.py alongside other fixes (default pool 100, ANN off). The issues above apply there too."
+}

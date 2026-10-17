@@ -54,6 +54,39 @@ class MemoryService:
         saved = self.store.ingest(record)
         return saved
 
+    def ask(self, *, user_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        """Cited answer from the caller's own memories (the CLI `ask` path): retrieve, build context, answer."""
+        from main.graph import parse_time
+        from main.retrieval.generation import ABSTAIN_THRESHOLD, answer
+        context = self.rag.context(
+            request["query"], user_id=user_id, mode=request["mode"], limit=request["limit"], budget=request["budget"],
+            as_of=parse_time(request.get("as_of")), known_at=parse_time(request.get("known_at")),
+            rerank=request.get("rerank"), candidate_limit=request.get("candidate_limit"))
+        result = answer(context, generator=request["generator"],
+                        abstain_threshold=ABSTAIN_THRESHOLD if request.get("abstain") else None)
+        result["reranker"] = context.get("reranker")
+        return result
+
+    def history(self, *, user_id: str, record_id: str) -> list[MemoryRecord]:
+        """Every revision of one of the caller's memories, oldest first (empty if missing or not theirs)."""
+        return self.store.history(record_id, user_id=user_id)
+
+    def graph(self, *, user_id: str, query: str | None = None, as_of: str | None = None, known_at: str | None = None,
+              predicate: str | None = None, hops: int = 2) -> dict[str, Any]:
+        """The caller's temporal graph: current relations, plus matched entities and paths for a query (the CLI `graph`)."""
+        from main.graph import parse_time
+        when, known = parse_time(as_of), parse_time(known_at)
+        self.rag.sync(user_id=user_id, semantic=False)
+        graph = self.rag.graph
+        result: dict[str, Any] = {"relations": graph.relations(user_id=user_id, as_of=when, known_at=known, predicate=predicate)}
+        if query:
+            entities = graph.entities(query, user_id=user_id, known_at=known)
+            paths = graph.traverse([e["id"] for e in entities], user_id=user_id, as_of=when, known_at=known, max_hops=hops)
+            if predicate:
+                paths = [p for p in paths if any(e["predicate"] == predicate for e in p["edges"])]
+            result.update(entities=entities, paths=paths)
+        return result
+
     def export_user(self, user: dict[str, Any], fmt: str) -> tuple[bytes, str, str]:
         user_id = user["id"]
         records = self.store._read_log()

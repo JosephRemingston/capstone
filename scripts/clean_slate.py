@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Directories or files removed outright (relative to ROOT).
 TARGETS = (
     'artifacts/ensemble_training',
+    'frontend/node_modules',
+    'frontend/dist',
     'data/rag/models',
     'data/evaluation/locomo',
     'data/evaluation/longmemeval',

@@ -1,0 +1,1582 @@
+{
+  "cases": 60,
+  "label_source": "claude_authored, labelled before running the classifier; not human-validated",
+  "importance_model": {
+    "type": "hybrid",
+    "model_weight": 0.25,
+    "small_talk_penalty": 0.25,
+    "model_sha256": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551",
+    "encoder": "BAAI/bge-small-en-v1.5:fastembed-0.8.1"
+  },
+  "clock": "2026-10-12T09:00:00+00:00",
+  "importance_range_baselines": {
+    "constant": {
+      "0.1": 0.16666666666666666,
+      "0.3": 0.23333333333333334,
+      "0.5": 0.8333333333333334,
+      "0.7": 0.7666666666666667,
+      "0.9": 0.7666666666666667
+    },
+    "best_constant": {
+      "score": 0.45,
+      "agreement": 0.8333333333333334
+    },
+    "by_range": {
+      "0.00-0.35": {
+        "cases": 10,
+        "agreement": 0.9
+      },
+      "0.15-0.60": {
+        "cases": 4,
+        "agreement": 0.5
+      },
+      "0.40-1.00": {
+        "cases": 6,
+        "agreement": 0.6666666666666666
+      },
+      "0.45-1.00": {
+        "cases": 40,
+        "agreement": 0.5
+      }
+    }
+  },
+  "category_accuracy": 0.5333333333333333,
+  "category_macro_f1": 0.5436507936507936,
+  "per_class": {
+    "episodic": {
+      "precision": 0.2777777777777778,
+      "recall": 0.5,
+      "f1": 0.35714285714285715,
+      "support": 10
+    },
+    "preference": {
+      "precision": 1.0,
+      "recall": 0.4,
+      "f1": 0.5714285714285715,
+      "support": 10
+    },
+    "procedural": {
+      "precision": 0.6,
+      "recall": 0.3,
+      "f1": 0.4,
+      "support": 10
+    },
+    "semantic": {
+      "precision": 0.75,
+      "recall": 0.6,
+      "f1": 0.6666666666666665,
+      "support": 10
+    },
+    "task": {
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6666666666666666,
+      "support": 10
+    },
+    "temporary": {
+      "precision": 0.45,
+      "recall": 0.9,
+      "f1": 0.6,
+      "support": 10
+    }
+  },
+  "tier_accuracy": 0.5666666666666667,
+  "importance_range_agreement": 0.5833333333333334,
+  "confusion": {
+    "episodic -> episodic": 5,
+    "episodic -> procedural": 1,
+    "episodic -> semantic": 1,
+    "episodic -> temporary": 3,
+    "preference -> episodic": 5,
+    "preference -> preference": 4,
+    "preference -> procedural": 1,
+    "procedural -> episodic": 3,
+    "procedural -> procedural": 3,
+    "procedural -> semantic": 1,
+    "procedural -> temporary": 3,
+    "semantic -> episodic": 2,
+    "semantic -> semantic": 6,
+    "semantic -> temporary": 2,
+    "task -> episodic": 2,
+    "task -> task": 5,
+    "task -> temporary": 3,
+    "temporary -> episodic": 1,
+    "temporary -> temporary": 9
+  },
+  "errors": [
+    {
+      "id": "sema-01",
+      "content": "I'm a nurse on the night shift at St. Mary's.",
+      "expected_category": "semantic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4369,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-05",
+      "content": "Grandma speaks only Tamil, no English at all.",
+      "expected_category": "semantic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0741,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-06",
+      "content": "The kids' school is a twenty minute walk from home.",
+      "expected_category": "semantic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-07",
+      "content": "I'm not married, despite what my mother tells people.",
+      "expected_category": "semantic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4244,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-02",
+      "content": "Decaf is more my speed these days.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-04",
+      "content": "Window seats only, I get anxious in the aisle.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3665,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-06",
+      "content": "Metric units, always.",
+      "expected_category": "preference",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.546,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-08",
+      "content": "I'm vegetarian, so skip the meat recipes.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4233,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-09",
+      "content": "Dark mode everything, my eyes thank you.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-10",
+      "content": "Honestly I could live on spicy noodles.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-03",
+      "content": "Water the plants every Sunday morning.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0732,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-04",
+      "content": "Don't let me forget mum's birthday on 3 May.",
+      "expected_category": "task",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4377,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-06",
+      "content": "I have to renew my passport before the trip in June.",
+      "expected_category": "task",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4309,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-07",
+      "content": "Can you remind me to stretch every two hours while I work?",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.6561,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-09",
+      "content": "Ask Sam whether the invoice went out.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0705,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-10",
+      "content": "Take the bins out every Tuesday evening.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0565,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-01",
+      "content": "I finally passed my driving test this morning!",
+      "expected_category": "episodic",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.4643,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-03",
+      "content": "Got promoted to team lead last week.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3001,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-04",
+      "content": "Missed the bus and walked to work in the rain.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-05",
+      "content": "My grandfather passed away in March.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4427,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-06",
+      "content": "The demo went badly because the projector died.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-07",
+      "content": "We adopted a puppy on Saturday.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4427,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-09",
+      "content": "Our flat flooded while we were on holiday.",
+      "expected_category": "episodic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5663,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-10",
+      "content": "The client signed the contract after three months of back and forth.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-01",
+      "content": "To reset the router, hold the back button for ten seconds and wait for the blue light.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0706,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-03",
+      "content": "For expense claims you scan the receipt, upload it to the portal, and tag your manager.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0706,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-04",
+      "content": "When the build fails I clear the cache and rerun with verbose logging.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4312,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-06",
+      "content": "Brew the green tea at eighty degrees for two minutes, never boiling.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0541,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-07",
+      "content": "Our onboarding checklist is laptop, badge, accounts, and a buddy lunch.",
+      "expected_category": "procedural",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5659,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "proc-08",
+      "content": "To get to my place, take the 42 bus to the last stop and walk past the bakery.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4327,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-10",
+      "content": "If the baby won't sleep we do a bath, a bottle, and two songs.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3669,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "temp-09",
+      "content": "Ok cool, next question.",
+      "expected_category": "temporary",
+      "predicted_category": "episodic",
+      "expected_tier": "working",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4365,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    }
+  ],
+  "results": [
+    {
+      "id": "sema-01",
+      "content": "I'm a nurse on the night shift at St. Mary's.",
+      "expected_category": "semantic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4369,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-02",
+      "content": "Our office is on the fourth floor of the Harbour building.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5714,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "sema-03",
+      "content": "My partner's name is Elif.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5167,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "sema-04",
+      "content": "I have type 1 diabetes and check my sugar four times a day.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5616,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "sema-05",
+      "content": "Grandma speaks only Tamil, no English at all.",
+      "expected_category": "semantic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0741,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-06",
+      "content": "The kids' school is a twenty minute walk from home.",
+      "expected_category": "semantic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-07",
+      "content": "I'm not married, despite what my mother tells people.",
+      "expected_category": "semantic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4244,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "sema-08",
+      "content": "My landlord is a retired judge called Mr Osei.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5727,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "sema-09",
+      "content": "Our team budget for this year is forty thousand euros.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5659,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "sema-10",
+      "content": "My blood type is O negative.",
+      "expected_category": "semantic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5676,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-01",
+      "content": "Please don't use emojis when you reply to me.",
+      "expected_category": "preference",
+      "predicted_category": "preference",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.746,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-02",
+      "content": "Decaf is more my speed these days.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-03",
+      "content": "I'd rather get one long weekly summary than daily pings.",
+      "expected_category": "preference",
+      "predicted_category": "preference",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.6499,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-04",
+      "content": "Window seats only, I get anxious in the aisle.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3665,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-05",
+      "content": "I hate cilantro with a passion.",
+      "expected_category": "preference",
+      "predicted_category": "preference",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.6207,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-06",
+      "content": "Metric units, always.",
+      "expected_category": "preference",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.546,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-07",
+      "content": "Morning meetings work best for me, nothing after 4pm.",
+      "expected_category": "preference",
+      "predicted_category": "preference",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.6935,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "pref-08",
+      "content": "I'm vegetarian, so skip the meat recipes.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4233,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-09",
+      "content": "Dark mode everything, my eyes thank you.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "pref-10",
+      "content": "Honestly I could live on spicy noodles.",
+      "expected_category": "preference",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3673,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-01",
+      "content": "Remind me to call the plumber tomorrow at 9.",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.7235,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-02",
+      "content": "I need to submit the grant report by Friday.",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.7235,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-03",
+      "content": "Water the plants every Sunday morning.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0732,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-04",
+      "content": "Don't let me forget mum's birthday on 3 May.",
+      "expected_category": "task",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4377,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-05",
+      "content": "Pay the electricity bill on the first of every month.",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5659,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-06",
+      "content": "I have to renew my passport before the trip in June.",
+      "expected_category": "task",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4309,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-07",
+      "content": "Can you remind me to stretch every two hours while I work?",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.6561,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-08",
+      "content": "Book a table for four on Saturday night.",
+      "expected_category": "task",
+      "predicted_category": "task",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.5738,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "task-09",
+      "content": "Ask Sam whether the invoice went out.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0705,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "task-10",
+      "content": "Take the bins out every Tuesday evening.",
+      "expected_category": "task",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0565,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-01",
+      "content": "I finally passed my driving test this morning!",
+      "expected_category": "episodic",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.4643,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-02",
+      "content": "We had pizza for dinner last night.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3001,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-03",
+      "content": "Got promoted to team lead last week.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3001,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-04",
+      "content": "Missed the bus and walked to work in the rain.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-05",
+      "content": "My grandfather passed away in March.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4427,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-06",
+      "content": "The demo went badly because the projector died.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "short_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "epis-07",
+      "content": "We adopted a puppy on Saturday.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4427,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": false,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-08",
+      "content": "I bumped into an old school friend at the market.",
+      "expected_category": "episodic",
+      "predicted_category": "episodic",
+      "expected_tier": "short_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.2932,
+      "importance_range": [
+        0.15,
+        0.6
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-09",
+      "content": "Our flat flooded while we were on holiday.",
+      "expected_category": "episodic",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5663,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "epis-10",
+      "content": "The client signed the contract after three months of back and forth.",
+      "expected_category": "episodic",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0703,
+      "importance_range": [
+        0.4,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-01",
+      "content": "To reset the router, hold the back button for ten seconds and wait for the blue light.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0706,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-02",
+      "content": "My morning routine: coffee, ten minutes of stretching, then emails.",
+      "expected_category": "procedural",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5359,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "proc-03",
+      "content": "For expense claims you scan the receipt, upload it to the portal, and tag your manager.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0706,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-04",
+      "content": "When the build fails I clear the cache and rerun with verbose logging.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4312,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-05",
+      "content": "I always proofread backwards, last sentence to first.",
+      "expected_category": "procedural",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5288,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "proc-06",
+      "content": "Brew the green tea at eighty degrees for two minutes, never boiling.",
+      "expected_category": "procedural",
+      "predicted_category": "temporary",
+      "expected_tier": "long_term",
+      "predicted_tier": "working",
+      "importance_score": 0.0541,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-07",
+      "content": "Our onboarding checklist is laptop, badge, accounts, and a buddy lunch.",
+      "expected_category": "procedural",
+      "predicted_category": "semantic",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.5659,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "proc-08",
+      "content": "To get to my place, take the 42 bus to the last stop and walk past the bakery.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4327,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "proc-09",
+      "content": "Deploys go through staging first and need two approvals.",
+      "expected_category": "procedural",
+      "predicted_category": "procedural",
+      "expected_tier": "long_term",
+      "predicted_tier": "long_term",
+      "importance_score": 0.536,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "proc-10",
+      "content": "If the baby won't sleep we do a bath, a bottle, and two songs.",
+      "expected_category": "procedural",
+      "predicted_category": "episodic",
+      "expected_tier": "long_term",
+      "predicted_tier": "short_term",
+      "importance_score": 0.3669,
+      "importance_range": [
+        0.45,
+        1.0
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "temp-01",
+      "content": "Thanks, that helps!",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0727,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-02",
+      "content": "Hi there",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0751,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-03",
+      "content": "Haha okay",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.059,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-04",
+      "content": "Hold on, let me check something.",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0707,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-05",
+      "content": "Sorry, typo.",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0751,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-06",
+      "content": "Good morning!",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0845,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-07",
+      "content": "Can you say that again?",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.071,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-08",
+      "content": "Never mind, figured it out.",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.071,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    },
+    {
+      "id": "temp-09",
+      "content": "Ok cool, next question.",
+      "expected_category": "temporary",
+      "predicted_category": "episodic",
+      "expected_tier": "working",
+      "predicted_tier": "short_term",
+      "importance_score": 0.4365,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": false,
+      "tier_correct": false,
+      "importance_in_range": false
+    },
+    {
+      "id": "temp-10",
+      "content": "lol",
+      "expected_category": "temporary",
+      "predicted_category": "temporary",
+      "expected_tier": "working",
+      "predicted_tier": "working",
+      "importance_score": 0.0514,
+      "importance_range": [
+        0.0,
+        0.35
+      ],
+      "category_correct": true,
+      "tier_correct": true,
+      "importance_in_range": true
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "knowledge-update": {
+    "examples": 75,
+    "with_gold_turns": 69,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.10144927536231885,
+    "mean_visible_fraction": 0.12993939393939394
+  },
+  "multi-session": {
+    "examples": 133,
+    "with_gold_turns": 125,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.1212,
+    "mean_visible_fraction": 0.1737333184820494
+  },
+  "single-session-assistant": {
+    "examples": 56,
+    "with_gold_turns": 56,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.625,
+    "mean_visible_fraction": 0.30242696510422346
+  },
+  "single-session-preference": {
+    "examples": 30,
+    "with_gold_turns": 30,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.08333333333333333,
+    "mean_visible_fraction": 0.23931878306878307
+  },
+  "single-session-user": {
+    "examples": 70,
+    "with_gold_turns": 64,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.21875,
+    "mean_visible_fraction": 0.15023809523809523
+  },
+  "temporal-reasoning": {
+    "examples": 93,
+    "with_gold_turns": 92,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.1960144927536232,
+    "mean_visible_fraction": 0.16681944127757178
+  },
+  "all": {
+    "examples": 457,
+    "with_gold_turns": 436,
+    "keep_everything_retention": 1.0,
+    "memory_retention": 0.210282874617737,
+    "mean_visible_fraction": 0.18161561082483144
+  }
+}

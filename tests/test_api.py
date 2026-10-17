@@ -94,6 +94,163 @@ class APITests(unittest.TestCase):
         self.assertEqual(result.json()["data"][0]["content"], "Project Atlas")
 
 
+class AskEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.client = TestClient(create_app(Settings.for_testing(Path(self.tmp.name))))
+        token = self.client.post("/api/v1/auth/signup", json={"email": "u@example.com", "password": "a-very-strong-password"}).json()["data"]["access_token"]
+        self.headers = {"Authorization": f"Bearer {token}"}
+        for text in ("I live in Chennai.", "I moved to Bengaluru."):
+            self.client.post("/api/v1/memories", headers=self.headers, json={"content": text, "session_id": "s"})
+
+    def test_extractive_answer_cites_the_current_fact_only(self):
+        response = self.client.post("/api/v1/memories/ask", headers=self.headers,
+                                    json={"query": "Where do I live?", "mode": "keyword", "rerank": False})
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()["data"]
+        self.assertFalse(data["abstain"])
+        self.assertEqual(data["generator"], "extractive")
+        text = " ".join(s["text"] for s in data["statements"])
+        self.assertIn("Bengaluru", text)
+        self.assertNotIn("Chennai", text)
+        self.assertTrue(all(e["source_id"] in data["sources"] for s in data["statements"] for e in s["evidence"]))
+
+    def test_validation_auth_isolation_and_provider_outage(self):
+        ask = lambda body, headers=None: self.client.post("/api/v1/memories/ask", headers=self.headers if headers is None else headers, json=body)
+        self.assertEqual(ask({"query": "x"}, headers={}).status_code, 401)
+        self.assertEqual(ask({"query": "  "}).status_code, 422)
+        blank_search = self.client.post("/api/v1/memories/search", headers=self.headers, json={"query": "  "})
+        self.assertEqual(blank_search.status_code, 422)   # was an unserialisable 500
+        self.assertEqual(blank_search.json()["error"]["code"], "validation_error")
+        self.assertEqual(ask({"query": "x", "mode": "recency"}).status_code, 422)
+        self.assertEqual(ask({"query": "x", "as_of": "not-a-date"}).status_code, 422)
+        self.assertEqual(ask({"query": "x", "generator": "gemini", "abstain": True}).status_code, 422)
+        other = self.client.post("/api/v1/auth/signup", json={"email": "o@example.com", "password": "another-strong-password"}).json()["data"]["access_token"]
+        empty = ask({"query": "Where do I live?", "mode": "keyword"}, headers={"Authorization": f"Bearer {other}"}).json()["data"]
+        self.assertTrue(empty["abstain"])
+        with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "", "GEMINI_API_KEY": ""}), \
+                mock.patch("main.retrieval.generation.load_dotenv", create=True), \
+                mock.patch("dotenv.load_dotenv"):
+            response = ask({"query": "Where do I live?", "mode": "keyword", "rerank": False, "generator": "gemini"})
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertNotIn("GOOGLE_API_KEY", response.text)
+
+
+class HistoryAndGraphEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.client = TestClient(create_app(Settings.for_testing(Path(self.tmp.name))))
+        self.headers = self.login("u@example.com")
+        self.created = [self.client.post("/api/v1/memories", headers=self.headers,
+                                         json={"content": text, "session_id": "s"}).json()["data"]
+                        for text in ("I live in Chennai.", "I moved to Bengaluru.")]
+
+    def login(self, email):
+        token = self.client.post("/api/v1/auth/signup", json={"email": email, "password": "a-very-strong-password"}).json()["data"]["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_history_lists_revisions_and_is_private(self):
+        old = self.created[0]["id"]
+        response = self.client.get(f"/api/v1/memories/{old}/history", headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        statuses = [r["memory_status"] for r in response.json()["data"]]
+        self.assertEqual(statuses[0], "active")
+        self.assertEqual(statuses[-1], "superseded")
+        other = self.login("o@example.com")
+        self.assertEqual(self.client.get(f"/api/v1/memories/{old}/history", headers=other).status_code, 404)
+        self.assertEqual(self.client.get("/api/v1/memories/missing/history", headers=self.headers).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/memories/{old}/history").status_code, 401)
+
+    def test_graph_relations_query_validation_and_isolation(self):
+        response = self.client.get("/api/v1/graph", headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        relations = response.json()["data"]["relations"]
+        self.assertTrue(any(r["object_label"] == "Bengaluru" for r in relations), relations)
+        self.assertFalse(any(r["object_label"] == "Chennai" for r in relations))
+        queried = self.client.get("/api/v1/graph", headers=self.headers, params={"query": "Bengaluru", "hops": 1}).json()["data"]
+        self.assertIn("entities", queried)
+        self.assertIn("paths", queried)
+        self.assertEqual(self.client.get("/api/v1/graph", headers=self.headers, params={"as_of": "nope"}).status_code, 422)
+        self.assertEqual(self.client.get("/api/v1/graph", headers=self.headers, params={"hops": 9}).status_code, 422)
+        self.assertEqual(self.client.get("/api/v1/graph").status_code, 401)
+        self.assertEqual(self.client.get("/api/v1/graph", headers=self.login("o@example.com")).json()["data"]["relations"], [])
+
+
+class EvaluationEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        reports = Path(self.tmp.name) / "reports"
+        reports.mkdir()
+        for tag, created, value in (("baseline", "2026-10-12T01:00:00", 0.5), ("final", "2026-10-12T18:00:00", 0.9)):
+            (reports / f"{tag}_summary.json").write_text(json.dumps({
+                "sections": {"longmemeval": {}, "_scorers": {}},
+                "flat": {"longmemeval.all.memory_retention": value, "lifecycle.passed": 16, "note": "text", "flag": True},
+                "manifest": {"tag": tag, "created_at": created, "git_head": "abc", "argv": ["secret-argv"]}}))
+        (reports / "retention_summary.json").write_text(json.dumps({"ensemble_macro_f1": 0.89}))
+        (reports / "retention_ensemble.json").write_text(json.dumps({"model": "m", "class_values": [0.3, 0.6, 0.8], "golden": {"x": 1}}))
+        (Path(self.tmp.name) / "outside_summary.json").write_text(json.dumps({"flat": {"leak": 1}}))
+        patcher = mock.patch.dict(os.environ, {"COGNIMEM_REPORTS_DIR": str(reports)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.client = TestClient(create_app(Settings.for_testing(Path(self.tmp.name))))
+        token = self.client.post("/api/v1/auth/signup", json={"email": "e@example.com", "password": "a-very-strong-password"}).json()["data"]["access_token"]
+        self.headers = {"Authorization": f"Bearer {token}"}
+
+    def test_lists_snapshots_oldest_first_and_skips_non_snapshots(self):
+        response = self.client.get("/api/v1/evaluation/snapshots", headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        rows = response.json()["data"]
+        self.assertEqual([r["tag"] for r in rows], ["baseline", "final"])
+        self.assertEqual(rows[0]["sections"], ["longmemeval"])
+        self.assertEqual(rows[0]["metrics"], 2)
+
+    def test_snapshot_returns_numeric_metrics_and_safe_manifest(self):
+        data = self.client.get("/api/v1/evaluation/snapshots/final", headers=self.headers).json()["data"]
+        self.assertEqual(data["flat"], {"longmemeval.all.memory_retention": 0.9, "lifecycle.passed": 16})
+        self.assertNotIn("argv", data["manifest"])
+        self.assertEqual(data["manifest"]["git_head"], "abc")
+
+    def test_unknown_or_malicious_tags_are_404_and_auth_is_required(self):
+        for tag in ("missing", "retention", "..%2Foutside", "../outside", "a" * 65):
+            with self.subTest(tag=tag):
+                self.assertEqual(self.client.get(f"/api/v1/evaluation/snapshots/{tag}", headers=self.headers).status_code, 404)
+        self.assertEqual(self.client.get("/api/v1/evaluation/snapshots").status_code, 401)
+        self.assertEqual(self.client.get("/api/v1/evaluation/model").status_code, 401)
+
+    def test_model_report_omits_internal_details(self):
+        data = self.client.get("/api/v1/evaluation/model", headers=self.headers).json()["data"]
+        self.assertEqual(data["class_values"], [0.3, 0.6, 0.8])
+        self.assertNotIn("golden", data)
+
+
+class WebAppMountTests(unittest.TestCase):
+    def test_built_app_is_served_with_spa_fallback_and_no_traversal(self):
+        with TemporaryDirectory() as tmp:
+            web = Path(tmp) / "dist"
+            (web / "assets").mkdir(parents=True)
+            (web / "index.html").write_text("<div id=root>INDEX</div>")
+            (web / "assets" / "app.js").write_text("console.log(1)")
+            (Path(tmp) / "secret.txt").write_text("SECRET")
+            with mock.patch.dict(os.environ, {"COGNIMEM_WEB_DIR": str(web)}):
+                client = TestClient(create_app(Settings.for_testing(Path(tmp))))
+            for path in ("/app", "/app/", "/app/memories/123", "/app/..%2Fsecret.txt", "/app/%2E%2E/secret.txt"):
+                with self.subTest(path=path):
+                    response = client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn("INDEX", response.text)
+                    self.assertNotIn("SECRET", response.text)
+            self.assertEqual(client.get("/app/assets/app.js").text, "console.log(1)")
+            self.assertEqual(client.get("/health/live").status_code, 200)
+
+    def test_missing_build_leaves_app_unmounted(self):
+        with TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"COGNIMEM_WEB_DIR": str(Path(tmp) / "absent")}):
+            client = TestClient(create_app(Settings.for_testing(Path(tmp))))
+        self.assertEqual(client.get("/app").status_code, 404)
+
+
 class SettingsFromEnvTests(unittest.TestCase):
     SECRET = {"COGNIMEM_JWT_SECRET": "x" * 40}
 

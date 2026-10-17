@@ -1,0 +1,64 @@
+{
+  "tag": "e6",
+  "created_at": "2026-10-12T16:55:40.732488+05:30",
+  "git_head": "12dbc04",
+  "dirty_tree": true,
+  "dataset_sha256": "a93ca70ff6d40b458db4d82a04fc79b8c7f91dd599840f0e2f96482153d00f25",
+  "steps": [
+    {
+      "step": "build_dataset",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "ablation_test",
+      "exit_code": 0,
+      "seconds": 411.6
+    },
+    {
+      "step": "ablation_dev",
+      "exit_code": 0,
+      "seconds": 159.0
+    },
+    {
+      "step": "classification",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "lifecycle",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "report",
+      "exit_code": 0,
+      "seconds": 0.1
+    }
+  ],
+  "files": {
+    "SUMMARY.md": "8afb63957f41c629f9d018a3ee4ac994db0b1ccdcee71ab7ff33f79ccaf8132c",
+    "ablation/results.json": "18721dcaff21dbd8e09aea3e3d1e18e79946ba7270d82e338044dc512de9b3c3",
+    "ablation/results.md": "f56cf5286b60f8b2abfffde05783161da10ea5ed667d33635692dc30fba5683e",
+    "ablation_ann/results.json": "4984366eebe9961cdadbdaf174550ae87fd8cb0af79fb18d8acea840ef64813f",
+    "ablation_ann/results.md": "525af1ac69442ba5f2394363e9cc31243857045020da825808d39fde179d572e",
+    "ablation_dev/results.json": "d309dafdc98e87a08976ee4f3c25a3f8a78627b9c6c5d76f9227ca0729db25b7",
+    "ablation_dev/results.md": "77340c04c706aa86c00701b79500ebb0cb18fdcd5ffcbe565b255bd0542e494a",
+    "conversational_evaluation.json": "2cb493f2bf95d6a212c759cdd39f92ca5c05bf207476c4aa10a756602aef90fa",
+    "lifecycle.json": "580ac42e50be983e99c3299e4c1faf5f5ce466857af181c5757fb8e62953b9b0",
+    "locomo_retrieval.json": "64ac00438595640fa66cb0e6d504c394b5a90726ded3754f678df51157988512",
+    "locomo_retrieval_ann.json": "11ff77c8c670b97ab81301411b09c3917505abfc04ec71e5847187b76dc05dc3",
+    "logs/ablation_dev.log": "87bcc505eee132988f3ca4b38930183423f8d2919b97c687a7fa9c762607b223",
+    "logs/ablation_test.log": "9d76892e89dcdf1d9291baefc44b277dc1be80fb643f14ea7fa74dc2eab6b283",
+    "logs/ablation_test_ann.log": "fdd4c76c80c1451352ca7432e469838fd9b0e0f0dafdab315fc78ae8253d9660",
+    "logs/build_dataset.log": "584e758d18eec61e76cf4690c7623133f32428c97f3a5946a9bd775f1d203e23",
+    "logs/classification.log": "8ee3495ca6fdb2b1bd9e3aa31547003273b23be8d3221bd068a10f2cafa1b7bd",
+    "logs/lifecycle.log": "ee3b77971ee2ab40d3ef075587d6dea6485014e4ea4fb0c3f4c4495170e0cd78",
+    "logs/locomo.log": "357e8e8abca41e30633ce89016f1d75db4390fd7202e9ad84d5f51bc09a6bb96",
+    "logs/locomo_ann.log": "01c3dfbe8d53097622d22ca7a0c536554dff2dc9552c7cdada595fe121f2a5f1",
+    "logs/report.log": "b30f585ce5c263595c279a525da38137be128653d6dcb5e17b0396484f998822",
+    "logs/retention.log": "82a83f63cfef6ebd1dc56b0bbe133da01c51c5ef85240cef52ace99483d47de0",
+    "longmemeval_retention.json": "a2b3e2d68adedb71ca94b80a6e98dbb1fa25e8fb3f8945ec2b277db845e316c0",
+    "summary.json": "85f8b41b8f6b61246132cfa57d2ec18204d0be54dee7c619a8aac063aed7feb3"
+  }
+}

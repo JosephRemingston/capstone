@@ -485,6 +485,7 @@ POST /api/v1/memories
 GET  /api/v1/memories
 GET  /api/v1/memories/{id}
 POST /api/v1/memories/search
+POST /api/v1/memories/ask
 GET  /api/v1/me/export?format=json|csv
 DELETE /api/v1/me
 GET /health/live

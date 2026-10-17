@@ -294,8 +294,9 @@ The adoption rule required at least 95% (benchmark) / 90% (external) of answerab
 | --- | --- | --- |
 | CLI | Ingestion, inspection, search, graph queries, answers, history, reconciliation and cleanup; the caller supplies a user ID. | [`main/__main__.py`](main/__main__.py) |
 | Python | `MemoryCore`, `LocalMemoryStore` and `MemoryRAG` used directly. | [`main/`](main/) |
-| HTTP API | FastAPI with signup/login, bearer tokens, role checks, per-user memory endpoints, search, JSON/CSV export and account deletion; the user ID comes from the authenticated identity. | [`api/`](api/) |
-| Operations | `/health/live`, `/health/ready` (reports the importance scorer), `/metrics` (Prometheus), structured request logs and `/docs`; the web demo is mounted at `/demo` when static assets are present. Settings are validated at start-up, and the importance model and encoder are loaded there, so a misconfiguration stops the API instead of failing requests. | [`api/app.py`](api/app.py), [`api/config.py`](api/config.py), [`static/`](static/) |
+| Web app | React app at `/app`: Chat (how each message is classified, tiered and scored, with the 25 % model + 75 % rules breakdown), Memories (filters, history, export), Memory detail (revision timeline, conflicts, claim), Search & Ask (per-channel ranks, fusion and reranker scores, cited answers; Gemini only after a confirmation), Graph (temporal relations by valid and recorded time), Evaluation (this README's baseline → final → current tables per layer, the importance model's test results, and a comparison of any two snapshots, all read from `evaluation/reports`) and System (health, scorer, live counters, account deletion). | [`frontend/`](frontend/) |
+| HTTP API | FastAPI with signup/login, bearer tokens, role checks, per-user memory endpoints, revision history (`GET /api/v1/memories/{id}/history`), the temporal graph (`GET /api/v1/graph`), the evaluation snapshots (`GET /api/v1/evaluation/snapshots[/{tag}]`, `GET /api/v1/evaluation/model`), search, cited answers (`POST /api/v1/memories/ask`, extractive by default), JSON/CSV export and account deletion; the user ID comes from the authenticated identity. | [`api/`](api/) |
+| Operations | `/health/live`, `/health/ready` (reports the importance scorer), `/metrics` (Prometheus), structured request logs and `/docs`; the React app is served at `/app` when `frontend/dist` is built, and the original single-page demo stays at `/demo`. Settings are validated at start-up, and the importance model and encoder are loaded there, so a misconfiguration stops the API instead of failing requests. | [`api/app.py`](api/app.py), [`api/config.py`](api/config.py), [`static/`](static/) |
 
 | Problem found in the baseline | Evidence | Fix | Code |
 | --- | --- | --- | --- |
@@ -328,6 +329,15 @@ The CLI `ask` command loads `.env` by default. The API reads its process environ
 export COGNIMEM_JWT_SECRET="$(.venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 .venv/bin/python -m api
 # Visit http://localhost:8000/docs for the endpoint schemas.
+```
+
+The web app needs Node 20+ and pnpm. Build it once and the API serves it at `http://localhost:8000/app`; for development, run Vite (which proxies `/api` to port 8000) next to the API:
+
+```bash
+cd frontend && pnpm install
+pnpm build                  # served by the API at /app
+pnpm dev                    # or: hot-reloading dev server at http://localhost:5173/app/
+pnpm test && pnpm e2e       # unit tests; Playwright smoke test against a fresh API (after pnpm build)
 ```
 
 `COGNIMEM_STORE`, `COGNIMEM_AUTH_DB`, and `COGNIMEM_INDEX` override local paths. Vector search is exact by default; `COGNIMEM_ANN_ENABLED=true` (CLI: `--ann`) enables LSH for users with at least `COGNIMEM_ANN_EXACT_THRESHOLD` memories (default 5000, must be >= 1). `COGNIMEM_CANDIDATE_POOL` (1-200) and `COGNIMEM_MODEL_THREADS` (default: onnxruntime decides) tune reranking. Keep `.env`, tokens, and generated runtime data out of version control.
@@ -389,6 +399,10 @@ curl -sS http://localhost:8000/api/v1/memories/search \
   -H "Authorization: Bearer $COGNIMEM_DEMO_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"query":"How should you answer me?","mode":"keyword","limit":5}'
+curl -sS http://localhost:8000/api/v1/memories/ask \
+  -H "Authorization: Bearer $COGNIMEM_DEMO_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"How should you answer me?"}'
 ```
 
 The `/docs` page documents the other endpoints. Token, store, and index files are local runtime state; do not commit them.
@@ -421,6 +435,7 @@ To run the automated tests, install the test runner (`uv pip install --python .v
 | [`main/retrieval/`](main/retrieval/) | Keyword ranking, BGE embeddings, hybrid search, reranking, context, answers. |
 | [`main/ensemble.py`](main/ensemble.py), [`main/ml.py`](main/ml.py), [`training/ensemble/`](training/ensemble/), [`artifacts/importance_ensemble/`](artifacts/importance_ensemble/) | Default hybrid importance scorer, its feature schema, its training, and the trained model. |
 | [`api/`](api/), [`static/`](static/) | Authenticated HTTP API, monitoring, privacy operations, demo. |
+| [`frontend/`](frontend/) | React + TypeScript web app (Vite, Tailwind, shadcn/ui), its unit tests and a Playwright smoke test. |
 | [`evaluation/`](evaluation/), `docs/reports/` (generated locally, git-ignored) | Datasets, runners, tracked summary metrics; full per-query reports and failure cases are regenerated under `docs/reports/`. |
 | [`tests/`](tests/) | Automated behavior and integration tests. |
 

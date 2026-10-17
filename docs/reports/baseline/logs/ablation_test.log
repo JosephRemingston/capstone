@@ -1,0 +1,50 @@
+# Controlled ablation (test split, 270 queries)
+
+Dataset: authored by Claude (AI) on 2026-10-12; not human-validated. Exact search: True. Candidate pool: 20. Top-K for answers: 5.
+
+## Retrieval (answerable queries)
+
+| Arm | Recall@5 | Recall@10 | Hit@5 | MRR | nDCG@10 | Pool hit | Reranker recovery | P50 ms | P95 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| vector | 89.7% | 94.8% | 95.1% | 0.860 | 0.844 | 99.2% | 95.9% | 21 | 30 |
+| vector_reranker | 92.4% | 97.0% | 98.4% | 0.904 | 0.877 | 99.2% | 99.2% | 69 | 84 |
+| vector_graph | 94.1% | 96.2% | 98.0% | 0.885 | 0.876 | 99.2% | 98.8% | 34 | 41 |
+| vector_graph_reranker | 92.4% | 97.0% | 98.4% | 0.904 | 0.877 | 99.2% | 99.2% | 81 | 93 |
+| hybrid_full | 93.0% | 97.6% | 98.8% | 0.904 | 0.879 | 99.6% | 99.2% | 85 | 100 |
+
+## Answers and answerability (all queries, extractive generator)
+
+| Arm | Correct (grounded) | Correct top-1 (answerable) | Answerable accepted | Unanswerable refused | Balanced | Context precision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| vector | 85.6% | 70.9% | 100.0% | 0.0% | 50.0% | 24.8% |
+| vector_reranker | 88.9% | 77.3% | 100.0% | 0.0% | 50.0% | 25.3% |
+| vector_graph | 89.3% | 74.1% | 100.0% | 0.0% | 50.0% | 26.0% |
+| vector_graph_reranker | 88.9% | 77.3% | 100.0% | 0.0% | 50.0% | 25.3% |
+| hybrid_full | 89.3% | 77.3% | 100.0% | 0.0% | 50.0% | 25.4% |
+
+## Recall@5 by query type
+
+| Type | vector | vector_reranker | vector_graph | vector_graph_reranker | hybrid_full |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| semantic | 90.9% | 100.0% | 95.5% | 100.0% | 100.0% |
+| episodic | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| temporal | 77.3% | 81.8% | 81.8% | 81.8% | 81.8% |
+| historical | 73.9% | 91.3% | 91.3% | 91.3% | 95.7% |
+| multi_hop | 72.7% | 65.9% | 90.9% | 65.9% | 68.2% |
+| entity_relationship | 95.7% | 95.7% | 100.0% | 95.7% | 95.7% |
+| conflict | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| preference | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| procedural | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| recency | 81.2% | 81.9% | 79.7% | 81.9% | 81.9% |
+| negative_absence | 95.5% | 100.0% | 95.5% | 100.0% | 100.0% |
+| unanswerable | — | — | — | — | — |
+
+## Paired comparisons (right minus left)
+
+- graph_contribution (vector → vector_graph): Recall@5 +0.043 [+0.022, +0.067], p=0.0002; grounded correctness +0.037, p=0.0026.
+- reranker_on_vector (vector → vector_reranker): Recall@5 +0.027 [-0.001, +0.056], p=0.0648; grounded correctness +0.033, p=0.0262.
+- reranker_on_graph (vector_graph → vector_graph_reranker): Recall@5 -0.016 [-0.041, +0.008], p=0.2164; grounded correctness -0.004, p=1.0000.
+- keyword_contribution (vector_graph_reranker → hybrid_full): Recall@5 +0.006 [+0.000, +0.016], p=0.4991; grounded correctness +0.004, p=1.0000.
+
+Labels are Claude-authored and not human-validated. Grounded correctness requires the answer to appear in a supporting memory that reached the context.
+

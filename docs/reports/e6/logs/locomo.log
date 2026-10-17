@@ -1,0 +1,16 @@
+{"conversation": "conv-26", "questions": 196, "elapsed_seconds": 124}
+{"conversation": "conv-30", "questions": 105, "elapsed_seconds": 191}
+{"conversation": "conv-41", "questions": 193, "elapsed_seconds": 288}
+{"conversation": "conv-42", "questions": 258, "elapsed_seconds": 420}
+{"conversation": "conv-43", "questions": 241, "elapsed_seconds": 554}
+{"conversation": "conv-44", "questions": 158, "elapsed_seconds": 641}
+{"conversation": "conv-47", "questions": 189, "elapsed_seconds": 747}
+{"conversation": "conv-48", "questions": 239, "elapsed_seconds": 876}
+{"conversation": "conv-49", "questions": 193, "elapsed_seconds": 980}
+{"conversation": "conv-50", "questions": 201, "elapsed_seconds": 1115}
+recency          R@5 0.009  R@10 0.014  Hit@5 0.011  pool_hit None  p50 1 ms
+keyword          R@5 0.377  R@10 0.446  Hit@5 0.413  pool_hit None  p50 10 ms
+semantic         R@5 0.433  R@10 0.540  Hit@5 0.478  pool_hit None  p50 9 ms
+graph            R@5 0.012  R@10 0.012  Hit@5 0.016  pool_hit None  p50 11 ms
+hybrid_fusion    R@5 0.482  R@10 0.569  Hit@5 0.531  pool_hit 0.696  p50 27 ms
+hybrid_reranked  R@5 0.668  R@10 0.734  Hit@5 0.723  pool_hit 0.919  p50 487 ms

@@ -1,0 +1,74 @@
+{
+ "verdict": "partially_sound",
+ "reproduced": true,
+ "reproduced_numbers": "Work dir: /private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6merge/verify (repo/, tools/, out/, variants/).\n\n**Patch and tree**\n- Patch sha256 890efe14\u20262567. It applies with `patch -p1` (dry run and real) to a fresh snapshot copy: no .rej or .orig files, no fuzz.\n- The tree differs from the snapshot in exactly the 17 listed files. It is identical to impl/repo.\n- generation.py changes are additions only (imports, the abstention block, the `answer()` abstain_threshold parameter). __main__.py changes are only the --abstain flag and its handling.\n- Freeze hashes in FROZEN_post_adjustment.txt match my applied tree: generation.py c6045708\u2026, __main__.py c09fd152\u2026, rag.py 8c9ccac1\u2026, gold a93ca70f\u20260f25.\n- The freeze was written at 16:17:01, before the bench-test log started at 16:17:07.\n- tools/frozen_generation.py is byte-identical to the judged base generation.py (3f81fa08\u2026). The base patch sha 21a2f7e6\u2026 matches the judge.\n\n**Dev replays** (frozen / adjusted, accepted / refused / balanced) all match the report:\n| Set | Frozen | Adjusted |\n|---|---|---|\n| Calib, designer contexts | 45/45, 11/45, 62.2 | 45/45, 11/45, 62.2 |\n| Bench-dev, designer contexts | 83/83, 3/7, 71.4 | 83/83, 3/7, 71.4 |\n| Calib, re-collected | identical | identical |\n| Bench-dev, re-collected | identical | identical |\n- Grounded: 57.3, 93.3 and 94.4.\n\n**Post-adjustment confirmation**\n- Official `evaluation.ablation --split test --candidate-limit 20 --abstain-threshold 0.0 --arms hybrid_full`, re-run once: grounded 91.5, accepted 99.6, refused 17.4, balanced 58.5.\n- The abstentions are q-p04-unanswerable-1, q-p07-unanswerable-2, q-p12-unanswerable-1, q-p12-unanswerable-3, and the false abstention q-p12-preference-1 (\"How long should my answers\u2026\").\n- LongMemEval saved contexts: 462/470 (98.3), 2/30, 52.5, precision 20.0, grounded 31.4.\n- LoCoMo saved contexts: 1516/1540 (98.4), 7/446, 50.0, precision 22.6, grounded 16.7.\n\n**Row-level frozen vs adjusted:** exactly one decision changes across calib, bench-dev (both context sets), bench-test, LongMemEval and LoCoMo: LongMemEval answerable \"How many days a week do I attend fitness classes?\" goes from None to unfilled_duration_slot.\n\n**Probes**\n- Verifier synthetic: 9/25 false abstentions, 9/22 refused. Designer: 0/40 and 10/10. Both reproduced.\n- My own probes, set 1: adjusted 2/52 false abstentions and 14/17 refused, against frozen 19/52 and 11/17.\n- My own probes, set 2: adjusted 6/29 and 9/22, against frozen 15/29 and 17/22.\n\n**Gold file**\n- `build_dataset --check` exits 0, and two fresh `--output` builds are byte-identical to the committed file.\n- Against the snapshot gold: memories identical (456), same 360 query ids in the same order, 0 answerable queries changed. Exactly 30 unanswerable queries changed, all in the 'query' field only.\n- Every seed diff is a `.queries[i].query` of an unanswerable query. Datasets match the judged base exactly.\n\n**Tests**\n- Full suite: 226 passed and 155 subtests passed. The new files have 30 tests.\n\n**Defaults and CLI**\n- Library default is off: answer(abstain_threshold=None), ABSTAIN_THRESHOLD=0.0, Protocol default None.\n- Help text starts with \"Experimental, off by default\".\n- `ask --abstain` with gemini: exit 2, invalid_input.\n- An end-to-end run on a temp store with the real local reranker abstained correctly (\"my brother Will\" answered, Bloemkast answered, 1,450 rent answered, yoga duration refused, sister name refused).\n- It warned once with --no-rerank and once with --mode keyword. Without --abstain the flag stays off.",
+ "issues": [
+  {
+   "severity": "major",
+   "issue": "Adjustment 1 is incomplete for the 'R is called/named <Name>' form. When the name is a stop or calendar word, the rule still falsely abstains, which contradicts the implementer's claim that the exemption covers the first run after 'the relation word or the link verb'.",
+   "evidence": "In _relation_names, the after-pattern `(?:(?:is|was|named|called|whose name is|name is|name's)\\s+)?` consumes only one token. So for 'My brother is called Will', group(1) is 'called Will', which starts lowercase, so first=False and 'will' is blocked.\n\nProbes that abstain (unfilled_name_slot):\n- 'What is my brother called?' + 'My brother is called Will and he lives in York.' (the judge's own head-noun example paired with the item-1 name)\n- \"What is my brother's name?\" + 'My brother is called Will.'\n- \"What is my brother's name?\" + 'My brother is named Will.'\n- \"What is my daughter's name?\" + 'My daughter is called June.'\n\n'My brother is called Daniel' passes. Frozen v2 fails these too, so this is a gap, not a regression.",
+   "fix": "Change the after-pattern to `(?:(?:is|was)\\s+)?(?:(?:named|called|whose name is|name is|name's)\\s+)?`.\n\nI checked this in variants/called_fix.py:\n- It fixes all four probes.\n- It changes 0 decisions on calib, bench-dev, bench-test, LongMemEval and LoCoMo, so the post-adjustment confirmation still holds.\n- The abstention tests pass.\n\nAdd 'My brother is called Will' and 'My daughter is called June' to test_names_colliding_with_stop_or_calendar_words."
+  },
+  {
+   "severity": "minor",
+   "issue": "The soft-exclusion relaxation from fix 1 opens a new fail-open path. Weekdays and holidays directly after a relation word, or after its possessive 's, now fill the name slot. Frozen v2 refused these.",
+   "evidence": "These now answer instead of refusing:\n- \"What is my sister's name?\" + \"My sister's Christmas party was fun.\"\n- \"What is my brother's name?\" + \"My brother's May wedding is in Spain.\"\n- 'I saw my sister Monday and she looked tired.'\n- 'Called my sister Friday about the trip.'\n- \"What's my partner's name?\" + 'My partner Thursday night is date night.'\n\nThe cause is that soft_ok applies after the optional `['\u2019]s` and to every word in _CALENDAR and _STOP.",
+   "fix": "Do not grant soft_ok after a bare possessive 's unless 'name is' or \"name's\" follows. Consider limiting the calendar exemption to month and given-name words (April, May, June, Jan, Jun, Will\u2026) and excluding weekdays and holidays. Re-run the dev replays and the row diff."
+  },
+  {
+   "severity": "minor",
+   "issue": "Fix 2 creates a new false-abstention class for nested relations. The rule now anchors only on the head relation, so when the evidence names the person through the modifier relation and a verb, it abstains. Frozen answered these.",
+   "evidence": "Adjusted abstains, frozen answers:\n- 'What is the name of my sister's husband?' + 'My sister married Tom last year.'\n- \"What's my sister's husband's name?\" (same text)\n- \"What is my brother's girlfriend's name?\" + 'My brother is dating Chloe now.'\n- 'What is the name of my brother's girlfriend?' + the same text.\n\nThis had no dev or held-out impact (0 rows changed apart from the fix-3 row).",
+   "fix": "When the head relation word occurs in no evidence sentence, fall back to the generic new-capitalised-name check, or keep the modifier relation as a secondary anchor. Add a test, then re-check dev."
+  },
+  {
+   "severity": "minor",
+   "issue": "`ask --abstain --preview` is a silent no-op when the reranker is applied: preview never calls answer(), and nothing warns or rejects.",
+   "evidence": "In rag_command, `payload = {'context':..., 'prompt':...} if args.preview else answer(...)`. On a real store with the reranker applied, `ask ... --generator extractive --abstain --preview` writes nothing to stderr.",
+   "fix": "Warn once (or reject) when --abstain is combined with --preview, and add a CLI test."
+  },
+  {
+   "severity": "minor",
+   "issue": "CliAbstainTests.test_warns_once_with_no_rerank is not hermetic. It runs real hybrid retrieval and loads BAAI/bge-small-en-v1.5 from data/rag/models.",
+   "evidence": "In a copy of the patched repo without the data/ symlink, the test fails with exit 2: 'Could not load model BAAI/bge-small-en-v1.5 from any source.' Without HF_HUB_OFFLINE it would try a network download during the test run. The pre-existing test_neural_importance has the same dependency, but this one is new.",
+   "fix": "Patch MemoryRAG.context (as test_applied_reranker_abstains_without_warning does) or stub the embedder in that test."
+  },
+  {
+   "severity": "minor",
+   "issue": "Verifier test 6 was turned into a characterisation test that asserts the defective behaviour, instead of staying an expected failure.",
+   "evidence": "KnownLimitations.test_new_capitalised_word_fills_name_or_entity asserts that abstention_reason returns None for \"What's my dog's name?\" + 'I took my dog to Central Park.' A future fix will make the suite fail. Judge item 6 asked only that passing expectedFailures be removed. An xfail that still fails is allowed (the judge counted '187 plus 6 xfail').",
+   "fix": "Restore @unittest.expectedFailure with the original refusal assertions, or use skip with a reason. Keep the docstring."
+  },
+  {
+   "severity": "minor",
+   "issue": "Some behaviour changes go beyond judge items 1-4: ';' no longer splits sentences, which affects anchor windows for every slot; there is a new 'X is/was my R' before-pattern; and there is a pronoun-clause link.",
+   "evidence": "_SENTENCE changed from splitting on ';' to `(?<=[.!?])\\s+|\\n+`. _PRONOUN_RELATION and the before-pattern change are also added. My row diff confirms 0 decision changes on all dev and held-out sets apart from the one fix-3 row, so the changes are measured neutral, but they were not sanctioned by the judge.",
+   "fix": "List them explicitly in the merge notes and report as implementer additions justified by verifier probe test 3."
+  },
+  {
+   "severity": "minor",
+   "issue": "Fix 3 costs one held-out answerable, and the judge's report wording is now false. 'How many days a week\u2026' questions are parsed as duration slots.",
+   "evidence": "LongMemEval 'How many days a week do I attend fitness classes?' changes from answered to unfilled_duration_slot, giving 462/470 = 98.3%. The report_wording line 'answerable acceptance is 98.4% or higher on every held-out set' no longer holds. LongMemEval balanced is now 52.5 and precision 20.0, against the frozen 52.6 and 22.2.",
+   "fix": "Do not tune now. Update report_wording to '98.3% or higher' and append the post-adjustment row with these exact figures. Record 'how many days a week' as a known limitation."
+  },
+  {
+   "severity": "minor",
+   "issue": "The elapsed-time cue list includes 'time of', and its provenance is undocumented. That phrase appears only in held-out LongMemEval contexts, not in any dev data.",
+   "evidence": "grep finds 'time of 25:50' and 'time of 27:12' only in heldout/ctx_lme.json. The dev data has only 'in 1:58' and 'in 4:05'. Removing 'time of' (or 'clocked' and 'under', or keeping only 'in') changes 0 decisions on any dev or held-out set, so there is no measurable held-out tuning effect.",
+   "fix": "Document where each cue word came from, or drop the cues that are not justified by dev data or probes."
+  },
+  {
+   "severity": "minor",
+   "issue": "Judge item 8 housekeeping and the report updates are still open. They are outside the patch.",
+   "evidence": "The wrong hash 'a93ca70f\u20260e07' still appears in the main repo's docs/progress/designs/F6-slot-rule-v2_design.json and F6-slot-rule-v2_verdict.json. The post-adjustment row and report_wording are not yet applied. The tool copies already exist in docs/progress/slot_rule_tools and docs/progress/slot_rule_verify_tools. The docs/reports/baseline/MANIFEST.json match was a coincidental hex substring.",
+   "fix": "In the main repo after merge: correct the hash in the notes, append the post-adjustment row, and apply the amended report_wording."
+  },
+  {
+   "severity": "minor",
+   "issue": "The bare-number money filler from fix 4 fails open on non-money numbers inside the anchor window. This is inherent to the adjustment and only costs refusals, never acceptance.",
+   "evidence": "These fill the money slot:\n- 'The car does 45 mpg on the motorway.'\n- 'The car has 60000 on the clock.'\n- 'Rent is due on the 1st, flat 4.'\n\nSeparately, 'Yoga class is in an hour, gotta run.' fills a duration slot; this also happens in frozen.",
+   "fix": "Document it as a known limitation. Optionally exclude numbers followed by measurement or ordinal units (mpg, miles on the clock, flat or room numbers) after a dev-only check."
+  }
+ ],
+ "recommended_adjustments": "**Overall:** most of the patch is correct and reproducible.\n- It applies cleanly and the library default stays off.\n- The CLI rejects --abstain with gemini and warns with --no-rerank and when the reranker was not applied.\n- Adjustments 2, 3, 4, 5 and 6 are in place.\n- Dev replays and all post-adjustment numbers reproduce exactly.\n- The gold rebuild is byte-stable and only the 30 unanswerable query texts changed.\n- The full suite passes (226).\n- Frozen and adjusted rules differ by one held-out row, a loss. No adjustment rescued a held-out row, so nothing suggests held-out tuning.\n\n**Before merge, should fix:**\n1. Make the relation after-pattern accept a two-token link, `(?:(?:is|was)\\s+)?(?:(?:named|called|...)\\s+)?`. This covers \"My brother is called Will\" and \"My daughter is called June\". I verified it: 0 decision changes on all dev and held-out sets, abstention tests pass, so the existing post-adjustment confirmation still stands. Add the two probes as tests.\n\n**Cheap follow-ups:**\n2. Restrict soft_ok so it does not fire after a bare possessive 's (\"my sister's Christmas party\") or on weekdays and holidays.\n3. When the head relation of a nested name question is absent from the evidence, fall back to the generic name check (\"my sister's husband\" + \"My sister married Tom\").\n4. Warn or reject on --abstain with --preview.\n5. Make test_warns_once_with_no_rerank hermetic by patching MemoryRAG.context.\n6. Restore verifier test 6 as @expectedFailure instead of asserting the defect.\n\n**Housekeeping:**\n- Re-run the row diff and dev replays after any of the above. No new held-out run is needed if the diff stays at 0 rows.\n- Report: change \"98.4% or higher\" to \"98.3% or higher\" (LongMemEval 462/470, balanced 52.5, precision 20.0). List the ';', 'X is my R' and pronoun-clause changes as implementer additions. Document where the elapsed-time cue words came from ('time of' appears only in held-out LongMemEval text; removing it changes no decision).\n- Correct the \u20260e07 hash in docs/progress/designs/F6-slot-rule-v2_{design,verdict}.json."
+}

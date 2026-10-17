@@ -1,0 +1,1098 @@
+[
+  {
+    "id": "abs-p01-u01",
+    "persona": "p01",
+    "query": "Which university did Priya study at before she joined Brightline?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "school/university"
+  },
+  {
+    "id": "abs-p01-u02",
+    "persona": "p01",
+    "query": "What rating did the Atlas client give the dashboard after launch, according to Priya?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "score/rating"
+  },
+  {
+    "id": "abs-p01-u03",
+    "persona": "p01",
+    "query": "What is Priya paid each year in her current role?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "salary/amount"
+  },
+  {
+    "id": "abs-p01-u04",
+    "persona": "p01",
+    "query": "On which dates does Priya's quarterly planning week with Dana take place?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "date/when"
+  },
+  {
+    "id": "abs-p01-u05",
+    "persona": "p01",
+    "query": "How many people work alongside Priya on the Atlas team?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "count/how-many"
+  },
+  {
+    "id": "abs-p01-u06",
+    "persona": "p01",
+    "query": "How long does Priya's daily metro commute in Porto take?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "duration"
+  },
+  {
+    "id": "abs-p01-u07",
+    "persona": "p01",
+    "query": "Do you know the name of the finance person who gets Priya's month-end figures?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "person name (non-pet)"
+  },
+  {
+    "id": "abs-p01-u08",
+    "persona": "p01",
+    "query": "Remind me which levada walk on Madeira Priya liked best.",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "which-option/preference"
+  },
+  {
+    "id": "abs-p01-u09",
+    "persona": "p01",
+    "query": "How does Priya feel about her manager working remotely from another country?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "opinion never stated"
+  },
+  {
+    "id": "abs-p01-u10",
+    "persona": "p01",
+    "query": "Has Priya ever competed in a race with the Tagus Rowing Club?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "yes/no existence"
+  },
+  {
+    "id": "abs-p01-u11",
+    "persona": "p01",
+    "query": "Why did Priya decide to leave her job at Brightline Analytics?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "reason/why"
+  },
+  {
+    "id": "abs-p01-u12",
+    "persona": "p01",
+    "query": "Did Priya's half marathon in Porto start in the morning or the evening?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "which-option"
+  },
+  {
+    "id": "abs-p01-u13",
+    "persona": "p01",
+    "query": "What wedding gift should Priya bring her sister, given her sister's tastes?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "advice-seeking, never-mentioned topic"
+  },
+  {
+    "id": "abs-p01-u14",
+    "persona": "p01",
+    "query": "What was Priya's finishing time in the Turin marathon?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Sofia ran Turin)"
+  },
+  {
+    "id": "abs-p01-u15",
+    "persona": "p01",
+    "query": "Which concert hall did Priya go to for a jazz night?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Jonas, Elbphilharmonie)"
+  },
+  {
+    "id": "abs-p01-a01",
+    "persona": "p01",
+    "query": "What is the name of Priya's brother?",
+    "answerable": true,
+    "gold": {
+      "p01-sibling": 3
+    },
+    "answer": "Arjun",
+    "aliases": [],
+    "form": "name wh-"
+  },
+  {
+    "id": "abs-p01-a02",
+    "persona": "p01",
+    "query": "Is Priya's manager at Tidewater called Dana Whitlock?",
+    "answerable": true,
+    "gold": {
+      "p01-manager": 3
+    },
+    "answer": "Dana Whitlock",
+    "aliases": [
+      "yes",
+      "Dana"
+    ],
+    "form": "name yes/no"
+  },
+  {
+    "id": "abs-p01-a03",
+    "persona": "p01",
+    "query": "How many coffees a day did Priya used to drink?",
+    "answerable": true,
+    "gold": {
+      "p01-pref_old": 3,
+      "p01-pref_new": 1
+    },
+    "answer": "four",
+    "aliases": [
+      "about four"
+    ],
+    "form": "how many (stated)"
+  },
+  {
+    "id": "abs-p01-a04",
+    "persona": "p01",
+    "query": "How long did it take Priya to run the Porto half marathon?",
+    "answerable": true,
+    "gold": {
+      "p01-ep_chain2": 3,
+      "p01-ep_chain1": 1
+    },
+    "answer": "1:58",
+    "aliases": [],
+    "form": "how long (stated)"
+  },
+  {
+    "id": "abs-p01-a05",
+    "persona": "p01",
+    "query": "How often does Priya video call her brother?",
+    "answerable": true,
+    "gold": {
+      "p01-sibling": 3
+    },
+    "answer": "most Sundays",
+    "aliases": [
+      "Sundays"
+    ],
+    "form": "how often (stated)"
+  },
+  {
+    "id": "abs-p01-a06",
+    "persona": "p01",
+    "query": "How many jobs has Priya held, counting her current one?",
+    "answerable": true,
+    "gold": {
+      "p01-job_old": 3,
+      "p01-job_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p01-a07",
+    "persona": "p01",
+    "query": "How many cities has Priya lived in, according to what she told me?",
+    "answerable": true,
+    "gold": {
+      "p01-home_old": 3,
+      "p01-home_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two",
+      "Lisbon and Porto"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p01-a08",
+    "persona": "p01",
+    "query": "For roughly how many years did Priya rent in Lisbon before moving to Porto?",
+    "answerable": true,
+    "gold": {
+      "p01-home_old": 3,
+      "p01-home_new": 3
+    },
+    "answer": "4 years",
+    "aliases": [
+      "four years",
+      "about four years"
+    ],
+    "form": "date arithmetic",
+    "computed": true
+  },
+  {
+    "id": "abs-p01-a09",
+    "persona": "p01",
+    "query": "When does Priya need to renew her residence card by?",
+    "answerable": true,
+    "gold": {
+      "p01-task_1": 3
+    },
+    "answer": "15th of January",
+    "aliases": [
+      "January 15",
+      "January"
+    ],
+    "form": "when (stated)"
+  },
+  {
+    "id": "abs-p01-a10",
+    "persona": "p01",
+    "query": "What job title did Priya get when she joined Tidewater Labs?",
+    "answerable": true,
+    "gold": {
+      "p01-job_new": 3
+    },
+    "answer": "senior analyst",
+    "aliases": [],
+    "form": "occupation word"
+  },
+  {
+    "id": "abs-p01-a11",
+    "persona": "p01",
+    "query": "I'm cooking dinner for Priya; which ingredient should I definitely avoid?",
+    "answerable": true,
+    "gold": {
+      "p01-allergy_pos": 3
+    },
+    "answer": "shellfish",
+    "aliases": [],
+    "form": "advice"
+  },
+  {
+    "id": "abs-p01-a12",
+    "persona": "p01",
+    "query": "Could you recommend a drink to order for Priya at a café today?",
+    "answerable": true,
+    "gold": {
+      "p01-pref_new": 3,
+      "p01-pref_old": 1
+    },
+    "answer": "oat flat white",
+    "aliases": [],
+    "form": "advice/preference (current)"
+  },
+  {
+    "id": "abs-p01-a13",
+    "persona": "p01",
+    "query": "Which city did Priya visit for a conference?",
+    "answerable": true,
+    "gold": {
+      "p01-ep_trip2": 3
+    },
+    "answer": "Copenhagen",
+    "aliases": [],
+    "form": "third-person episodic"
+  },
+  {
+    "id": "abs-p01-a14",
+    "persona": "p01",
+    "query": "How does Priya get around without owning a car?",
+    "answerable": true,
+    "gold": {
+      "p01-neg_car": 3
+    },
+    "answer": "metro",
+    "aliases": [
+      "the metro"
+    ],
+    "form": "third-person, how"
+  },
+  {
+    "id": "abs-p01-a15",
+    "persona": "p01",
+    "query": "At what oven temperature does Priya bake her sourdough?",
+    "answerable": true,
+    "gold": {
+      "p01-proc_b": 3
+    },
+    "answer": "250 degrees",
+    "aliases": [
+      "250"
+    ],
+    "form": "how much (stated number)"
+  },
+  {
+    "id": "abs-p02-u01",
+    "persona": "p02",
+    "query": "Which Oslo neighbourhood is Jonas's new flat located in?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "place/neighbourhood"
+  },
+  {
+    "id": "abs-p02-u02",
+    "persona": "p02",
+    "query": "Where did Jonas take classes to get ready for his Norwegian exam?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "school/place"
+  },
+  {
+    "id": "abs-p02-u03",
+    "persona": "p02",
+    "query": "What was the bill for Jonas's parents' celebration meal?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "price/amount"
+  },
+  {
+    "id": "abs-p02-u04",
+    "persona": "p02",
+    "query": "On what date did Polaris first go live in a port, according to Jonas?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "date/when"
+  },
+  {
+    "id": "abs-p02-u05",
+    "persona": "p02",
+    "query": "Roughly how many players turn up to Jonas's weekly chess evenings?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "count/how-many"
+  },
+  {
+    "id": "abs-p02-u06",
+    "persona": "p02",
+    "query": "How many hours does Jonas spend on the train to his company's head office?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "duration"
+  },
+  {
+    "id": "abs-p02-u07",
+    "persona": "p02",
+    "query": "What is the name of the landlord Jonas argues with in Norwegian?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "person name (non-pet)"
+  },
+  {
+    "id": "abs-p02-u08",
+    "persona": "p02",
+    "query": "What did Jonas think of the food at Smak?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "opinion never stated"
+  },
+  {
+    "id": "abs-p02-u09",
+    "persona": "p02",
+    "query": "Has Jonas ever played in a chess tournament with his club?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "yes/no existence"
+  },
+  {
+    "id": "abs-p02-u10",
+    "persona": "p02",
+    "query": "Why did Rive Gauche cancel the booking for Jonas's parents' dinner?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "reason/why"
+  },
+  {
+    "id": "abs-p02-u11",
+    "persona": "p02",
+    "query": "Did Jonas's sister Freya end up having a son or a daughter?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "which-option"
+  },
+  {
+    "id": "abs-p02-u12",
+    "persona": "p02",
+    "query": "Which brand of ski wax should Jonas buy, based on what he normally uses?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "advice-seeking, never-stated preference"
+  },
+  {
+    "id": "abs-p02-u13",
+    "persona": "p02",
+    "query": "How did Jonas do in the Porto half marathon?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Priya ran Porto)"
+  },
+  {
+    "id": "abs-p02-u14",
+    "persona": "p02",
+    "query": "Remind me what the rowing club Jonas trains with is called.",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Priya, Tagus Rowing Club)"
+  },
+  {
+    "id": "abs-p02-u15",
+    "persona": "p02",
+    "query": "Do you know what Jonas's cat is called?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "pet name"
+  },
+  {
+    "id": "abs-p02-a01",
+    "persona": "p02",
+    "query": "What is the name of Jonas's sister?",
+    "answerable": true,
+    "gold": {
+      "p02-sibling": 3
+    },
+    "answer": "Freya",
+    "aliases": [],
+    "form": "name wh-"
+  },
+  {
+    "id": "abs-p02-a02",
+    "persona": "p02",
+    "query": "Is the chess club Jonas joined called the Elbe Chess Club?",
+    "answerable": true,
+    "gold": {
+      "p02-club": 3
+    },
+    "answer": "Elbe Chess Club",
+    "aliases": [
+      "yes"
+    ],
+    "form": "name yes/no"
+  },
+  {
+    "id": "abs-p02-a03",
+    "persona": "p02",
+    "query": "How many hours does Jonas cure the salmon for his gravlax?",
+    "answerable": true,
+    "gold": {
+      "p02-proc_c": 3
+    },
+    "answer": "48 hours",
+    "aliases": [
+      "48"
+    ],
+    "form": "how many (stated)"
+  },
+  {
+    "id": "abs-p02-a04",
+    "persona": "p02",
+    "query": "How often does Jonas flip the salmon while it cures?",
+    "answerable": true,
+    "gold": {
+      "p02-proc_c": 3
+    },
+    "answer": "every 12",
+    "aliases": [
+      "every 12 hours",
+      "12"
+    ],
+    "form": "how often (stated)"
+  },
+  {
+    "id": "abs-p02-a05",
+    "persona": "p02",
+    "query": "How often does Jonas's manager come over to Oslo?",
+    "answerable": true,
+    "gold": {
+      "p02-manager": 3,
+      "p02-manager_city": 3
+    },
+    "answer": "every other week",
+    "aliases": [],
+    "form": "how often, multi-memory"
+  },
+  {
+    "id": "abs-p02-a06",
+    "persona": "p02",
+    "query": "How long was Jonas's skiing trip to Trysil?",
+    "answerable": true,
+    "gold": {
+      "p02-ep_trip2": 3
+    },
+    "answer": "a week",
+    "aliases": [
+      "one week",
+      "week"
+    ],
+    "form": "how long (stated)"
+  },
+  {
+    "id": "abs-p02-a07",
+    "persona": "p02",
+    "query": "How many countries has Jonas lived in, going by his moves?",
+    "answerable": true,
+    "gold": {
+      "p02-home_old": 3,
+      "p02-home_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two",
+      "Germany and Norway"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p02-a08",
+    "persona": "p02",
+    "query": "How many different teas has Jonas said he drinks over the years?",
+    "answerable": true,
+    "gold": {
+      "p02-pref_old": 3,
+      "p02-pref_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two",
+      "Earl Grey and sencha"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p02-a09",
+    "persona": "p02",
+    "query": "How many months after moving to Oslo was Jonas's Norwegian exam scheduled?",
+    "answerable": true,
+    "gold": {
+      "p02-home_new": 3,
+      "p02-ep_chain1": 3
+    },
+    "answer": "8 months",
+    "aliases": [
+      "eight months",
+      "8"
+    ],
+    "form": "date arithmetic",
+    "computed": true
+  },
+  {
+    "id": "abs-p02-a10",
+    "persona": "p02",
+    "query": "When is Jonas's Norwegian tax return due?",
+    "answerable": true,
+    "gold": {
+      "p02-task_2": 3
+    },
+    "answer": "end of April",
+    "aliases": [
+      "April"
+    ],
+    "form": "when (stated)"
+  },
+  {
+    "id": "abs-p02-a11",
+    "persona": "p02",
+    "query": "What role did Jonas take on when he joined Fjordline Energy?",
+    "answerable": true,
+    "gold": {
+      "p02-job_new": 3
+    },
+    "answer": "planning lead",
+    "aliases": [],
+    "form": "occupation word"
+  },
+  {
+    "id": "abs-p02-a12",
+    "persona": "p02",
+    "query": "Should I serve Jonas a creamy dairy dessert when he visits?",
+    "answerable": true,
+    "gold": {
+      "p02-allergy_pos": 3
+    },
+    "answer": "lactose intolerant",
+    "aliases": [
+      "no"
+    ],
+    "form": "advice"
+  },
+  {
+    "id": "abs-p02-a13",
+    "persona": "p02",
+    "query": "What did Jonas's manager Ingrid used to run before?",
+    "answerable": true,
+    "gold": {
+      "p02-manager": 3
+    },
+    "answer": "offshore logistics",
+    "aliases": [],
+    "form": "third-person"
+  },
+  {
+    "id": "abs-p02-a14",
+    "persona": "p02",
+    "query": "What did the customs team send Jonas's team when Polaris went live?",
+    "answerable": true,
+    "gold": {
+      "p02-status_3": 3
+    },
+    "answer": "a cake",
+    "aliases": [
+      "cake"
+    ],
+    "form": "third-person episodic"
+  },
+  {
+    "id": "abs-p02-a15",
+    "persona": "p02",
+    "query": "Who was responsible for the delays to Jonas's Polaris project?",
+    "answerable": true,
+    "gold": {
+      "p02-status_2": 3
+    },
+    "answer": "customs software vendor",
+    "aliases": [
+      "vendor"
+    ],
+    "form": "third-person who"
+  },
+  {
+    "id": "abs-p03-u01",
+    "persona": "p03",
+    "query": "Which Kigali neighbourhood did Amara move into?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "place/neighbourhood"
+  },
+  {
+    "id": "abs-p03-u02",
+    "persona": "p03",
+    "query": "Which secondary school did Amara attend growing up in Kenya?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "school/university"
+  },
+  {
+    "id": "abs-p03-u03",
+    "persona": "p03",
+    "query": "What was the value of the funding Amara was offered for her master's?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "price/amount"
+  },
+  {
+    "id": "abs-p03-u04",
+    "persona": "p03",
+    "query": "When is Amara's next work trip to Kampala scheduled?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "date/when"
+  },
+  {
+    "id": "abs-p03-u05",
+    "persona": "p03",
+    "query": "What was the final number of participants in Amara's infusion pump trial?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "count/how-many"
+  },
+  {
+    "id": "abs-p03-u06",
+    "persona": "p03",
+    "query": "How long is the forest loop Amara runs with her club?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "duration/distance"
+  },
+  {
+    "id": "abs-p03-u07",
+    "persona": "p03",
+    "query": "What is the name of the aunt hosting Amara's cousin's graduation party?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "person name (non-pet)"
+  },
+  {
+    "id": "abs-p03-u08",
+    "persona": "p03",
+    "query": "What did Amara think of the food in Stone Town?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "opinion never stated"
+  },
+  {
+    "id": "abs-p03-u09",
+    "persona": "p03",
+    "query": "Has Amara ever gone to visit her brother in Arusha?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "yes/no existence"
+  },
+  {
+    "id": "abs-p03-u10",
+    "persona": "p03",
+    "query": "Why did Amara's old clinic mix up her medical file?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "reason/why"
+  },
+  {
+    "id": "abs-p03-u11",
+    "persona": "p03",
+    "query": "Was the Safari Rally Amara watched won by a local or a foreign driver?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "which-option"
+  },
+  {
+    "id": "abs-p03-u12",
+    "persona": "p03",
+    "query": "What should Amara feed her tortoise so it stops hiding all day?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "advice-seeking, never-mentioned topic"
+  },
+  {
+    "id": "abs-p03-u13",
+    "persona": "p03",
+    "query": "Which language exam did Amara register to sit?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Jonas, B2 Norwegian)"
+  },
+  {
+    "id": "abs-p03-u14",
+    "persona": "p03",
+    "query": "Which tea has Amara switched to drinking lately?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "cross-persona trap (Jonas, sencha)"
+  },
+  {
+    "id": "abs-p03-u15",
+    "persona": "p03",
+    "query": "Do you know what job Amara's brother in Arusha has?",
+    "answerable": false,
+    "gold": {},
+    "answer": "",
+    "aliases": [],
+    "attribute_type": "sibling occupation"
+  },
+  {
+    "id": "abs-p03-a01",
+    "persona": "p03",
+    "query": "What is the name of Amara's younger brother?",
+    "answerable": true,
+    "gold": {
+      "p03-sibling": 3
+    },
+    "answer": "Baraka",
+    "aliases": [],
+    "form": "name wh-"
+  },
+  {
+    "id": "abs-p03-a02",
+    "persona": "p03",
+    "query": "Is Amara's manager called Peter Okello?",
+    "answerable": true,
+    "gold": {
+      "p03-manager": 3
+    },
+    "answer": "Peter Okello",
+    "aliases": [
+      "yes",
+      "Peter"
+    ],
+    "form": "name yes/no"
+  },
+  {
+    "id": "abs-p03-a03",
+    "persona": "p03",
+    "query": "How often does Amara fly to Kampala for work?",
+    "answerable": true,
+    "gold": {
+      "p03-hq": 3
+    },
+    "answer": "once a month",
+    "aliases": [
+      "about once a month",
+      "monthly"
+    ],
+    "form": "how often (stated)"
+  },
+  {
+    "id": "abs-p03-a04",
+    "persona": "p03",
+    "query": "How long does Amara knead her chapati dough for?",
+    "answerable": true,
+    "gold": {
+      "p03-proc_b": 3
+    },
+    "answer": "ten minutes",
+    "aliases": [
+      "10 minutes"
+    ],
+    "form": "how long (stated)"
+  },
+  {
+    "id": "abs-p03-a05",
+    "persona": "p03",
+    "query": "How often did Amara finish a thriller back when she read them?",
+    "answerable": true,
+    "gold": {
+      "p03-pref_old": 3,
+      "p03-pref_new": 1
+    },
+    "answer": "every week",
+    "aliases": [
+      "one every week",
+      "weekly"
+    ],
+    "form": "how often (stated)"
+  },
+  {
+    "id": "abs-p03-a06",
+    "persona": "p03",
+    "query": "How many different venues has Amara's cousin's graduation party been planned for?",
+    "answerable": true,
+    "gold": {
+      "p03-c2_old": 3,
+      "p03-c2_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two",
+      "Mombasa and Nakuru"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p03-a07",
+    "persona": "p03",
+    "query": "How many employers has Amara told me she worked for?",
+    "answerable": true,
+    "gold": {
+      "p03-job_old": 3,
+      "p03-job_new": 3
+    },
+    "answer": "2",
+    "aliases": [
+      "two",
+      "Savanna Health and Mwangaza Robotics"
+    ],
+    "form": "counting/aggregation",
+    "computed": true
+  },
+  {
+    "id": "abs-p03-a08",
+    "persona": "p03",
+    "query": "By how long did Amara defer her Edinburgh scholarship?",
+    "answerable": true,
+    "gold": {
+      "p03-ep_chain2": 3
+    },
+    "answer": "a year",
+    "aliases": [
+      "one year",
+      "by a year"
+    ],
+    "form": "how long (stated)"
+  },
+  {
+    "id": "abs-p03-a09",
+    "persona": "p03",
+    "query": "Which date must Amara renew her work permit before?",
+    "answerable": true,
+    "gold": {
+      "p03-task_1": 3
+    },
+    "answer": "1st of March",
+    "aliases": [
+      "March 1",
+      "March"
+    ],
+    "form": "when (stated)"
+  },
+  {
+    "id": "abs-p03-a10",
+    "persona": "p03",
+    "query": "When is Amara's conference abstract due?",
+    "answerable": true,
+    "gold": {
+      "p03-task_2": 3
+    },
+    "answer": "15th of September",
+    "aliases": [
+      "September 15",
+      "September"
+    ],
+    "form": "when (stated)"
+  },
+  {
+    "id": "abs-p03-a11",
+    "persona": "p03",
+    "query": "Is Amara an engineer by training?",
+    "answerable": true,
+    "gold": {
+      "p03-occupation": 3
+    },
+    "answer": "biomedical engineer",
+    "aliases": [
+      "yes",
+      "engineer"
+    ],
+    "form": "occupation word yes/no"
+  },
+  {
+    "id": "abs-p03-a12",
+    "persona": "p03",
+    "query": "Suggest a book genre that Amara would enjoy reading right now.",
+    "answerable": true,
+    "gold": {
+      "p03-pref_new": 3,
+      "p03-pref_old": 1
+    },
+    "answer": "historical fiction",
+    "aliases": [],
+    "form": "advice/preference (current)"
+  },
+  {
+    "id": "abs-p03-a13",
+    "persona": "p03",
+    "query": "Where did Amara spend the holidays recently?",
+    "answerable": true,
+    "gold": {
+      "p03-ep_trip2": 3
+    },
+    "answer": "Zanzibar",
+    "aliases": [
+      "Stone Town"
+    ],
+    "form": "third-person episodic"
+  },
+  {
+    "id": "abs-p03-a14",
+    "persona": "p03",
+    "query": "How does Amara get around given that she has no car?",
+    "answerable": true,
+    "gold": {
+      "p03-neg_car": 3
+    },
+    "answer": "boda bodas",
+    "aliases": [
+      "matatus"
+    ],
+    "form": "third-person, how"
+  },
+  {
+    "id": "abs-p03-a15",
+    "persona": "p03",
+    "query": "What did Peter Okello set up at Amara's company?",
+    "answerable": true,
+    "gold": {
+      "p03-manager": 3
+    },
+    "answer": "hardware lab",
+    "aliases": [
+      "the company's hardware lab"
+    ],
+    "form": "third-person"
+  }
+]

@@ -63,6 +63,12 @@ def extract_claim(text: str) -> dict | None:
                 'positive': positive, 'exclusive': exclusive, 'kind': kind,
                 'display_value': value, 'display_subject': display_subject}
 
+    # A completed move states the new residence. The destination must be a capitalised place name, so
+    # "I moved to the backend team" or "I moved to a new desk" is not read as a home city.
+    match = re.fullmatch(r"I\s+(?:have\s+|just\s+|recently\s+|finally\s+)*(?:moved|relocated|shifted)\s+to\s+((?-i:[A-Z])[\w.'-]*(?:\s+(?-i:[A-Z])[\w.'-]*)*)",
+                         text, re.I)
+    if match:
+        return claim('residence', match[1])
     # The explicit "now"/"no longer" forms describe a present change, not history.
     match = re.fullmatch(r"I\s+(?:(do not|don't|no longer)\s+)?(?:(?:now|currently)\s+)?(?:live|reside)\s+in\s+(.+)", text, re.I)
     if match:

@@ -1,0 +1,106 @@
+{
+  "importance_model": {
+    "type": "heuristic"
+  },
+  "clock": "2026-10-12T10:00:00+00:00",
+  "checks": 16,
+  "passed": 16,
+  "results": [
+    {
+      "check": "greeting_is_working_memory",
+      "expected": "working",
+      "actual": "working",
+      "passed": true
+    },
+    {
+      "check": "one_off_task_is_short_term",
+      "expected": "short_term",
+      "actual": "short_term",
+      "passed": true
+    },
+    {
+      "check": "preference_is_long_term",
+      "expected": "long_term",
+      "actual": "long_term",
+      "passed": true
+    },
+    {
+      "check": "recurring_task_is_long_term",
+      "expected": "long_term",
+      "actual": "long_term",
+      "passed": true
+    },
+    {
+      "check": "dated_task_expires_a_day_after_deadline",
+      "expected": "2026-10-14T23:59:59+00:00",
+      "actual": "2026-10-14T23:59:59+00:00",
+      "passed": true
+    },
+    {
+      "check": "inactive_long_term_memory_archives",
+      "expected": "archive",
+      "actual": "archive",
+      "passed": true
+    },
+    {
+      "check": "completion_statement_completes_task",
+      "expected": "completed",
+      "actual": "completed",
+      "passed": true
+    },
+    {
+      "check": "completed_task_hidden_from_default_list",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "check": "completion_keeps_revision_history",
+      "expected": 2,
+      "actual": 2,
+      "passed": true
+    },
+    {
+      "check": "cancellation_statement_cancels_task",
+      "expected": "cancelled",
+      "actual": "cancelled",
+      "passed": true
+    },
+    {
+      "check": "reschedule_statement_moves_deadline",
+      "expected": "2026-10-20T17:00:00+00:00",
+      "actual": "2026-10-20T17:00:00+00:00",
+      "passed": true
+    },
+    {
+      "check": "recurring_task_stays_active_after_payment",
+      "expected": "active",
+      "actual": "active",
+      "passed": true
+    },
+    {
+      "check": "recurring_occurrence_is_recorded",
+      "expected": 1,
+      "actual": 1,
+      "passed": true
+    },
+    {
+      "check": "recurring_task_advances_to_next_due_date",
+      "expected": "2026-11-30",
+      "actual": "2026-11-30",
+      "passed": true
+    },
+    {
+      "check": "superseded_fact_hidden_from_current_view",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "check": "superseded_fact_kept_in_history",
+      "expected": "superseded",
+      "actual": "superseded",
+      "passed": true
+    }
+  ]
+}

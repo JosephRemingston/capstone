@@ -1,0 +1,203 @@
+{
+ "changed_seed_files": [
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p01_priya.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p02_jonas.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p03_amara.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p04_mateo.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p05_hana.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p06_felix.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p07_leila.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p08_tomasz.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p09_ines.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p10_kwame.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p11_sofia.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/seeds/p12_ravi.json",
+  "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/repo/evaluation/datasets/gold_queries.json (rebuilt, not a seed)"
+ ],
+ "new_unanswerable": [
+  {
+   "id": "q-p01-unanswerable-1",
+   "persona": "p01",
+   "query": "Remind me which Porto neighbourhood Priya lives in now.",
+   "attribute_type": "place/neighbourhood"
+  },
+  {
+   "id": "q-p01-unanswerable-2",
+   "persona": "p01",
+   "query": "Do you know what Priya's sister is called?",
+   "attribute_type": "person name (non-pet)"
+  },
+  {
+   "id": "q-p02-unanswerable-1",
+   "persona": "p02",
+   "query": "What score did Jonas achieve on his Norwegian language exam?",
+   "attribute_type": "score/grade"
+  },
+  {
+   "id": "q-p02-unanswerable-2",
+   "persona": "p02",
+   "query": "For how many years has Jonas been building up his record collection?",
+   "attribute_type": "duration"
+  },
+  {
+   "id": "q-p02-unanswerable-3",
+   "persona": "p02",
+   "query": "How much is Jonas paying in monthly rent since the move to Norway?",
+   "attribute_type": "price/amount"
+  },
+  {
+   "id": "q-p03-unanswerable-1",
+   "persona": "p03",
+   "query": "Has Amara ever had to use her emergency adrenaline pen after a sting?",
+   "attribute_type": "yes/no existence"
+  },
+  {
+   "id": "q-p03-unanswerable-2",
+   "persona": "p03",
+   "query": "Which university awarded Amara her engineering degree?",
+   "attribute_type": "school/university"
+  },
+  {
+   "id": "q-p04-unanswerable-1",
+   "persona": "p04",
+   "query": "What price did Mateo get when he sold his car?",
+   "attribute_type": "price/amount"
+  },
+  {
+   "id": "q-p04-unanswerable-2",
+   "persona": "p04",
+   "query": "How many cousins make up Mateo's regular padel group?",
+   "attribute_type": "count/how-many"
+  },
+  {
+   "id": "q-p04-unanswerable-3",
+   "persona": "p04",
+   "query": "Why did Mateo's uncle decide to give away his parrot?",
+   "attribute_type": "reason/why"
+  },
+  {
+   "id": "q-p05-unanswerable-1",
+   "persona": "p05",
+   "query": "Tell me how many levels Hana's puzzle game had when it launched on Steam.",
+   "attribute_type": "count/how-many"
+  },
+  {
+   "id": "q-p05-unanswerable-2",
+   "persona": "p05",
+   "query": "What title did Hana give the comic she entered in the competition?",
+   "attribute_type": "name/title of a work"
+  },
+  {
+   "id": "q-p06-unanswerable-1",
+   "persona": "p06",
+   "query": "Which wine region did Felix favour for the Pinot Noir in his cellar?",
+   "attribute_type": "preference never stated"
+  },
+  {
+   "id": "q-p06-unanswerable-2",
+   "persona": "p06",
+   "query": "Who was the famous director Felix found himself standing beside at the festival premiere?",
+   "attribute_type": "person name (non-pet)"
+  },
+  {
+   "id": "q-p06-unanswerable-3",
+   "persona": "p06",
+   "query": "Is Felix's brother Lukas older or younger than Felix?",
+   "attribute_type": "which-option"
+  },
+  {
+   "id": "q-p07-unanswerable-1",
+   "persona": "p07",
+   "query": "Which business school turned down Leila's MBA application?",
+   "attribute_type": "school/university"
+  },
+  {
+   "id": "q-p07-unanswerable-2",
+   "persona": "p07",
+   "query": "Do you know what Karim, Leila's twin, does for a job?",
+   "attribute_type": "sibling occupation"
+  },
+  {
+   "id": "q-p08-unanswerable-1",
+   "persona": "p08",
+   "query": "In what year did Tomasz finish his electrical engineering degree?",
+   "attribute_type": "date/when"
+  },
+  {
+   "id": "q-p08-unanswerable-2",
+   "persona": "p08",
+   "query": "Did Tomasz manage to finish the Turin marathon in under four hours?",
+   "attribute_type": "cross-persona trap (yes/no; only Sofia ran Turin, 4:05)"
+  },
+  {
+   "id": "q-p08-unanswerable-3",
+   "persona": "p08",
+   "query": "How many turbines does Tomasz's Amber Grid project have connected so far?",
+   "attribute_type": "count/how-many"
+  },
+  {
+   "id": "q-p09-unanswerable-1",
+   "persona": "p09",
+   "query": "In which year did Ines first start working at Rh\u00f4ne Pharma?",
+   "attribute_type": "date/when"
+  },
+  {
+   "id": "q-p09-unanswerable-2",
+   "persona": "p09",
+   "query": "Can you suggest a training plan for the race Ines signed up for?",
+   "attribute_type": "advice-seeking about a never-mentioned topic (false premise)"
+  },
+  {
+   "id": "q-p10-unanswerable-1",
+   "persona": "p10",
+   "query": "What was Kwame's exam score when he earned his CCNP?",
+   "attribute_type": "score/grade"
+  },
+  {
+   "id": "q-p10-unanswerable-2",
+   "persona": "p10",
+   "query": "Remind me which resort Kwame went to for his week of skiing.",
+   "attribute_type": "cross-persona trap (place; only Jonas skied, Trysil)"
+  },
+  {
+   "id": "q-p10-unanswerable-3",
+   "persona": "p10",
+   "query": "Has Kwame given the goat in his yard a name, and what is it?",
+   "attribute_type": "pet name"
+  },
+  {
+   "id": "q-p11-unanswerable-1",
+   "persona": "p11",
+   "query": "Is Sofia's sister Giulia expecting a baby boy or a girl?",
+   "attribute_type": "which-option"
+  },
+  {
+   "id": "q-p11-unanswerable-2",
+   "persona": "p11",
+   "query": "How did Sofia feel about the Mariza concert at the Coliseu?",
+   "attribute_type": "cross-persona trap (opinion; only Priya saw Mariza)"
+  },
+  {
+   "id": "q-p12-unanswerable-1",
+   "persona": "p12",
+   "query": "What annual salary does Ravi earn at Kaveri Fintech?",
+   "attribute_type": "price/salary"
+  },
+  {
+   "id": "q-p12-unanswerable-2",
+   "persona": "p12",
+   "query": "Do you know what Ravi calls the stray cat he feeds?",
+   "attribute_type": "pet name"
+  },
+  {
+   "id": "q-p12-unanswerable-3",
+   "persona": "p12",
+   "query": "Which profession does Ravi's older brother in Chennai work in?",
+   "attribute_type": "sibling occupation"
+  }
+ ],
+ "abstention_dev_path": "/private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/abstention_dev.json",
+ "abstention_dev_counts": "90 rows, dev personas only: p01 15 answerable + 15 unanswerable, p02 15 + 15, p03 15 + 15, so 45 answerable and 45 unanswerable. 8 answerable rows are marked computed: true (6 counts and 2 date-arithmetic durations). Answerable question forms: counting/aggregation 6, how long (stated) 4, how often (stated) 4 plus 1 that needs two memories, when (stated) 4, name wh- 3, name yes/no 3, how many (stated) 2, how much (stated number) 1, date arithmetic 2, occupation word 2 plus 1 yes/no, advice 2, advice/preference (current) 2, third-person 8. The unanswerable rows cover 26 attribute types, including 6 cross-persona traps (2 per persona), 1 sibling-occupation question and 1 pet-name question. Each row also carries the extra keys attribute_type (unanswerable) or form (answerable). Ids look like abs-p01-u01 and abs-p01-a01.",
+ "validation_output": "CHECKER (tools/check_abstention_dev.py repo abstention_dev.json):\nbenchmark: sibling-occupation=2 pet-name=2 cross-persona=3 distinct attribute types=20\nbenchmark: first-word spread {'What': 5, 'How': 4, 'Which': 4, 'Do': 3, 'Remind': 2, 'Has': 2, 'Is': 2, 'In': 2, 'For': 1, 'Why': 1, 'Tell': 1, 'Who': 1, 'Did': 1, 'Can': 1}\nabstention_dev: sibling-occupation=1 pet-name=1 cross-persona=6 distinct attribute types=26\nabstention_dev: first-word spread {'What': 12, 'Which': 8, 'How': 6, 'Do': 3, 'Has': 3, 'Why': 3, 'On': 2, 'Remind': 2, 'Did': 2, 'Where': 1, 'Roughly': 1, 'When': 1, 'Was': 1}\nabstention_dev rows: 90 {('p01','answerable'): 15, ('p01','unanswerable'): 15, ('p02','answerable'): 15, ('p02','unanswerable'): 15, ('p03','answerable'): 15, ('p03','unanswerable'): 15}\nanswerable computed: 8\nWARN abs-p03-u15: 0.67 content-word overlap with p03-sibling\nWARN q-p07-unanswerable-2: 0.67 content-word overlap with p07-sibling\nOK\n(What it checks: ids and query texts are unique; persona is in p01-p03; each query names its persona and has at least 6 words; no row repeats a benchmark query; unanswerable rows have empty gold, answer and aliases; gold memory ids exist, belong to the persona and include a grade 3; for rows not marked computed, the answer or an alias appears verbatim, ignoring case, in a gold memory, and also matches metrics.contains_phrase; the benchmark has 30 unanswerables with the required per-persona counts, the texts match tools/new_unanswerable.py, and none carries evidence, answer or as_of; at most 3 sibling-occupation and 3 pet-name questions per set.)\n\nBUILD: PYTHONPATH=. python -m evaluation.build_dataset ; then --check prints \"Dataset file matches a fresh build.\" {\"memories\": 456, \"queries\": 360, \"split_queries\": {\"dev\": 90, \"test\": 270}, \"sha256\": \"a93ca70ff6d40b458db4d82a04fc79b8c7f91dd599840f0e2f96482153d00f25\"}. All content validators passed.\n\nTESTS: PYTHONPATH=. python -m pytest -q tests/test_evaluation_dataset.py -> 5 passed in 1.12s\n\nDIFF vs snapshot gold_queries.json: memories are identical and the set of query ids is identical. 30 queries changed, all unanswerable, and in each only the 'query' field differs, so ids and positions are stable.",
+ "caveats": "- I wrote and checked every query myself (an AI); no human has checked them. I read all 456 memories for the 12 personas and used keyword greps across the whole corpus (neighbourhood, university, score, salary, rent, fee, boy/girl, older/younger, EpiPen, Mariza, ski, marathon, race, rowing, jazz, tea, landlord, tournament and others) to confirm that each asked-for attribute is never stated for that persona. For the cross-persona traps, the entity appears only under the other persona: Turin marathon only Sofia, skiing only Jonas, Mariza only Priya, rowing only Priya, jazz night only Jonas, sencha and the language exam only Jonas.\n- Some unanswerable questions rest on a false premise (Ines 'the race she signed up for', Tomasz 'Turin marathon', Kwame skiing, Amara 'tea she switched to', Jonas 'rowing club'). A system could fairly answer 'there is no record of that' instead of 'I don't know'. Both should count as refusals, but answer-acceptance metrics that check text may treat them differently.\n- I avoided date and duration questions that the session dates make roughly answerable. For example 'when did Priya adopt her dog' and 'how long has Jonas been in the chess club' were rejected. A few remaining ones sit next to stated facts on purpose: the Lantern level count (the prototype had 3 levels), Mateo's cousins ('three evenings a week' is a distractor number), and the Kesho participant count ('first patients').\n- In abstention_dev.json, the yes/no answerable rows put the memory phrase as the answer and 'yes' as an alias (e.g. answer 'Dana Whitlock', aliases ['yes','Dana']), so extractive output can match. Short aliases like 'yes', 'no', '12', '2', 'March' and 'week' may give loose matches if the downstream scorer accepts any alias. Tighten them if the scorer works that way.\n- Computed answers: Priya rented in Lisbon about 4 years (2021 to March 2025). Jonas's exam was 8 months after moving to Oslo (April 2025 to December 2025). The other 6 computed rows are counts (2 jobs, 2 cities, 2 countries, 2 teas, 2 venues, 2 employers). They are marked computed: true and each has at least two grade-3 gold memories.\n- abstention_dev.json uses only p01-p03 memories and does not repeat any benchmark query. Some answerable rows ask about the same memory as a benchmark dev query in different words (e.g. historical fiction, the Afrobeats-style preferences). That is acceptable within the dev split, but the set is not independent of the dev benchmark.\n- The checker still flags two entity-level overlaps (brother/Arusha for Amara; Karim/twin for Leila). These are intended distractor entities, not copied wording.\n- Helper scripts are in the scratch dir only: tools/new_unanswerable.py (the 30 texts and attribute types), tools/apply_unanswerable.py (edits seed lines in place, keeping formatting and positions), tools/make_abstention_dev.py, and tools/check_abstention_dev.py. All are under /private/tmp/claude-501/-Users-josephremingstonl-Downloads-code-capstone/2d91e859-4acd-4fbf-99c1-146f2e2aa197/scratchpad/f6rework/author/. Nothing under /Users/josephremingstonl/Downloads/code/capstone was edited, no model was downloaded, no LLM or network call was made, and I did not open the designs/ or design/ directories.\n- I did not run the ablation harness. Benchmark numbers for answerability on the 30 unanswerables will change and are not comparable with earlier runs."
+}
