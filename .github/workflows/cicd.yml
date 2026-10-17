@@ -1,0 +1,11 @@
+name: CI/CD
+
+on:
+  pull_request:
+
+jobs:
+  pr-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The PR Agent
+        uses: The-PR-Agent/pr-agent@v0.48.0
