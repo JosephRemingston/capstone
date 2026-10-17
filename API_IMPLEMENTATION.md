@@ -31,6 +31,12 @@ Open `/demo/` for the browser demo or `/docs` for the OpenAPI UI.
 - `GET /api/v1/memories`
 - `GET /api/v1/memories/{id}`
 - `POST /api/v1/memories/search`
+- `GET /api/v1/memories/{id}/history` — every revision of one of the caller's memories, oldest first (404 if missing or not theirs)
+- `GET /api/v1/graph?query=&as_of=&known_at=&predicate=&hops=` — the caller's temporal relations; with `query`, also matched entities and paths (hops 1–3)
+- `GET /api/v1/evaluation/snapshots` — the tracked measurement snapshots (`evaluation/reports/<tag>_summary.json`), oldest first
+- `GET /api/v1/evaluation/snapshots/{tag}` — one snapshot's numeric metrics and provenance (404 for unknown tags)
+- `GET /api/v1/evaluation/model` — the importance model's test report (`retention_ensemble.json`)
+- `POST /api/v1/memories/ask` — cited answer; extractive by default, `"generator": "gemini"` sends memory text to Gemini (503 if unavailable)
 - `GET /api/v1/me/export?format=json|csv`
 - `DELETE /api/v1/me`
 - `GET /health/live`

@@ -1,0 +1,7 @@
+{
+  "cases": 60,
+  "category_accuracy": 0.5,
+  "category_macro_f1": 0.5161212452460658,
+  "tier_accuracy": 0.55,
+  "importance_range_agreement": 0.48333333333333334
+}

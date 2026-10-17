@@ -10,10 +10,13 @@ memory_store/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
-/docs/*
 !/docs/architecture.md
 memory_store/*.indexes.json
 memory_store/*.cleanup-schedule.json
 /artifacts/*
 # the default importance model ships with the code (python -m training.ensemble.run rebuilds it)
 !/artifacts/importance_ensemble/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/

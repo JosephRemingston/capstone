@@ -1,0 +1,185 @@
+def _fold(text):
+    return text.casefold().replace('’', "'")
+
+
+def _stem(word):
+    """Crude suffix stripping, applied identically to question and evidence words."""
+    word = _fold(word).split("'")[0]
+    if word.endswith('ies') and len(word) > 4:
+        word = word[:-3] + 'y'
+    elif word.endswith(('sses', 'xes', 'ches', 'shes', 'zes')):
+        word = word[:-2]
+    elif word.endswith('s') and not word.endswith('ss') and len(word) > 3:
+        word = word[:-1]
+    for suffix in ('ing', 'ed'):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            word = word[:-len(suffix)]
+            break
+    return word[:-1] if word.endswith('e') and len(word) > 3 else word
+
+
+def question_slot(query):
+    """The typed answer slot a question asks for, or None. Yes/no and computed-answer questions have none."""
+    q = _POLITE.sub('', _fold(query).strip())
+    if re.match(_AUX, q):
+        return None
+    for slot, pattern in _SLOT_QUESTIONS:
+        if not pattern.search(q):
+            continue
+        if slot == 'name' and any(word[:1].isupper() for word in re.findall(r"\b(?:called|named)\s+(\S+)", query)):
+            return None   # the name is already given ("... called Biscuit?")
+        rest = q.split(None, 2)[-1]
+        if slot in ('duration', 'distance') and (_AGGREGATION.search(rest) or _DATE_ARITHMETIC.search(rest)):
+            return None   # computed: "how many days ago", "how long have I been", "in total"
+        if slot == 'money' and _AGGREGATION.search(rest):
+            return None
+        return slot
+    return None
+
+
+def _speakers(text):
+    return {_fold(name).strip() for name in _SPEAKER_LINE.findall(text) if name.strip()}
+
+
+def _sentences(text):
+    return [part.strip() for part in _SENTENCE.split(_META_LINE.sub('', text)) if part.strip()]
+
+
+_INITIAL_BEFORE = '.!?:;"(“—-'
+_NAME_JOINER = re.compile(r"(?:['’]s)?[ \t]*(?:(?:of|de|da|do|du|del|la|le|van|von|der|di|&)[ \t]+)?")
+
+
+def _capitalised(sentence):
+    """Runs of adjacent capitalised words (Unicode-aware) as (folded tokens, run starts the sentence)."""
+    runs, run, initial, last_end = [], [], False, -1
+    for match in _WORD.finditer(sentence):
+        token = re.split("['’]", match.group())[0]
+        capital = (bool(token) and token[0].isupper() and not any(c.isdigit() for c in token)
+                   and _fold(token) != 'i')
+        if capital and run and _NAME_JOINER.fullmatch(sentence[last_end:match.start()]):
+            run.append(_fold(token))
+        else:
+            if run:
+                runs.append((run, initial))
+            run = [_fold(token)] if capital else []
+            before = sentence[:match.start()].rstrip()
+            initial = not before or before[-1] in _INITIAL_BEFORE
+        last_end = match.end()
+    if run:
+        runs.append((run, initial))
+    return runs
+
+
+def _names(sentence, mid_capitalised, excluded):
+    """Capitalised runs that look like a new proper name. A leading common word is dropped ("Spent", "Big");
+    a run sharing a word with the question is not new ("Brightline Analytics" for a Brightline question);
+    a lone sentence-initial word counts only if it is also capitalised mid-sentence somewhere in the context."""
+    found = []
+    for run, initial in _capitalised(sentence):
+        if run[0] in _STOP or run[0] in _CALENDAR or (initial and len(run) > 1 and run[0] not in mid_capitalised):
+            run, initial = run[1:], False
+        if not run or any(t in excluded or _stem(t) in excluded for t in run):
+            continue
+        if initial and len(run) == 1 and run[0] not in mid_capitalised:
+            continue
+        if any(len(t) > 1 for t in run):
+            found.append(' '.join(run))
+    return found
+
+
+def _slot_evidence(context):
+    """(slot, evidence sentences, excluded words, mid-sentence capitalised words), or None when the rule is idle."""
+    if (context.get('reranker') or {}).get('status') != 'applied':
+        return None
+    scores = context.get('scores') or {}
+    scored = {key: scores[key]['reranker'] for key in context['sources']
+              if isinstance((scores.get(key) or {}).get('reranker'), (int, float))}
+    if not scored:
+        return None
+    slot = question_slot(context['query'])
+    best = max(scored, key=scored.get)
+    texts = {key: context['sources'][key]['text'] for key in scored}
+    speakers = set().union(*(_speakers(text) for text in texts.values()))
+    speaker_words = {w for name in speakers for w in re.findall(r'[^\W\d_]+', name)}
+    raw_words = _WORD.findall(context['query'])
+    query_words = {_fold(w).split("'")[0] for w in raw_words}
+    asked = {name for name in speakers if name and set(re.findall(r'[^\W\d_]+', name)) <= query_words}
+    # Evidence: the best-scored source plus every source the cross-encoder judged relevant (logit >= 0),
+    # minus sources spoken by a different named speaker than the one the question is about.
+    keys = [key for key in scored if key == best or scored[key] >= 0]
+    if asked:
+        keys = [key for key in keys if not _speakers(texts[key]) or _speakers(texts[key]) & asked]
+    all_sentences = {key: _sentences(texts[key]) for key in texts}
+    mid = {token for group in all_sentences.values() for s in group
+           for run, initial in _capitalised(s) for token in (run[1:] if initial else run)}
+    sentences = [s for key in keys for s in all_sentences[key]]
+    if slot in ('name', 'occupation'):
+        # Who is asked about: a relative or contact ("Priya's brother") anchors the evidence to sentences that
+        # mention that relation or a name introduced next to it ("My brother Arjun ..." then "Arjun is a nurse").
+        relations = {_stem(w) for w in query_words if w in _RELATIONS}
+        if relations:
+            linked = set(relations)
+            for s in (s for group in all_sentences.values() for s in group):
+                if relations & {_stem(w) for w in _WORD.findall(s)}:
+                    linked |= {t for run, _ in _capitalised(s) for t in run if t not in _STOP}
+            sentences = [s for s in sentences
+                         if linked & ({_stem(w) for w in _WORD.findall(s)} | {_fold(w) for w in _WORD.findall(s)})]
+    elif slot in ('frequency', 'money', 'duration', 'distance'):
+        # Numbers are everywhere; require the filler within one sentence of a content word of the question
+        # ("commute", "salmon"). Capitalised question words are not anchors: "Porto" would admit the time of
+        # the Porto half marathon for a question about a Porto commute.
+        anchors = {_stem(w) for w in raw_words if not w[:1].isupper()} - {_stem(w) for w in _STOP | _SLOT_WORDS}
+        if anchors:
+            sentences = []
+            for key in keys:
+                group = all_sentences[key]
+                for index, s in enumerate(group):
+                    window = ' '.join(group[max(0, index - 1): index + 2])
+                    if anchors & {_stem(w) for w in _WORD.findall(window)}:
+                        sentences.append(s)
+    excluded = _STOP | _CALENDAR | _RELATIONS | speaker_words | query_words | {_stem(w) for w in query_words}
+    return slot, sentences, excluded, mid
+
+
+def _filled(slot, sentences, excluded, mid):
+    for sentence in sentences:
+        folded = _fold(sentence)
+        if slot in ('name', 'entity'):
+            if _names(sentence, mid, excluded):
+                return True
+        elif slot == 'occupation':
+            if _OCCUPATION_EVIDENCE.search(folded) or any(
+                    m.group(1)[:1].isupper() and _fold(m.group(1)) not in excluded for m in _EMPLOYER.finditer(sentence)):
+                return True
+        elif slot == 'distance':
+            if _DISTANCE.search(folded) or _DURATION.search(folded):
+                return True
+        elif {'frequency': _FREQUENCY, 'money': _MONEY, 'duration': _DURATION}[slot].search(folded):
+            return True
+    return False
+
+
+def abstention_reason(context, threshold=ABSTAIN_THRESHOLD, *, slot_check=True):
+    """Why the extractive answer should abstain, or None to answer. A pure function of the context.
+
+    Reads context['query'], context['sources'][id]['text'], context['scores'][id]['reranker'] (raw
+    cross-encoder logit) and context['reranker']['status']; never abstains unless the reranker was
+    applied and scored at least one source.
+    """
+    if threshold is None:
+        return None
+    evidence = _slot_evidence(context)
+    if evidence is None:
+        return None
+    if threshold > 0:
+        scores = context['scores']
+        top = max(scores[key]['reranker'] for key in context['sources']
+                  if isinstance((scores.get(key) or {}).get('reranker'), (int, float)))
+        if top < math.log(threshold / (1 - threshold)):
+            return 'low_reranker_confidence'
+    slot, sentences, excluded, mid = evidence
+    if not slot_check or slot is None:
+        return None
+    return None if _filled(slot, sentences, excluded, mid) else f'unfilled_{slot}_slot'
+
+

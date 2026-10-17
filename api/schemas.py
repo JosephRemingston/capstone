@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Envelope(BaseModel):
@@ -45,6 +45,42 @@ class MemoryCreateRequest(BaseModel):
         if not value:
             raise ValueError("value must not be blank")
         return value
+
+
+class AskRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=10_000)
+    mode: Literal["keyword", "semantic", "hybrid", "graph"] = "hybrid"
+    limit: int = Field(default=5, ge=1, le=20)
+    budget: int = Field(default=10_000, ge=256, le=100_000)
+    candidate_limit: int | None = Field(default=None, ge=1, le=200)
+    rerank: bool | None = None
+    # Extractive by default: memory text leaves the server only when the caller asks for Gemini.
+    generator: Literal["extractive", "gemini"] = "extractive"
+    abstain: bool = False
+    as_of: str | None = Field(default=None, max_length=64)
+    known_at: str | None = Field(default=None, max_length=64)
+
+    @field_validator("query")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("query must not be blank")
+        return value
+
+    @field_validator("as_of", "known_at")
+    @classmethod
+    def iso_time(cls, value: str | None) -> str | None:
+        if value is not None:
+            from main.graph import parse_time
+            parse_time(value)   # ValueError -> 422 here, never mistaken for a provider outage
+        return value
+
+    @model_validator(mode="after")
+    def abstain_needs_extractive(self) -> "AskRequest":
+        if self.abstain and self.generator != "extractive":
+            raise ValueError("abstain works only with the extractive generator")
+        return self
 
 
 class SearchRequest(BaseModel):

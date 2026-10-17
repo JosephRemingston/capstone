@@ -1,0 +1,69 @@
+{
+  "tag": "e4",
+  "created_at": "2026-10-12T16:17:13.786346+05:30",
+  "git_head": "12dbc04",
+  "dirty_tree": true,
+  "dataset_sha256": "1cba69eca16162928c382d5fb9b5d6495beb2fccec7b99065e6d8ffcf85ff936",
+  "steps": [
+    {
+      "step": "build_dataset",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "ablation_test",
+      "exit_code": 0,
+      "seconds": 547.2
+    },
+    {
+      "step": "ablation_dev",
+      "exit_code": 0,
+      "seconds": 188.8
+    },
+    {
+      "step": "locomo",
+      "exit_code": 0,
+      "seconds": 1115.8
+    },
+    {
+      "step": "classification",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "lifecycle",
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "report",
+      "exit_code": 0,
+      "seconds": 0.2
+    }
+  ],
+  "files": {
+    "SUMMARY.md": "634f01c90eaa041306b7c4ce35e1429a2273080ce6a994258b2f5d7298862879",
+    "ablation/results.json": "03887421423e6dafa981ccbdc55ff4854e496d703deb310208a1f35069039b3c",
+    "ablation/results.md": "73c4f6ad23805dcd7ec698dad27f4ed0c6036840eb65ea9b6f8e56e204974b80",
+    "ablation_ann/results.json": "4984366eebe9961cdadbdaf174550ae87fd8cb0af79fb18d8acea840ef64813f",
+    "ablation_ann/results.md": "525af1ac69442ba5f2394363e9cc31243857045020da825808d39fde179d572e",
+    "ablation_dev/results.json": "bbfbee11b38175638c406218769586e6d46da4884a13bf2b367253a64452edc6",
+    "ablation_dev/results.md": "17fc6e489e54c0e294dff87b4d82173717cd25f88599cf598f396a481aa0d4cd",
+    "conversational_evaluation.json": "63e08eb6a23dac61f91b5c86ee297cafa3fe7c8176351d9245f0e43a06d6c160",
+    "lifecycle.json": "580ac42e50be983e99c3299e4c1faf5f5ce466857af181c5757fb8e62953b9b0",
+    "locomo_retrieval.json": "64ac00438595640fa66cb0e6d504c394b5a90726ded3754f678df51157988512",
+    "locomo_retrieval_ann.json": "11ff77c8c670b97ab81301411b09c3917505abfc04ec71e5847187b76dc05dc3",
+    "logs/ablation_dev.log": "47d5182e41d98753e8298c372f71a19c7f4fc87329466600cd7ed879d550fddc",
+    "logs/ablation_test.log": "eb0709c032ae535b3a2b73c7cf5b60ecb9f46c3085eebb151c3d17df7235279e",
+    "logs/ablation_test_ann.log": "fdd4c76c80c1451352ca7432e469838fd9b0e0f0dafdab315fc78ae8253d9660",
+    "logs/build_dataset.log": "82b0d201506486aaeee7e5b0a604fb7775abd3835a630587753cf8f19a11ef41",
+    "logs/classification.log": "0baad5a1a34518f14c68cf09d7f4db6dad7d165b4ba6a5ea2ced9082a04face6",
+    "logs/lifecycle.log": "ee3b77971ee2ab40d3ef075587d6dea6485014e4ea4fb0c3f4c4495170e0cd78",
+    "logs/locomo.log": "357e8e8abca41e30633ce89016f1d75db4390fd7202e9ad84d5f51bc09a6bb96",
+    "logs/locomo_ann.log": "01c3dfbe8d53097622d22ca7a0c536554dff2dc9552c7cdada595fe121f2a5f1",
+    "logs/report.log": "a25d0143fc88fdbf70fbe4c0f1e479345d437be3e3b5c4e60857b759007a1edb",
+    "logs/retention.log": "82a83f63cfef6ebd1dc56b0bbe133da01c51c5ef85240cef52ace99483d47de0",
+    "longmemeval_retention.json": "a2b3e2d68adedb71ca94b80a6e98dbb1fa25e8fb3f8945ec2b277db845e316c0",
+    "summary.json": "41737ac8f133439421821b7138fec281529068ae8da8dbd2852e6b58c8d490b0"
+  }
+}

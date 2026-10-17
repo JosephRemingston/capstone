@@ -53,6 +53,11 @@ class MemoryCore:
         if (not self.classifier.legacy and memory_input.role == 'user'
                 and memory_input.metadata.get('relations') and category is MemoryCategory.TEMPORARY):
             category = MemoryCategory.SEMANTIC
+        # "I moved to Bengaluru" reads as an event, but it states where the user now lives: keep it as the
+        # current fact so it supersedes the previous residence.
+        if (not self.classifier.legacy and memory_input.role == 'user' and category is MemoryCategory.EPISODIC
+                and (extract_claim(memory_input.content) or {}).get('predicate') == 'residence'):
+            category = MemoryCategory.SEMANTIC
         record = MemoryRecord.from_input(memory_input=memory_input, category=category)
         record.confidence = memory_input.metadata.get('confidence', record.confidence)
         validate_evidence(record)

@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/josephremingstonl/Downloads/code/capstone/evaluation/lifecycle.py", line 94, in <module>
+    main()
+    ~~~~^^
+  File "/Users/josephremingstonl/Downloads/code/capstone/evaluation/lifecycle.py", line 84, in main
+    report = evaluate()
+  File "/Users/josephremingstonl/Downloads/code/capstone/evaluation/lifecycle.py", line 61, in evaluate
+    store.ingest(process('I paid rent', at=NOW + timedelta(days=20), task_id=rent.id, occurrence_at='2026-10-31'))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/josephremingstonl/Downloads/code/capstone/main/storage/locking.py", line 45, in invoke
+    return method(self, *args, **kwargs)
+  File "/Users/josephremingstonl/Downloads/code/capstone/main/storage/store.py", line 146, in ingest
+    raise ValueError('Target task not found, inactive, newer than update, or belongs to another user')
+ValueError: Target task not found, inactive, newer than update, or belongs to another user

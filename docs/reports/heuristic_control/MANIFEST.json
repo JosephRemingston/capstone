@@ -1,0 +1,81 @@
+{
+  "tag": "heuristic_control",
+  "created_at": "2026-10-16T04:16:14.009486+05:30",
+  "argv": [
+    "scripts/measure_all.py",
+    "--tag",
+    "heuristic_control",
+    "--scorer-steps-only",
+    "--scorer",
+    "heuristic"
+  ],
+  "git_head": "bad8836",
+  "dirty_tree": true,
+  "diff_sha256": "e0f928dcdc57a5ddb531132229ffe22c5ced3b818f09b9e25c0cf314625a4d55",
+  "untracked": {
+    "artifacts/importance_ensemble/deep_seed_42.onnx": "7a1703ba8d88a54ceed9ef0d16dd6899a3a14ea391efaf1ce17443a2e9b83f88",
+    "artifacts/importance_ensemble/deep_seed_43.onnx": "ad6dc2807bd354f344842841bb681f6412a1c7184a3ea6ecc33a76a092a3046f",
+    "artifacts/importance_ensemble/deep_seed_44.onnx": "648a5eb8e8c30183fe833a7a4bc4db8e5be7e9b61894987fecef2dcc5bd7a056",
+    "artifacts/importance_ensemble/metadata.json": "17286f0439fb75afac5af20e8c50e635222690b861cb686314e2ab706fc7a551",
+    "artifacts/importance_ensemble/xgboost.ubj": "820baa7875ea0325aff79dd2caa7f4f3dfa17e9cf0d7da3aee259fb57bf89feb",
+    "evaluation/clock.py": "9d32c90c5b7e4e46bc99217046735b3e0b3ab3c74192a05213ee21d2af424029",
+    "evaluation/reports/retention_ensemble.json": "803f2ce7b0675a02e5eb9237935eca480b8e3ccf5b31a8d747e0d1153afad6cd",
+    "evaluation/reports/retention_ensemble.md": "e561bd545b9c4a2d6255b2101808c438109117c1bed3199cca965565020361f1",
+    "main/ensemble.py": "8b85729302e885e1dbe6196e1625498dc6ef2e5db8d54cae965a93b55eec4d0b",
+    "tests/test_hybrid_importance.py": "ebb427d16ff1a0bae258f4fce8a09f301672b190d0bfe1e76a00fe6949f4c559",
+    "tests/test_retention_ensemble_training.py": "b4e47fe9dff5dee77fc45522f2df98da4f8298398625fff691f507f31c580e53",
+    "training/ensemble/heads.py": "c03ca64cbe5efceb42aed54b31d7aa2cd7af8cca2769221d5ffe0070c8dd9e7a"
+  },
+  "dataset_sha256": "a93ca70ff6d40b458db4d82a04fc79b8c7f91dd599840f0e2f96482153d00f25",
+  "scorer": "heuristic",
+  "steps": [
+    {
+      "step": "retention",
+      "command": [
+        "-m",
+        "evaluation.retention"
+      ],
+      "exit_code": 0,
+      "seconds": 14.1
+    },
+    {
+      "step": "classification",
+      "command": [
+        "-m",
+        "evaluation.classification"
+      ],
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "lifecycle",
+      "command": [
+        "-m",
+        "evaluation.lifecycle"
+      ],
+      "exit_code": 0,
+      "seconds": 0.1
+    },
+    {
+      "step": "report",
+      "command": [
+        "-m",
+        "evaluation.report"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0
+    }
+  ],
+  "reused": {},
+  "files": {
+    "SUMMARY.md": "d7955f69279d32495c3f6a9dd086aad0300d73c53ac9109b0820ef0d5e860b60",
+    "conversational_evaluation.json": "8229d485a007e60a2c82e19b8373dd4c3e57ab4e85a429b4853ee6987b130572",
+    "lifecycle.json": "1f8572783f533621f2e048b57a7d21c3589c216a0e9ed247a4a930131661e5fe",
+    "logs/classification.log": "0baad5a1a34518f14c68cf09d7f4db6dad7d165b4ba6a5ea2ced9082a04face6",
+    "logs/lifecycle.log": "ee3b77971ee2ab40d3ef075587d6dea6485014e4ea4fb0c3f4c4495170e0cd78",
+    "logs/report.log": "9f9e3e67feed997e890f2e81509da50698b075a2782626bf4cd881c71eba01f1",
+    "logs/retention.log": "c4fa1e3671069da2d6bbfb5afc7d74f438de93f7f332c441c1dacf7321476ca8",
+    "longmemeval_retention.json": "6b6faa2a252c3aaa9c149e99d0df98183b45a32a28232e84dcaeea7d4b986ad7",
+    "summary.json": "531b0c9b0cdafdfccf48d77e1be172f9891226cb1aea2cacb67574dd624416fe"
+  }
+}

@@ -7,18 +7,20 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CollectorRegistry, generate_latest, CONTENT_TYPE_LATEST
 
 from .auth import AuthConfig, AuthManager, AuthStore, current_user, require_roles
+from . import evaluation
 from .config import Settings
 from .logging import configure_logging
 from .metrics import Metrics
-from .schemas import AuthResponse, LoginRequest, MemoryCreateRequest, SearchRequest, SignupRequest
+from .schemas import AskRequest, AuthResponse, LoginRequest, MemoryCreateRequest, SearchRequest, SignupRequest
 from .services import MemoryService
 from main.domain.models import MemoryCategory, MemoryTier
 from main.storage.store import LocalMemoryStore
@@ -97,7 +99,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def validation_error_handler(request: Request, exc: RequestValidationError):
         return JSONResponse(status_code=422, content={
             "success": False, "data": None,
-            "error": {"code": "validation_error", "message": "Request validation failed", "details": exc.errors()},
+            # jsonable_encoder: custom validators put the raised ValueError object in each error's ctx, which plain
+            # JSON cannot serialise; without it a blank query crashed with HTTP 500 instead of 422.
+            "error": {"code": "validation_error", "message": "Request validation failed",
+                      "details": jsonable_encoder(exc.errors(), custom_encoder={Exception: str})},
             "request_id": getattr(request.state, "request_id", str(uuid4())),
         })
 
@@ -205,6 +210,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Memory not found")
         return success(record.to_dict(), request.state.request_id)
 
+    @app.get("/api/v1/memories/{record_id}/history")
+    def memory_history(record_id: str, request: Request, user: dict = Depends(require_roles("user", "admin"))):
+        revisions = request.app.state.service.history(user_id=user["id"], record_id=record_id)
+        if not revisions:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return success([record.to_dict() for record in revisions], request.state.request_id)
+
+    @app.get("/api/v1/graph")
+    def memory_graph(request: Request, query: str | None = Query(default=None, max_length=1000),
+                     as_of: str | None = Query(default=None, max_length=64),
+                     known_at: str | None = Query(default=None, max_length=64),
+                     predicate: str | None = Query(default=None, max_length=64),
+                     hops: int = Query(default=2, ge=1, le=3),
+                     user: dict = Depends(require_roles("user", "admin"))):
+        data = request.app.state.service.graph(user_id=user["id"], query=(query or "").strip() or None, as_of=as_of,
+                                               known_at=known_at, predicate=predicate, hops=hops)
+        return success(data, request.state.request_id)
+
+    @app.get("/api/v1/evaluation/snapshots")
+    def evaluation_snapshots(request: Request, user: dict = Depends(require_roles("user", "admin"))):
+        return success(evaluation.list_snapshots(), request.state.request_id)
+
+    @app.get("/api/v1/evaluation/snapshots/{tag}")
+    def evaluation_snapshot(tag: str, request: Request, user: dict = Depends(require_roles("user", "admin"))):
+        snapshot = evaluation.load_snapshot(tag)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Snapshot not found")
+        return success(snapshot, request.state.request_id)
+
+    @app.get("/api/v1/evaluation/model")
+    def evaluation_model(request: Request, user: dict = Depends(require_roles("user", "admin"))):
+        report = evaluation.load_model_report()
+        if report is None:
+            raise HTTPException(status_code=404, detail="Importance model report not found")
+        return success(report, request.state.request_id)
+
     @app.post("/api/v1/memories/search")
     def search_memories(request: Request, body: SearchRequest, user: dict = Depends(require_roles("user", "admin"))):
         if body.category is not None:
@@ -222,6 +263,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 session_id=body.session_id, category=body.category, tier=body.tier,
             )
         return success(data, request.state.request_id)
+
+    @app.post("/api/v1/memories/ask")
+    def ask_memories(request: Request, body: AskRequest, user: dict = Depends(require_roles("user", "admin"))):
+        if body.generator == "gemini":
+            try:
+                result = request.app.state.service.ask(user_id=user["id"], request=body.model_dump())
+            except ValueError as exc:
+                # Missing key, provider or network failure: a server-side outage, not a bad request. The message stays
+                # generic because provider errors can echo request data.
+                raise HTTPException(status_code=503, detail="Hosted answers are unavailable; retry with the extractive generator") from exc
+        else:
+            result = request.app.state.service.ask(user_id=user["id"], request=body.model_dump())
+        return success(result, request.state.request_id)
 
     @app.get("/api/v1/me/export")
     def export_data(request: Request, format: str = "json", user: dict = Depends(require_roles("user", "admin"))):
@@ -241,6 +295,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     static_dir = Path(__file__).resolve().parent.parent / "static"
     if static_dir.exists():
         app.mount("/demo", StaticFiles(directory=static_dir, html=True), name="demo")
+
+    # The React app (`cd frontend && pnpm build`). Client-side routes such as /app/memories/<id> fall back to
+    # index.html so a reload or shared link works; a missing build simply leaves /app unmounted.
+    web_dir = Path(os.getenv("COGNIMEM_WEB_DIR") or Path(__file__).resolve().parent.parent / "frontend" / "dist")
+    if (web_dir / "index.html").is_file() and (web_dir / "assets").is_dir():
+        app.mount("/app/assets", StaticFiles(directory=web_dir / "assets"), name="web-assets")
+        web_root = web_dir.resolve()
+
+        @app.get("/app", include_in_schema=False)
+        @app.get("/app/{path:path}", include_in_schema=False)
+        def web_app(path: str = ""):
+            candidate = (web_root / path).resolve()
+            if path and candidate.is_file() and candidate.is_relative_to(web_root):
+                return FileResponse(candidate)
+            return FileResponse(web_root / "index.html")
 
     return app
 

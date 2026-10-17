@@ -1,0 +1,10 @@
+Dataset file matches a fresh build.
+{
+  "memories": 456,
+  "queries": 360,
+  "split_queries": {
+    "dev": 90,
+    "test": 270
+  },
+  "sha256": "1cba69eca16162928c382d5fb9b5d6495beb2fccec7b99065e6d8ffcf85ff936"
+}
